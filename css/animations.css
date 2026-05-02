@@ -1,0 +1,49 @@
+/* animations.css — مؤثرات اللعبة | Game Animations */
+
+@keyframes drawLine {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes fillBox {
+  from {
+    fill-opacity: 0;
+  }
+  to {
+    fill-opacity: 1;
+  }
+}
+@keyframes winnerFlash {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+@keyframes glowPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 6px transparent;
+  }
+  50% {
+    box-shadow: 0 0 12px currentColor;
+  }
+}
+
+.animate-line {
+  animation: drawLine 0.15s ease-out forwards;
+}
+.animate-box {
+  animation: fillBox 0.3s ease-in-out forwards;
+}
+.animate-winner {
+  animation: winnerFlash 0.6s ease-in-out 2;
+}
+.active-glow {
+  animation: glowPulse 0.25s ease-in-out infinite;
+}

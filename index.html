@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dots & Boxes — SVG (المرحلة 1)</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="./css/animations.css" />
+
+    <!-- 🆕 حل مشكلة favicon.ico -->
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <main id="app">
+      <h1>Dots & Boxes — SVG</h1>
+      
+      <!-- 🎮 شاشة الإعدادات -->
+      <div id="setup-screen">
+        <div id="setup-box">
+          <h2>🎯 إعدادات اللعبة</h2>
+          
+          <div class="setup-section">
+            <label for="grid-size">📐 حجم اللوحة:</label>
+            <select id="grid-size">
+              <option value="3">صغير (3×3) - 4 مربعات</option>
+              <option value="4" selected>متوسط (4×4) - 9 مربعات</option>
+              <option value="5">كبير (5×5) - 16 مربع</option>
+              <option value="6">ضخم (6×6) - 25 مربع</option>
+              <option value="7">عملاق (7×7) - 36 مربع</option>
+            </select>
+          </div>
+          
+          <!-- 🔍 معاينة اللوحة -->
+          <div id="grid-preview">
+            <div class="preview-grid" data-size="4">
+              <span></span><span></span><span></span><span></span>
+              <span></span><span></span><span></span><span></span>
+              <span></span><span></span><span></span><span></span>
+              <span></span><span></span><span></span><span></span>
+            </div>
+          </div>
+          
+          <div class="setup-section">
+            <label for="player-count">👥 عدد اللاعبين:</label>
+            <select id="player-count">
+              <option value="2">لاعبين</option>
+              <option value="3" selected>3 لاعبين</option>
+              <option value="4">4 لاعبين</option>
+            </select>
+          </div>
+          
+          <div class="setup-section">
+            <label for="ai-mode">🤖 وضع اللعب:</label>
+            <select id="ai-mode">
+              <option value="human">لاعبين بشريين</option>
+              <option value="ai">ضد الكمبيوتر 🤖</option>
+            </select>
+          </div>
+          
+          <div class="setup-section hidden" id="ai-difficulty-section">
+            <label for="ai-difficulty">⚡ صعوبة الكمبيوتر:</label>
+            <select id="ai-difficulty">
+              <option value="easy">😊 سهل</option>
+              <option value="medium">🧠 متوسط</option>
+              <option value="nightmare">🔥 صعب</option>
+            </select>
+          </div>
+          
+          <button id="start-game" class="btn-primary">🚀 ابدأ اللعبة</button>
+        </div>
+      </div>
+
+      <!-- 📊 معلومات اللعبة -->
+      <div id="info" class="hidden">
+        <div id="scores"></div>
+        <button id="restart">Restart Game</button>
+        <button id="sound-toggle" class="sound-btn" title="تشغيل/إيقاف المؤثرات الصوتية">
+          🔊
+        </button>
+        <button id="music-toggle" class="music-btn" title="تشغيل/إيقاف الموسيقى">
+          🎵
+        </button>
+      </div>
+      <svg id="board" class="hidden"></svg>
+
+      <!-- 🏆 شاشة النتيجة -->
+      <div id="winner-screen" class="hidden">
+        <div id="winner-box">
+          <h2 id="winner-message">Player 1 Wins!</h2>
+          <div id="winner-details"></div>
+          <!-- 🆕 هنا بيظهر ترتيب اللاعبين -->
+          <button id="play-again">Play Again</button>
+        </div>
+      </div>
+    </main>
+
+    <script type="module" src="js/main.js" defer></script>
+  </body>
+</html>

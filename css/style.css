@@ -1,0 +1,501 @@
+/* تنسيقات عامة */
+* {
+  box-sizing: border-box;
+}
+/* ⚡ إعدادات أساسية للصفحة */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  height: 100vh;
+  background: linear-gradient(135deg, #f0f4ff, #e0ecff);
+  color: #333;+
+  
+}
+/* 🏷️ العنوان */
+h1 {
+  margin-top: 20px;
+  font-size: 2rem;
+  color: #2c3e50;
+  text-align: center;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  
+  
+}
+
+/* 📊 منطقة الحالة (دور اللاعب + النقاط) */
+#info {
+  display: flex;
+  flex-wrap: wrap;        /* 🆕 يخليها تلف تلقائياً */
+  gap: 20px;
+  margin: 20px 0;
+  font-size: 1.2rem;
+  align-items: center;
+  justify-content: center; /* 🆕 وسّط المحتوى */
+}
+
+
+
+#scores {
+  margin: 10px 0;
+  font-size: 1.2rem;
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+}
+
+#scores span {
+  display: inline-block;
+  min-width: 100px; /* 🧱 يثبت العرض لتجنب القفز */
+  text-align: center;
+  padding: 6px 10px; /* نفس المسافة دائمًا */
+  border-radius: 8px;
+  font-weight: 500;
+  color: #333;
+  line-height: 1.2;
+  transition: background-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* 📱 للأجهزة الصغيرة (مثل الهواتف) */
+@media (max-width: 768px) {
+  #scoreboard span {
+    min-width: 80px;
+    height: 32px;
+    font-size: 14px;
+  }
+}
+
+/* 📲 شاشات أصغر (أقل من 480px) */
+@media (max-width: 480px) {
+  #scoreboard span {
+    min-width: 60px;
+    height: 28px;
+    font-size: 13px;
+  }
+}
+
+
+/* 🎮 زر إعادة التشغيل */
+#restart {
+  padding: 8px 16px;         /* 🆕 قللنا الارتفاع */
+  font-size: 1rem;
+  line-height: 1.2;          /* 🆕 لتوازن مع النصوص */
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: #0066cc;
+  color: white;
+  transition: background-color 0.3s;
+}
+
+#restart:hover {
+  background-color: #004999;
+}
+
+/* 🔊 زر التحكم بالصوت */
+#sound-toggle {
+  padding: 8px 16px;
+  font-size: 1.2rem;
+  line-height: 1.2;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: #28a745;
+  color: white;
+  transition: all 0.3s ease;
+  min-width: 50px;
+}
+
+#sound-toggle:hover {
+  background-color: #218838;
+  transform: scale(1.05);
+}
+
+#sound-toggle.muted {
+  background-color: #dc3545;
+}
+
+#sound-toggle.muted:hover {
+  background-color: #c82333;
+}
+
+/* 🎵 زر التحكم بالموسيقى */
+#music-toggle {
+  padding: 8px 16px;
+  font-size: 1.2rem;
+  line-height: 1.2;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: #6f42c1;
+  color: white;
+  transition: all 0.3s ease;
+  min-width: 50px;
+}
+
+#music-toggle:hover {
+  background-color: #5a32a3;
+  transform: scale(1.05);
+}
+
+#music-toggle.muted {
+  background-color: #6c757d;
+}
+
+#music-toggle.muted:hover {
+  background-color: #5a6268;
+}
+
+#board {
+  flex: 1;
+  max-width: 90vmin;
+  max-height: 90vmin;
+  aspect-ratio: 1 / 1;
+  border: 3px solid #ccc;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+
+
+/* اللاعب الحالي يكون بارز */
+.active-turn {
+  font-weight: 600;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+  
+}
+
+/* 🟢 النقاط */
+.dot {
+  fill: #000; /* لون النقطة */
+  pointer-events: none; /* غير قابلة للنقر */
+}
+
+.player-1 {
+  background-color: rgba(255, 0, 0, 0.5); /* أحمر */
+}
+
+.player-2 {
+  background-color: rgba(0, 0, 255, 0.5); /* أزرق */
+}
+
+.edge {
+  stroke: #ccc;
+  stroke-width: 2;
+  cursor: pointer;
+  transition: stroke 0.3s ease, stroke-width 0.3s ease; /* 🆕 انيميشن */
+}
+
+.edge:hover {
+  stroke: #888;
+  stroke-width: 3;
+}
+
+.edge-p1 {
+  stroke: #007bff !important;
+  stroke-width: 3;
+}
+
+.edge-p2 {
+  stroke: #ff3333 !important; 
+  stroke-width: 3;
+}
+
+/* 🟢 المربعات */
+#squares rect {
+  stroke: none;
+  opacity: 0; /* 🆕 تبدأ شفافة */
+  transition: opacity 0.5s ease; /* 🆕 انيميشن */
+}
+
+#squares rect.filled {
+  opacity: 1; /* 🆕 تصير ظاهرة */
+}
+
+/* 🏆 شاشة النتيجة */
+#winner-screen {
+   position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(5px);
+  transition: opacity 0.4s ease;
+}
+
+#winner-box {
+  background: #d5720fff;
+  border-radius: 16px;
+  padding: 30px 40px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  animation: fadeInUp 0.5s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#winner-message {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #fff;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+/* 🎯 جدول الترتيب */
+#winner-details {
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px 30px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  width: min(90%, 400px);
+  text-align: left;
+  animation: fadeInUp 0.5s ease;
+}
+
+/* صفوف اللاعبين */
+#winner-details div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+  font-size: 1.1rem;
+}
+
+#winner-details div:last-child {
+  border-bottom: none;
+}
+/* الميداليات 🥇🥈🥉 */
+#winner-details div:nth-child(1)::before {
+  content: "🥇 ";
+
+}
+#winner-details div:nth-child(2)::before {
+  content: "🥈 ";
+}
+#winner-details div:nth-child(3)::before {
+  content: "🥉 ";
+}
+
+
+#play-again {
+   margin-top: 25px;
+  padding: 10px 24px;
+  font-size: 1.1rem;
+  font-weight: 500;
+  background: linear-gradient(135deg, #007bff, #0056b3);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(0, 123, 255, 0.4);
+  transition: all 0.3s ease;
+}
+
+#play-again:hover {
+    background: linear-gradient(135deg, #3399ff, #007bff);
+  transform: translateY(-1px);
+  box-shadow: 0 0 16px rgba(51, 153, 255, 0.6);
+}
+
+
+/* 📱 استجابة للشاشات الصغيرة */
+@media (max-width: 600px) {
+  #info {
+    flex-direction: column;  /* 🆕 تحت بعض */
+    gap: 10px;
+  }
+}
+
+
+/* حركات لطيفة */
+@keyframes fadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 🎮 شاشة الإعدادات */
+#setup-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 50vh;
+  animation: fadeInUp 0.5s ease;
+}
+
+#setup-box {
+  background: white;
+  border-radius: 20px;
+  padding: 40px 50px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  min-width: 350px;
+  animation: fadeInUp 0.6s ease;
+}
+
+#setup-box h2 {
+  text-align: center;
+  color: #2c3e50;
+  margin-bottom: 30px;
+  font-size: 1.8rem;
+}
+
+.setup-section {
+  margin-bottom: 25px;
+}
+
+.setup-section label {
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #34495e;
+  margin-bottom: 10px;
+}
+
+.setup-section select {
+  width: 100%;
+  padding: 12px 15px;
+  font-size: 1rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.setup-section select:hover {
+  border-color: #667eea;
+}
+
+.setup-section select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 15px 20px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  margin-top: 20px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* 🎵 زر اختيار الموسيقى */
+.btn-secondary {
+  width: 100%;
+  padding: 12px 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, #6f42c1 0%, #9b59b6 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 3px 10px rgba(111, 66, 193, 0.3);
+}
+
+.btn-secondary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(111, 66, 193, 0.4);
+}
+
+/* 🔍 معاينة اللوحة */
+#grid-preview {
+  display: flex;
+  justify-content: center;
+  margin: 20px 0;
+  padding: 20px;
+  background: linear-gradient(135deg, #f0f4ff, #e0ecff);
+  border-radius: 12px;
+}
+
+.preview-grid {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.preview-grid[data-size="3"] {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.preview-grid[data-size="4"] {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.preview-grid[data-size="5"] {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.preview-grid[data-size="6"] {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+.preview-grid[data-size="7"] {
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.preview-grid span {
+  width: 20px;
+  height: 20px;
+  background: #667eea;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.preview-grid:hover span {
+  background: #764ba2;
+  transform: scale(1.1);
+}
+
+/* إخفاء عناصر */
+.hidden {
+  display: none !important;
+}
+
+

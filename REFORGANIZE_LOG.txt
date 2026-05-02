@@ -1,0 +1,6 @@
+Reorganized project into modular structure on 2025-10-14T11:43:20.862575Z
+Moved: js/config.js -> js/config/config.js
+Moved: js/logic.js -> js/core/logic.js
+Moved: js/board.js -> js/render/boardRenderer.js (original DOM code)
+Created: js/core/state.js, js/render/uiRenderer.js, js/board.js (controller)
+Updated main.js to use controller and config
