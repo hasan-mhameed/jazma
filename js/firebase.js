@@ -101,23 +101,13 @@ export class OnlineManager {
   // ══ الاستماع للحركات ════════════════════════════════════════
   _listenForMoves(code) {
     const unsub = onValue(ref(db, `rooms/${code}/move`), (snap) => {
-      console.log("🔥 Firebase move event:", snap.val());
       if (!snap.exists()) return;
       const data = snap.val();
-      console.log("📦 data.by:", data.by, "my playerNum:", this.playerNum);
       if (!data.by || !data.key) return;
-
-      if (data.by === this.playerNum) {
-        console.log("⏭ skipping own move");
-        return;
-      }
-
+      if (data.by === this.playerNum) return;
       const moveId = `${data.key}_${data.seq}`;
-      console.log("🆔 moveId:", moveId, "lastApplied:", this._lastApplied);
       if (moveId === this._lastApplied) return;
-
       this._lastApplied = moveId;
-      console.log("✅ applying move:", data.key);
       this._cbMove && this._cbMove(data.key);
     });
     this._unsubs.push(unsub);

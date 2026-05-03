@@ -249,7 +249,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // ✅ سجّل onMove بعد ما اللوحة تتبنى (requestAnimationFrame يضمن إن الـ DOM جاهز)
     requestAnimationFrame(() => {
       onlineManager.onMove((lineKey) => {
-        console.log("📩 onMove fired, edges in DOM:", document.querySelectorAll('#edges line').length);
         applyOpponentMove(lineKey);
       });
     });
