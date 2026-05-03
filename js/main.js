@@ -195,14 +195,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
       joinRoomBtn.disabled = true;
       try {
-        const roomCfg = await onlineManager.joinRoom(code, name);
-        config.rows = roomCfg.rows;
-        config.cols = roomCfg.cols;
+        const roomData = await onlineManager.joinRoom(code, name);
+        config.rows = roomData.cfg.rows;
+        config.cols = roomData.cfg.cols;
         config.players = 2;
         config.online  = true;
         config.onlinePlayerNum = 2;
 
-        const oppName = await onlineManager.getOpponentName();
+        const oppName = roomData.p1name || "اللاعب 1";
         config.onlinePlayerNames = { 1: oppName, 2: name };
         onlineMyName.textContent  = name;
         onlineOppName.textContent = oppName;
@@ -237,21 +237,21 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /* ── إطلاق لعبة أونلاين ── */
+  let _moveSeq = 0; // رقم تسلسلي للحركات
+
   function launchOnlineGame(myPlayerNum) {
     config.aiMode = "online";
+    _moveSeq = 0;
     aiPlayer = null;
     launchGame();
 
-    // إشارة الدور
     updateOnlineTurnIndicator();
 
-    // استقبال حركات الخصم
-    onlineManager.onMove((data) => {
-      if (!data.lastMove) return;
-      applyOpponentMove(data.lastMove);
+    // استقبال حركات الخصم — الـ callback يستقبل lineKey مباشرة
+    onlineManager.onMove((lineKey) => {
+      applyOpponentMove(lineKey);
     });
 
-    // لو الخصم قطع اتصاله
     onlineManager.onOpponentLeft(() => {
       showDisconnectAlert();
     });

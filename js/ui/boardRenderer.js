@@ -124,9 +124,8 @@ export function handleEdgeClick(edge, cfg) {
   const totalSquares = (cfg.rows-1)*(cfg.cols-1);
   const filled = Object.values(state.scores||{}).reduce((a,b)=>(+a||0)+(+b||0),0);
   if (filled===totalSquares) {
-    // 🌐 إرسال الحالة النهائية قبل إنهاء اللعبة
     if (cfg.aiMode==="online") {
-      onlineManager.pushState(Array.from(state.lines), state.currentPlayer, state.scores, key);
+      onlineManager.pushMove(key, Date.now());
     }
     endGame(cfg,state.scores);
     return;
@@ -139,8 +138,9 @@ export function handleEdgeClick(edge, cfg) {
   }
 
   // 🌐 إرسال الحركة للخصم
-  if (cfg.aiMode==="online") {
-    onlineManager.pushState(Array.from(state.lines), state.currentPlayer, state.scores, key);
+  if (cfg.aiMode === "online") {
+    // نستخدم timestamp كـ seq لضمان التفرد
+    onlineManager.pushMove(key, Date.now());
   }
 
   setTimeout(()=>triggerAIIfNeeded(cfg), 100);

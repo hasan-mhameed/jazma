@@ -1,206 +1,140 @@
-// 📄 firebase.js — v11.7
-// إدارة اللعب الأونلاين عبر Firebase Realtime Database
-
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import {
-  getDatabase, ref, set, get, onValue, update, remove, onDisconnect
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+// 📄 firebase.js — v11.8
+import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, get, onValue, update, onDisconnect }
+                            from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
-  authDomain: "jazma-e17c5.firebaseapp.com",
-  projectId: "jazma-e17c5",
-  storageBucket: "jazma-e17c5.firebasestorage.app",
+  apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
+  authDomain:        "jazma-e17c5.firebaseapp.com",
+  databaseURL:       "https://jazma-e17c5-default-rtdb.firebaseio.com",
+  projectId:         "jazma-e17c5",
+  storageBucket:     "jazma-e17c5.firebasestorage.app",
   messagingSenderId: "924710370216",
-  appId: "1:924710370216:web:99d697db3cfca06492fb9d",
-  measurementId: "G-96RYZW0XGM",
-  databaseURL: "https://jazma-e17c5-default-rtdb.firebaseio.com"
+  appId:             "1:924710370216:web:99d697db3cfca06492fb9d",
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+const db  = getDatabase(app);
 
-// توليد كود غرفة عشوائي (6 أرقام)
-function generateRoomCode() {
+function genCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 export class OnlineManager {
   constructor() {
-    this.roomCode    = null;
-    this.playerNum   = null;   // 1 أو 2
-    this.playerName  = null;
-    this._listeners  = [];     // لإلغاء كل المستمعين عند المغادرة
-
-    // Callbacks
-    this._onOpponentJoined = null;
-    this._onOpponentLeft   = null;
-    this._onMove           = null;
-    this._onRematch        = null;
+    this.roomCode  = null;
+    this.playerNum = null;
+    this._unsubs   = [];
+    this._cbMove   = null;
+    this._cbJoined = null;
+    this._cbLeft   = null;
+    this._gameStarted = false; // ✅ منع تشغيل اللعبة أكثر من مرة
+    this._lastMoveKey = null;  // ✅ منع تطبيق نفس الحركة مرتين
   }
 
-  // ─── إنشاء غرفة ──────────────────────────────────────────────
-  async createRoom(cfg, playerName) {
-    const code = generateRoomCode();
-    this.roomCode   = code;
-    this.playerNum  = 1;
-    this.playerName = playerName;
+  // ══ إنشاء غرفة ══════════════════════════════════════════════
+  async createRoom(cfg, name) {
+    const code = genCode();
+    this.roomCode  = code;
+    this.playerNum = 1;
+    this._gameStarted = false;
 
     await set(ref(db, `rooms/${code}`), {
       cfg:    { rows: cfg.rows, cols: cfg.cols },
       status: "waiting",
-      players: {
-        1: { name: playerName, online: true },
-      },
-      gameState: {
-        lines: [],
-        currentPlayer: 1,
-        scores: { 1: 0, 2: 0 },
-        lastMove: null,
-        lastMoveBy: null,
-      },
-      rematch: null,
+      p1name: name,
+      p2name: "",
+      move: { key: "", by: 0, seq: 0 },  // ✅ نستخدم seq لتمييز الحركات
     });
 
-    // لو انقطع الاتصال، نحذف الغرفة تلقائياً
     onDisconnect(ref(db, `rooms/${code}`)).remove();
-
-    this._listenStatus(code);
-    this._listenGameState(code);
-    this._listenRematch(code);
-
+    this._listenForPlayer2(code);
+    this._listenForMoves(code);
     return code;
   }
 
-  // ─── الانضمام لغرفة ──────────────────────────────────────────
-  async joinRoom(code, playerName) {
+  // ══ الانضمام ════════════════════════════════════════════════
+  async joinRoom(code, name) {
     const snap = await get(ref(db, `rooms/${code}`));
-    if (!snap.exists())              throw new Error("الغرفة غير موجودة!");
+    if (!snap.exists())             throw new Error("الغرفة غير موجودة!");
     const room = snap.val();
-    if (room.status !== "waiting")   throw new Error("الغرفة ممتلئة أو انتهت!");
+    if (room.status !== "waiting")  throw new Error("الغرفة ممتلئة أو انتهت!");
 
-    this.roomCode   = code;
-    this.playerNum  = 2;
-    this.playerName = playerName;
+    this.roomCode  = code;
+    this.playerNum = 2;
+    this._gameStarted = false;
 
     await update(ref(db, `rooms/${code}`), {
-      "players/2": { name: playerName, online: true },
+      p2name: name,
       status: "playing",
     });
 
-    onDisconnect(ref(db, `rooms/${code}/players/2/online`)).set(false);
-
-    this._listenStatus(code);
-    this._listenGameState(code);
-    this._listenRematch(code);
-
-    return room.cfg;
+    onDisconnect(ref(db, `rooms/${code}/status`)).set("finished");
+    this._listenForMoves(code);
+    return { cfg: room.cfg, p1name: room.p1name };
   }
 
-  // ─── إرسال حركة ──────────────────────────────────────────────
-  async sendMove(lineKey, newCurrentPlayer, newScores) {
+  // ══ إرسال حركة ══════════════════════════════════════════════
+  async pushMove(lineKey, seq) {
     if (!this.roomCode) return;
-    await update(ref(db, `rooms/${this.roomCode}/gameState`), {
-      lines:         newCurrentPlayer === 1 ? [] : [],  // placeholder — نبنيها أسفل
-      currentPlayer: newCurrentPlayer,
-      scores:        newScores,
-      lastMove:      lineKey,
-      lastMoveBy:    this.playerNum,
+    await update(ref(db, `rooms/${this.roomCode}/move`), {
+      key: lineKey,
+      by:  this.playerNum,
+      seq: seq,  // رقم تسلسلي يضمن عدم تكرار نفس الحركة
     });
   }
 
-  // ─── إرسال الحالة الكاملة (أدق وأأمن) ───────────────────────
-  async pushState(linesArray, currentPlayer, scores, lastMove) {
-    if (!this.roomCode) return;
-    await update(ref(db, `rooms/${this.roomCode}/gameState`), {
-      lines:         linesArray,
-      currentPlayer: currentPlayer,
-      scores:        scores,
-      lastMove:      lastMove,
-      lastMoveBy:    this.playerNum,
-    });
-  }
-
-  // ─── طلب إعادة مباراة ────────────────────────────────────────
-  async requestRematch() {
-    if (!this.roomCode) return;
-    await update(ref(db, `rooms/${this.roomCode}/rematch`), {
-      [`player${this.playerNum}`]: true,
-    });
-  }
-
-  // ─── الاستماع لحالة الغرفة ───────────────────────────────────
-  _listenStatus(code) {
-    const unsub = onValue(ref(db, `rooms/${code}/players`), (snap) => {
-      if (!snap.exists()) return;
-      const players = snap.val();
-      // اللاعب 2 انضم
-      if (players[2] && this.playerNum === 1 && this._onOpponentJoined) {
-        this._onOpponentJoined(players[2].name);
-      }
-      // أحد اللاعبين قطع الاتصال
-      if (this.playerNum === 1 && players[2] && players[2].online === false && this._onOpponentLeft) {
-        this._onOpponentLeft();
-      }
-      if (this.playerNum === 2 && players[1] && players[1].online === false && this._onOpponentLeft) {
-        this._onOpponentLeft();
+  // ══ الاستماع لانضمام اللاعب 2 (مرة وحدة فقط) ═══════════════
+  _listenForPlayer2(code) {
+    const unsub = onValue(ref(db, `rooms/${code}/status`), (snap) => {
+      if (snap.val() === "playing" && !this._gameStarted) {
+        this._gameStarted = true;
+        // اجلب اسم اللاعب 2
+        get(ref(db, `rooms/${code}/p2name`)).then(s => {
+          this._cbJoined && this._cbJoined(s.val() || "اللاعب 2");
+        });
       }
     });
-    this._listeners.push(unsub);
+    this._unsubs.push(unsub);
   }
 
-  // ─── الاستماع لحركات الخصم ───────────────────────────────────
-  _listenGameState(code) {
-    const unsub = onValue(ref(db, `rooms/${code}/gameState`), (snap) => {
+  // ══ الاستماع للحركات ════════════════════════════════════════
+  _listenForMoves(code) {
+    const unsub = onValue(ref(db, `rooms/${code}/move`), (snap) => {
       if (!snap.exists()) return;
       const data = snap.val();
-      // نستقبل فقط حركات الخصم
-      if (data.lastMoveBy && data.lastMoveBy !== this.playerNum && this._onMove) {
-        this._onMove(data);
+      // استقبل فقط حركات الخصم وغير المكررة
+      if (data.by && data.by !== this.playerNum && data.key && data.key !== this._lastMoveKey) {
+        this._lastMoveKey = data.key + "_" + data.seq;
+        // استخدم seq مع key عشان ما تتكرر
+        const moveId = `${data.key}_${data.seq}`;
+        if (moveId !== this._lastApplied) {
+          this._lastApplied = moveId;
+          this._cbMove && this._cbMove(data.key);
+        }
       }
     });
-    this._listeners.push(unsub);
+    this._unsubs.push(unsub);
   }
 
-  // ─── الاستماع لطلب إعادة مباراة ─────────────────────────────
-  _listenRematch(code) {
-    const unsub = onValue(ref(db, `rooms/${code}/rematch`), (snap) => {
-      if (!snap.exists() || !this._onRematch) return;
-      const data = snap.val();
-      const otherKey = this.playerNum === 1 ? "player2" : "player1";
-      if (data && data[otherKey]) {
-        this._onRematch();
-      }
-    });
-    this._listeners.push(unsub);
-  }
-
-  // ─── جلب اسم الخصم ───────────────────────────────────────────
-  async getOpponentName() {
-    const otherNum = this.playerNum === 1 ? 2 : 1;
-    const snap = await get(ref(db, `rooms/${this.roomCode}/players/${otherNum}/name`));
-    return snap.exists() ? snap.val() : "الخصم";
-  }
-
-  // ─── مغادرة الغرفة ───────────────────────────────────────────
+  // ══ مغادرة ══════════════════════════════════════════════════
   async leaveRoom() {
-    this._listeners.forEach(unsub => unsub());
-    this._listeners = [];
+    this._unsubs.forEach(u => u());
+    this._unsubs = [];
     if (this.roomCode) {
       await update(ref(db, `rooms/${this.roomCode}`), { status: "finished" });
     }
-    this.roomCode   = null;
-    this.playerNum  = null;
-    this.playerName = null;
+    this.roomCode  = null;
+    this.playerNum = null;
+    this._gameStarted = false;
+    this._lastMoveKey = null;
+    this._lastApplied = null;
   }
 
-  // ─── Callbacks ───────────────────────────────────────────────
-  onOpponentJoined(cb) { this._onOpponentJoined = cb; }
-  onOpponentLeft(cb)   { this._onOpponentLeft   = cb; }
-  onMove(cb)           { this._onMove           = cb; }
-  onRematch(cb)        { this._onRematch        = cb; }
-
-  isMyTurn(currentPlayer) { return currentPlayer === this.playerNum; }
+  isMyTurn(cp)       { return cp === this.playerNum; }
+  onMove(cb)         { this._cbMove   = cb; }
+  onOpponentJoined(cb){ this._cbJoined = cb; }
+  onOpponentLeft(cb) { this._cbLeft   = cb; }
 }
 
 export const onlineManager = new OnlineManager();
