@@ -244,12 +244,14 @@ document.addEventListener("DOMContentLoaded", () => {
     _moveSeq = 0;
     aiPlayer = null;
     launchGame();
-
     updateOnlineTurnIndicator();
 
-    // استقبال حركات الخصم — الـ callback يستقبل lineKey مباشرة
-    onlineManager.onMove((lineKey) => {
-      applyOpponentMove(lineKey);
+    // ✅ سجّل onMove بعد ما اللوحة تتبنى (requestAnimationFrame يضمن إن الـ DOM جاهز)
+    requestAnimationFrame(() => {
+      onlineManager.onMove((lineKey) => {
+        console.log("📩 onMove fired, edges in DOM:", document.querySelectorAll('#edges line').length);
+        applyOpponentMove(lineKey);
+      });
     });
 
     onlineManager.onOpponentLeft(() => {
