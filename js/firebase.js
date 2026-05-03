@@ -103,16 +103,17 @@ export class OnlineManager {
     const unsub = onValue(ref(db, `rooms/${code}/move`), (snap) => {
       if (!snap.exists()) return;
       const data = snap.val();
-      // استقبل فقط حركات الخصم وغير المكررة
-      if (data.by && data.by !== this.playerNum && data.key && data.key !== this._lastMoveKey) {
-        this._lastMoveKey = data.key + "_" + data.seq;
-        // استخدم seq مع key عشان ما تتكرر
-        const moveId = `${data.key}_${data.seq}`;
-        if (moveId !== this._lastApplied) {
-          this._lastApplied = moveId;
-          this._cbMove && this._cbMove(data.key);
-        }
-      }
+      if (!data.by || !data.key) return;
+
+      // استقبل فقط حركات الخصم
+      if (data.by === this.playerNum) return;
+
+      // منع تكرار نفس الحركة باستخدام seq
+      const moveId = `${data.key}_${data.seq}`;
+      if (moveId === this._lastApplied) return;
+
+      this._lastApplied = moveId;
+      this._cbMove && this._cbMove(data.key);
     });
     this._unsubs.push(unsub);
   }
