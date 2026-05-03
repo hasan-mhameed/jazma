@@ -7,8 +7,6 @@ import { updateTurn, updateTurnUI }        from "./ui/turnManager.js";
 import { audioManager }                    from "./audio/audioManager.js";
 import { AIPlayer }                        from "./ai/aiPlayer.js";
 import { onlineManager }                   from "./firebase.js";
-import { applyOnlineMove }                 from "./ui/boardRenderer.js";
-import { state }                           from "./core/state.js";
 
 let aiPlayer = null;
 
@@ -259,15 +257,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateOnlineTurnIndicator() {
     if (!onlineTurnInd) return;
-    const isMyTurn = state.currentPlayer === config.onlinePlayerNum;
-    onlineTurnInd.textContent = isMyTurn ? "🟢 دورك!" : "⏳ دور خصمك...";
-    onlineTurnInd.style.color = isMyTurn ? "#4ade80" : "#f87171";
+    const mine = config.onlinePlayerNum;
+    import("./core/state.js").then(({ state }) => {
+      const isMyTurn = state.currentPlayer === mine;
+      onlineTurnInd.textContent = isMyTurn ? "🟢 دورك!" : "⏳ دور خصمك...";
+      onlineTurnInd.style.color = isMyTurn ? "#4ade80" : "#f87171";
+    });
   }
 
   /* تطبيق حركة الخصم على اللوحة */
   function applyOpponentMove(lineKey, data) {
-    applyOnlineMove(lineKey, data, config);
-    updateOnlineTurnIndicator();
+    import("./ui/boardRenderer.js").then(({ applyOnlineMove }) => {
+      applyOnlineMove(lineKey, data, config);
+      updateOnlineTurnIndicator();
+    });
   }
 
   /* تنبيه انقطاع الاتصال */
