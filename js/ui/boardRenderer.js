@@ -188,13 +188,18 @@ export function fillSquare(r,c,cfg,player) {
 
 // ─── تطبيق حركة الخصم الأونلاين ─────────────────────────────────
 export function applyOnlineMove(lineKey, cfg) {
-  for (const edge of document.querySelectorAll('#edges line')) {
+  console.log("🎯 applyOnlineMove key:", lineKey);
+  const edges = document.querySelectorAll('#edges line');
+  console.log("📐 edges in DOM:", edges.length);
+  for (const edge of edges) {
     const key = makeKey(+edge.dataset.r1,+edge.dataset.c1,+edge.dataset.r2,+edge.dataset.c2);
-    if (key===lineKey && !state.lines.has(key)) {
+    if (key === lineKey && !state.lines.has(key)) {
+      console.log("✅ found edge, applying");
       handleEdgeClick(edge, cfg);
       return;
     }
   }
+  console.log("❌ edge not found! cfg:", cfg?.rows, cfg?.cols);
 }
 
 // ─── reset ───────────────────────────────────────────────────────
