@@ -124,7 +124,7 @@ export function handleEdgeClick(edge, cfg, isOpponentMove = false) {
   const totalSquares = (cfg.rows-1)*(cfg.cols-1);
   const filled = Object.values(state.scores||{}).reduce((a,b)=>(+a||0)+(+b||0),0);
   if (filled===totalSquares) {
-    if (cfg.aiMode==="online") {
+    if (cfg.aiMode==="online" && !isOpponentMove) {
       onlineManager.pushMove(key, Date.now());
     }
     endGame(cfg,state.scores);
@@ -137,9 +137,8 @@ export function handleEdgeClick(edge, cfg, isOpponentMove = false) {
     updateTurn(cfg);
   }
 
-  // 🌐 إرسال الحركة للخصم
-  if (cfg.aiMode === "online") {
-    // نستخدم timestamp كـ seq لضمان التفرد
+  // 🌐 إرسال الحركة للخصم (فقط إذا كانت حركتي أنا، مش حركة الخصم)
+  if (cfg.aiMode === "online" && !isOpponentMove) {
     onlineManager.pushMove(key, Date.now());
   }
 
