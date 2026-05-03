@@ -87,11 +87,11 @@ function drawEdge(r1,c1,r2,c2,cfg) {
 }
 
 // ─── معالجة نقر الخط ─────────────────────────────────────────────
-export function handleEdgeClick(edge, cfg) {
+export function handleEdgeClick(edge, cfg, isOpponentMove = false) {
   if (isAIThinking) return;
 
-  // 🌐 أونلاين: امنع اللعب في دور الخصم
-  if (cfg.aiMode === "online" && !onlineManager.isMyTurn(state.currentPlayer)) return;
+  // 🌐 أونلاين: امنع اللعب في دور الخصم (إلا إذا كانت حركة الخصم نفسه)
+  if (cfg.aiMode === "online" && !isOpponentMove && !onlineManager.isMyTurn(state.currentPlayer)) return;
 
   const r1=parseInt(edge.dataset.r1,10), c1=parseInt(edge.dataset.c1,10);
   const r2=parseInt(edge.dataset.r2,10), c2=parseInt(edge.dataset.c2,10);
@@ -195,7 +195,7 @@ export function applyOnlineMove(lineKey, cfg) {
     const key = makeKey(+edge.dataset.r1,+edge.dataset.c1,+edge.dataset.r2,+edge.dataset.c2);
     if (key === lineKey && !state.lines.has(key)) {
       console.log("✅ found edge, applying");
-      handleEdgeClick(edge, cfg);
+      handleEdgeClick(edge, cfg, true); // true = حركة الخصم، تجاوز فحص الدور
       return;
     }
   }
