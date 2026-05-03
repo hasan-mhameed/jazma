@@ -7,7 +7,6 @@
 
 import { state } from "../core/state.js";
 import { config } from "../config/config.js";
-import { currentPlayer } from "./boardRenderer.js";
 
 export function updateTurn(cfg) {
   updateTurnUI(cfg);
@@ -19,15 +18,12 @@ export function updateTurnUI(cfg) {
     if (!span) continue;
 
     const color = cfg.colors[i - 1];
-
-    // 🔹 إعادة الحالة الافتراضية للجميع
     span.classList.remove("active-turn");
     span.style.backgroundColor = "transparent";
     span.style.color = "#333";
     span.style.boxShadow = "none";
 
-    // 🔹 تفعيل اللاعب الحالي
-    if (i === currentPlayer) {
+    if (i === state.currentPlayer) {
       span.classList.add("active-turn");
       span.style.backgroundColor = color;
       span.style.color = "#fff";
