@@ -1,139 +1,313 @@
-// 📄 main.js
-// نقطة الدخول للتطبيق وتشغيل اللعبة
-// App entry point and initializes the game
+// 📄 main.js — v11.7
+// نقطة الدخول للتطبيق
 
-import { config } from "./config/config.js";
+import { config }                          from "./config/config.js";
 import { startBoard, updateScoreboard, resetState } from "./board.js";
-import { updateTurn, updateTurnUI } from "./ui/turnManager.js";
-import { audioManager } from "./audio/audioManager.js";
-import { AIPlayer } from "./ai/aiPlayer.js";
+import { updateTurn, updateTurnUI }        from "./ui/turnManager.js";
+import { audioManager }                    from "./audio/audioManager.js";
+import { AIPlayer }                        from "./ai/aiPlayer.js";
+import { onlineManager }                   from "./firebase.js";
 
-// 🤖 AI Player instance
 let aiPlayer = null;
 
-// 🎮 شاشة الإعدادات
 document.addEventListener("DOMContentLoaded", () => {
-  const setupScreen = document.getElementById("setup-screen");
-  const startGameBtn = document.getElementById("start-game");
-  const gridSizeSelect = document.getElementById("grid-size");
+
+  /* ── عناصر الـ DOM ── */
+  const setupScreen       = document.getElementById("setup-screen");
+  const onlineScreen      = document.getElementById("online-screen");
+  const infoDiv           = document.getElementById("info");
+  const boardSvg          = document.getElementById("board");
+  const winnerScreen      = document.getElementById("winner-screen");
+
+  const gridSizeSelect    = document.getElementById("grid-size");
   const playerCountSelect = document.getElementById("player-count");
-  const aiModeSelect = document.getElementById("ai-mode");
-  const aiDifficultySelect = document.getElementById("ai-difficulty");
+  const aiModeSelect      = document.getElementById("ai-mode");
+  const aiDifficultySelect= document.getElementById("ai-difficulty");
   const aiDifficultySection = document.getElementById("ai-difficulty-section");
-  const infoDiv = document.getElementById("info");
-  const boardSvg = document.getElementById("board");
-  const gridPreview = document.querySelector(".preview-grid");
-  
-  // 🤖 إظهار/إخفاء خيارات صعوبة AI
-  if (aiModeSelect && aiDifficultySection) {
-    aiModeSelect.addEventListener("change", (e) => {
-      if (e.target.value === "ai") {
-        aiDifficultySection.classList.remove("hidden");
-        // في وضع AI، نخلي اللاعبين 2 فقط
-        playerCountSelect.value = "2";
-        playerCountSelect.disabled = true;
-      } else {
-        aiDifficultySection.classList.add("hidden");
-        playerCountSelect.disabled = false;
-      }
-    });
-  }
-  
-  // 🔍 تحديث معاينة اللوحة عند تغيير الحجم
-  if (gridSizeSelect && gridPreview) {
-    gridSizeSelect.addEventListener("change", (e) => {
-      const size = parseInt(e.target.value);
-      updateGridPreview(size);
-    });
-  }
-  
+  const gridPreview       = document.querySelector(".preview-grid");
+  const startGameBtn      = document.getElementById("start-game");
+
+  // أونلاين
+  const stepName          = document.getElementById("online-step-name");
+  const stepLobby         = document.getElementById("online-step-lobby");
+  const stepPlaying       = document.getElementById("online-step-playing");
+  const playerNameInput   = document.getElementById("player-name-input");
+  const roomCodeInput     = document.getElementById("room-code-input");
+  const createRoomBtn     = document.getElementById("create-room-btn");
+  const joinRoomBtn       = document.getElementById("join-room-btn");
+  const onlineBackBtn     = document.getElementById("online-back-btn");
+  const cancelRoomBtn     = document.getElementById("cancel-room-btn");
+  const roomCodeDisplay   = document.getElementById("room-code-display");
+  const copyCodeBtn       = document.getElementById("copy-code-btn");
+  const lobbyStatusText   = document.getElementById("lobby-status-text");
+  const onlineError       = document.getElementById("online-error");
+  const onlineMyName      = document.getElementById("online-my-name");
+  const onlineOppName     = document.getElementById("online-opp-name");
+  const onlineTurnInd     = document.getElementById("online-turn-indicator");
+
+  /* ── معاينة اللوحة ── */
   function updateGridPreview(size) {
     if (!gridPreview) return;
-    
-    // تحديث الـ attribute
     gridPreview.setAttribute("data-size", size);
-    
-    // إنشاء النقاط الجديدة
     gridPreview.innerHTML = "";
-    const totalDots = size * size;
-    
-    for (let i = 0; i < totalDots; i++) {
-      const dot = document.createElement("span");
-      gridPreview.appendChild(dot);
+    for (let i = 0; i < size * size; i++) {
+      gridPreview.appendChild(document.createElement("span"));
     }
   }
-  
-  // زر بدء اللعبة
-  if (startGameBtn) {
-    startGameBtn.addEventListener("click", () => {
-      // 🔊 صوت الزر
-      audioManager.playButtonClick();
-      
-      // الحصول على الإعدادات المختارة
-      const gridSize = parseInt(gridSizeSelect.value);
-      const playerCount = parseInt(playerCountSelect.value);
-      const aiMode = aiModeSelect ? aiModeSelect.value : 'human';
-      const aiDifficulty = aiDifficultySelect ? aiDifficultySelect.value : 'medium';
-      
-      // تحديث الـ config
-      config.rows = gridSize;
-      config.cols = gridSize;
-      config.players = playerCount;
-      config.aiMode = aiMode;
-      
-      // 🤖 تهيئة AI إذا كان الوضع AI
-      if (aiMode === 'ai') {
-        aiPlayer = new AIPlayer(aiDifficulty);
-        config.players = 2; // دائماً لاعبين في وضع AI
-      } else {
-        aiPlayer = null;
+  if (gridSizeSelect) {
+    gridSizeSelect.addEventListener("change", e => updateGridPreview(+e.target.value));
+  }
+
+  /* ── AI mode toggle ── */
+  if (aiModeSelect) {
+    aiModeSelect.addEventListener("change", e => {
+      const isAI = e.target.value === "ai";
+      aiDifficultySection.classList.toggle("hidden", !isAI);
+      if (isAI) { playerCountSelect.value = "2"; playerCountSelect.disabled = true; }
+      else       { playerCountSelect.disabled = false; }
+
+      // وضع أونلاين → فتح شاشة الأونلاين
+      if (e.target.value === "online") {
+        setupScreen.classList.add("hidden");
+        showOnlineStep("name");
+        onlineScreen.classList.remove("hidden");
       }
-      
-      // إخفاء شاشة الإعدادات وإظهار اللعبة
-      if (setupScreen) setupScreen.classList.add("hidden");
-      if (infoDiv) infoDiv.classList.remove("hidden");
-      if (boardSvg) boardSvg.classList.remove("hidden");
-      
-      // بدء اللعبة
-      startGame();
     });
   }
-  
-  // دالة بدء اللعبة
-  function startGame() {
+
+  /* ── بدء اللعبة (offline) ── */
+  if (startGameBtn) {
+    startGameBtn.addEventListener("click", () => {
+      audioManager.playButtonClick();
+      const gridSize    = +gridSizeSelect.value;
+      const playerCount = +playerCountSelect.value;
+      const aiMode      = aiModeSelect ? aiModeSelect.value : "human";
+      const aiDifficulty= aiDifficultySelect ? aiDifficultySelect.value : "medium";
+
+      if (aiMode === "online") {
+        // فتح شاشة الأونلاين
+        setupScreen.classList.add("hidden");
+        showOnlineStep("name");
+        onlineScreen.classList.remove("hidden");
+        return;
+      }
+
+      config.rows    = gridSize;
+      config.cols    = gridSize;
+      config.players = playerCount;
+      config.aiMode  = aiMode;
+      config.online  = false;
+
+      aiPlayer = aiMode === "ai" ? new AIPlayer(aiDifficulty) : null;
+      if (aiMode === "ai") config.players = 2;
+
+      launchGame();
+    });
+  }
+
+  function launchGame() {
+    setupScreen.classList.add("hidden");
+    onlineScreen.classList.add("hidden");
+    infoDiv.classList.remove("hidden");
+    boardSvg.classList.remove("hidden");
     startBoard(config, aiPlayer);
     updateScoreboard();
     updateTurnUI(config);
-    
-    // 🎵 بدء الموسيقى الخلفية
     audioManager.startBackgroundMusic();
   }
 
-  // Cache controls
-  const restartBtn = document.getElementById("restart");
-  const playAgainBtn = document.getElementById("play-again");
-  const winnerScreen = document.getElementById("winner-screen");
+  /* ══════════════════════════════════════
+     🌐 منطق الأونلاين
+  ══════════════════════════════════════ */
+  function showOnlineStep(step) {
+    stepName.classList.add("hidden");
+    stepLobby.classList.add("hidden");
+    stepPlaying.classList.add("hidden");
+    onlineError.classList.add("hidden");
+    if (step === "name")    stepName.classList.remove("hidden");
+    if (step === "lobby")   stepLobby.classList.remove("hidden");
+    if (step === "playing") stepPlaying.classList.remove("hidden");
+  }
 
-  // 🆕 زر Restart - يرجع لشاشة الإعدادات
+  function showOnlineError(msg) {
+    onlineError.textContent = msg;
+    onlineError.classList.remove("hidden");
+  }
+
+  function getPlayerName() {
+    const name = playerNameInput.value.trim();
+    if (!name) { showOnlineError("❗ أدخل اسمك أولاً!"); return null; }
+    return name;
+  }
+
+  /* إنشاء غرفة */
+  if (createRoomBtn) {
+    createRoomBtn.addEventListener("click", async () => {
+      const name = getPlayerName(); if (!name) return;
+      createRoomBtn.disabled = true;
+      try {
+        const gridSize = +gridSizeSelect.value;
+        config.rows = config.cols = gridSize;
+        config.players = 2;
+        config.online  = true;
+        config.onlinePlayerNum = 1;
+
+        const code = await onlineManager.createRoom(config, name);
+        roomCodeDisplay.textContent = code;
+        showOnlineStep("lobby");
+        lobbyStatusText.textContent = "بانتظار الخصم...";
+
+        // لما ينضم الخصم
+        onlineManager.onOpponentJoined(async (oppName) => {
+          const myName = name;
+          config.onlinePlayerNames = { 1: myName, 2: oppName };
+          onlineMyName.textContent  = myName;
+          onlineOppName.textContent = oppName;
+          showOnlineStep("playing");
+          launchOnlineGame(1);
+        });
+
+      } catch (e) {
+        showOnlineError(e.message);
+      } finally {
+        createRoomBtn.disabled = false;
+      }
+    });
+  }
+
+  /* نسخ الكود */
+  if (copyCodeBtn) {
+    copyCodeBtn.addEventListener("click", () => {
+      navigator.clipboard?.writeText(roomCodeDisplay.textContent);
+      copyCodeBtn.textContent = "✅ تم النسخ!";
+      setTimeout(() => { copyCodeBtn.textContent = "📋 نسخ الكود"; }, 2000);
+    });
+  }
+
+  /* الانضمام لغرفة */
+  if (joinRoomBtn) {
+    joinRoomBtn.addEventListener("click", async () => {
+      const name = getPlayerName(); if (!name) return;
+      const code = roomCodeInput.value.trim();
+      if (code.length !== 6) { showOnlineError("❗ الكود يجب أن يكون 6 أرقام"); return; }
+
+      joinRoomBtn.disabled = true;
+      try {
+        const roomCfg = await onlineManager.joinRoom(code, name);
+        config.rows = roomCfg.rows;
+        config.cols = roomCfg.cols;
+        config.players = 2;
+        config.online  = true;
+        config.onlinePlayerNum = 2;
+
+        const oppName = await onlineManager.getOpponentName();
+        config.onlinePlayerNames = { 1: oppName, 2: name };
+        onlineMyName.textContent  = name;
+        onlineOppName.textContent = oppName;
+        showOnlineStep("playing");
+        launchOnlineGame(2);
+
+      } catch (e) {
+        showOnlineError(e.message);
+      } finally {
+        joinRoomBtn.disabled = false;
+      }
+    });
+  }
+
+  /* إلغاء الغرفة */
+  if (cancelRoomBtn) {
+    cancelRoomBtn.addEventListener("click", async () => {
+      await onlineManager.leaveRoom();
+      showOnlineStep("name");
+    });
+  }
+
+  /* رجوع من شاشة الأونلاين */
+  if (onlineBackBtn) {
+    onlineBackBtn.addEventListener("click", () => {
+      onlineScreen.classList.add("hidden");
+      setupScreen.classList.remove("hidden");
+      aiModeSelect.value = "human";
+      aiDifficultySection.classList.add("hidden");
+      playerCountSelect.disabled = false;
+    });
+  }
+
+  /* ── إطلاق لعبة أونلاين ── */
+  function launchOnlineGame(myPlayerNum) {
+    config.aiMode = "online";
+    aiPlayer = null;
+    launchGame();
+
+    // إشارة الدور
+    updateOnlineTurnIndicator();
+
+    // استقبال حركات الخصم
+    onlineManager.onMove((data) => {
+      if (!data.lastMove) return;
+      applyOpponentMove(data.lastMove, data);
+    });
+
+    // لو الخصم قطع اتصاله
+    onlineManager.onOpponentLeft(() => {
+      showDisconnectAlert();
+    });
+  }
+
+  function updateOnlineTurnIndicator() {
+    if (!onlineTurnInd) return;
+    const mine = config.onlinePlayerNum;
+    import("./core/state.js").then(({ state }) => {
+      const isMyTurn = state.currentPlayer === mine;
+      onlineTurnInd.textContent = isMyTurn ? "🟢 دورك!" : "⏳ دور خصمك...";
+      onlineTurnInd.style.color = isMyTurn ? "#4ade80" : "#f87171";
+    });
+  }
+
+  /* تطبيق حركة الخصم على اللوحة */
+  function applyOpponentMove(lineKey, data) {
+    import("./ui/boardRenderer.js").then(({ applyOnlineMove }) => {
+      applyOnlineMove(lineKey, data, config);
+      updateOnlineTurnIndicator();
+    });
+  }
+
+  /* تنبيه انقطاع الاتصال */
+  function showDisconnectAlert() {
+    const box = document.createElement("div");
+    box.style.cssText = `
+      position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+      background:#1e1e2e;border:2px solid #f87171;border-radius:16px;
+      padding:28px 36px;text-align:center;z-index:9999;box-shadow:0 8px 40px #0008;
+    `;
+    box.innerHTML = `
+      <p style="font-size:1.2rem;margin-bottom:16px;">❌ انقطع اتصال الخصم!</p>
+      <button onclick="location.reload()" style="background:#7c6af7;color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:1rem;">🔄 العودة للقائمة</button>
+    `;
+    document.body.appendChild(box);
+  }
+
+  /* ══════════════════════════════════════
+     🔄 Restart / Play Again
+  ══════════════════════════════════════ */
+  const restartBtn  = document.getElementById("restart");
+  const playAgainBtn= document.getElementById("play-again");
+
   if (restartBtn) {
-    restartBtn.addEventListener("click", () => {
-      // 🔊 صوت الزر
+    restartBtn.addEventListener("click", async () => {
       audioManager.playButtonClick();
-      
-      // 🎵 إيقاف الموسيقى
       audioManager.stopBackgroundMusic();
-      
-      // 🤖 إعادة تعيين AI
+      if (config.online) await onlineManager.leaveRoom();
       aiPlayer = null;
-      
-      // إخفاء اللعبة
-      if (infoDiv) infoDiv.classList.add("hidden");
-      if (boardSvg) boardSvg.classList.add("hidden");
-      
-      // إظهار شاشة الإعدادات
-      if (setupScreen) setupScreen.classList.remove("hidden");
-      
-      // إعادة تعيين الحالة
+      config.online = false;
+      infoDiv.classList.add("hidden");
+      boardSvg.classList.add("hidden");
+      onlineScreen.classList.add("hidden");
+      setupScreen.classList.remove("hidden");
+      aiModeSelect.value = "human";
+      aiDifficultySection.classList.add("hidden");
+      playerCountSelect.disabled = false;
       resetState();
     });
   }
@@ -141,35 +315,29 @@ document.addEventListener("DOMContentLoaded", () => {
   if (playAgainBtn) {
     playAgainBtn.addEventListener("click", () => {
       if (winnerScreen) winnerScreen.classList.add("hidden");
-      if (restartBtn) restartBtn.click();
+      restartBtn?.click();
     });
   }
-  
-  // 🔊 زر تفعيل/تعطيل الصوت
+
+  /* ══════════════════════════════════════
+     🔊 صوت وموسيقى
+  ══════════════════════════════════════ */
   const soundToggleBtn = document.getElementById("sound-toggle");
-  if (soundToggleBtn) {
-    soundToggleBtn.addEventListener("click", () => {
-      const isEnabled = audioManager.toggle();
-      soundToggleBtn.textContent = isEnabled ? "🔊" : "🔇";
-      soundToggleBtn.classList.toggle("muted", !isEnabled);
-      
-      // تشغيل صوت test
-      if (isEnabled) {
-        audioManager.playButtonClick();
-      }
-    });
-  }
-  
-  // 🎵 زر تفعيل/تعطيل الموسيقى
   const musicToggleBtn = document.getElementById("music-toggle");
-  if (musicToggleBtn) {
-    musicToggleBtn.addEventListener("click", () => {
-      const isEnabled = audioManager.toggleMusic();
-      musicToggleBtn.textContent = isEnabled ? "🎵" : "🎶";
-      musicToggleBtn.classList.toggle("muted", !isEnabled);
-      
-      // تشغيل صوت test
-      audioManager.playButtonClick();
-    });
-  }
+
+  soundToggleBtn?.addEventListener("click", () => {
+    const on = audioManager.toggle();
+    soundToggleBtn.textContent = on ? "🔊" : "🔇";
+    soundToggleBtn.classList.toggle("muted", !on);
+    if (on) audioManager.playButtonClick();
+  });
+
+  musicToggleBtn?.addEventListener("click", () => {
+    const on = audioManager.toggleMusic();
+    musicToggleBtn.textContent = on ? "🎵" : "🎶";
+    musicToggleBtn.classList.toggle("muted", !on);
+    audioManager.playButtonClick();
+  });
+
 });
+

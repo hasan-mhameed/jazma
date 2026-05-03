@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Dots & Boxes — SVG (المرحلة 1)</title>
+    <title>جزمة — Dots & Boxes v11.7</title>
     <link rel="stylesheet" href="css/style.css" />
     <link rel="stylesheet" href="./css/animations.css" />
 
@@ -54,6 +54,7 @@
             <select id="ai-mode">
               <option value="human">لاعبين بشريين</option>
               <option value="ai">ضد الكمبيوتر 🤖</option>
+              <option value="online">🌐 أونلاين</option>
             </select>
           </div>
           
@@ -90,6 +91,57 @@
           <div id="winner-details"></div>
           <!-- 🆕 هنا بيظهر ترتيب اللاعبين -->
           <button id="play-again">Play Again</button>
+        </div>
+      </div>
+
+      <!-- 🌐 شاشة الأونلاين -->
+      <div id="online-screen" class="hidden">
+        <div id="online-box">
+
+          <!-- الخطوة 1: إدخال الاسم -->
+          <div id="online-step-name">
+            <h2>🌐 اللعب الأونلاين</h2>
+            <p class="online-hint">أدخل اسمك للمتابعة</p>
+            <input id="player-name-input" type="text" maxlength="16"
+              placeholder="اسمك هنا..." autocomplete="off" />
+            <div class="online-actions">
+              <button id="create-room-btn" class="btn-primary btn-online">🏠 إنشاء غرفة</button>
+              <div class="online-divider">— أو —</div>
+              <div class="join-row">
+                <input id="room-code-input" type="text" maxlength="6"
+                  placeholder="كود الغرفة (6 أرقام)" autocomplete="off" />
+                <button id="join-room-btn" class="btn-primary btn-online">🚪 انضم</button>
+              </div>
+            </div>
+            <div id="online-error" class="online-error hidden"></div>
+            <button id="online-back-btn" class="btn-back">↩ رجوع</button>
+          </div>
+
+          <!-- الخطوة 2: لوبي الانتظار -->
+          <div id="online-step-lobby" class="hidden">
+            <h2>🏠 غرفتك جاهزة!</h2>
+            <p class="online-hint">شارك الكود مع صديقك</p>
+            <div id="room-code-display"></div>
+            <button id="copy-code-btn" class="btn-copy">📋 نسخ الكود</button>
+            <div id="lobby-status">
+              <div class="waiting-dots">
+                <span></span><span></span><span></span>
+              </div>
+              <p id="lobby-status-text">بانتظار الخصم...</p>
+            </div>
+            <button id="cancel-room-btn" class="btn-back">✕ إلغاء</button>
+          </div>
+
+          <!-- الخطوة 3: اللعبة جارية — شريط المعلومات -->
+          <div id="online-step-playing" class="hidden">
+            <div id="online-game-bar">
+              <span id="online-my-name" class="online-player-badge mine"></span>
+              <span class="vs-badge">VS</span>
+              <span id="online-opp-name" class="online-player-badge opp"></span>
+            </div>
+            <div id="online-turn-indicator"></div>
+          </div>
+
         </div>
       </div>
     </main>

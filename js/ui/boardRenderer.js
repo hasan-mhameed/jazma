@@ -11,9 +11,8 @@ import { renderScoreboard, updateScoreboard } from "./scoreboard.js";
 import { updateTurn, updateTurnUI } from "./turnManager.js";
 import { endGame } from "./gameEnd.js";
 import { audioManager } from "../audio/audioManager.js";
-
-// import { makeKey } from "./utils.js";
 import { checkSquaresAround } from "../core/logic.js";
+import { onlineManager } from "../firebase.js";
 
 export let lines = new Set();
 export let currentPlayer = 1; // اللاعب الحالي (1 أو 2)
@@ -145,12 +144,11 @@ function drawEdge(r1, c1, r2, c2, cfg) {
 
 // 🆕 معالجة نقرات الخطوط (edges)
 function handleEdgeClick(edge, cfg) {
-  // 🤖 منع اللاعب من اللعب أثناء دور AI
-  if (isAIThinking) {
-    console.log('⏳ انتظر... الكمبيوتر يفكر');
-    return;
-  }
-  
+  if (isAIThinking) return;
+
+  // 🌐 في وضع الأونلاين: امنع اللاعب من اللعب في دور الخصم
+  if (cfg.aiMode === "online" && !onlineManager.isMyTurn(currentPlayer)) return;
+
   const r1 = parseInt(edge.dataset.r1, 10);
   const c1 = parseInt(edge.dataset.c1, 10);
   const r2 = parseInt(edge.dataset.r2, 10);
@@ -204,11 +202,15 @@ function handleEdgeClick(edge, cfg) {
     currentPlayer = (currentPlayer % cfg.players) + 1;
     updateTurn(cfg);
   }
-  
+
+  // 🌐 إرسال الحركة للخصم في وضع الأونلاين
+  if (cfg.aiMode === "online") {
+    const linesArray = Array.from(state.lines);
+    onlineManager.pushState(linesArray, currentPlayer, state.scores, key);
+  }
+
   // 🤖 تحقق إذا دور AI وشغّله
-  setTimeout(() => {
-    triggerAIIfNeeded(cfg);
-  }, 100);
+  setTimeout(() => { triggerAIIfNeeded(cfg); }, 100);
 }
 
 // 🤖 تشغيل AI إذا كان دوره
@@ -335,3 +337,20 @@ export function resetState() {
 
 // 🟢 بناء scoreboard ديناميكي
 // (moved renderScoreboard to ui/scoreboard.js)
+
+// 🌐 تطبيق حركة الخصم الأونلاين
+export function applyOnlineMove(lineKey, data, cfg) {
+  // إيجاد الخط من المفتاح
+  const edges = document.querySelectorAll('#edges line');
+  for (const edge of edges) {
+    const r1 = parseInt(edge.dataset.r1);
+    const c1 = parseInt(edge.dataset.c1);
+    const r2 = parseInt(edge.dataset.r2);
+    const c2 = parseInt(edge.dataset.c2);
+    const key = makeKey(r1, c1, r2, c2);
+    if (key === lineKey && !state.lines.has(key)) {
+      handleEdgeClick(edge, cfg);
+      return;
+    }
+  }
+}
