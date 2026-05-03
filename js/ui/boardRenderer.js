@@ -143,7 +143,7 @@ function drawEdge(r1, c1, r2, c2, cfg) {
 }
 
 // 🆕 معالجة نقرات الخطوط (edges)
-function handleEdgeClick(edge, cfg) {
+export function handleEdgeClick(edge, cfg) {
   if (isAIThinking) return;
 
   // 🌐 في وضع الأونلاين: امنع اللاعب من اللعب في دور الخصم
@@ -340,7 +340,6 @@ export function resetState() {
 
 // 🌐 تطبيق حركة الخصم الأونلاين
 export function applyOnlineMove(lineKey, data, cfg) {
-  // إيجاد الخط من المفتاح
   const edges = document.querySelectorAll('#edges line');
   for (const edge of edges) {
     const r1 = parseInt(edge.dataset.r1);
