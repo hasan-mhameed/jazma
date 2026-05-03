@@ -1,4 +1,4 @@
-# 🎮 Dots & Boxes — v11.7
+# 🎮 Dots & Boxes — v11.8
 
 لعبة Dots & Boxes الكلاسيكية مع ذكاء اصطناعي قوي وموسيقى مصرية أصلية 🏺
 
@@ -66,6 +66,12 @@ Jazam_v11.6/
 ---
 
 ## 📋 سجل الإصدارات
+
+### v11.8
+- إعادة كتابة boardRenderer.js بالكامل
+- توحيد مصدر الدور في state.currentPlayer فقط (إزالة المتغير المحلي currentPlayer)
+- إصلاح جذري لمشكلة عدم تزامن الحركات في وضع الأونلاين
+- تبسيط applyOnlineMove — لا تحتاج data، فقط lineKey و cfg
 
 ### v11.7
 - إضافة نظام اللعب الأونلاين الكامل عبر Firebase Realtime Database

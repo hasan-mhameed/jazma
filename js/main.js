@@ -248,7 +248,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // استقبال حركات الخصم
     onlineManager.onMove((data) => {
       if (!data.lastMove) return;
-      applyOpponentMove(data.lastMove, data);
+      applyOpponentMove(data.lastMove);
     });
 
     // لو الخصم قطع اتصاله
@@ -265,8 +265,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /* تطبيق حركة الخصم على اللوحة */
-  function applyOpponentMove(lineKey, data) {
-    applyOnlineMove(lineKey, data, config);
+  function applyOpponentMove(lineKey) {
+    applyOnlineMove(lineKey, config);
     updateOnlineTurnIndicator();
   }
 
