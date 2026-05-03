@@ -143,11 +143,11 @@ function drawEdge(r1, c1, r2, c2, cfg) {
 }
 
 // 🆕 معالجة نقرات الخطوط (edges)
-function handleEdgeClick(edge, cfg) {
+export function handleEdgeClick(edge, cfg) {
   if (isAIThinking) return;
 
   // 🌐 في وضع الأونلاين: امنع اللاعب من اللعب في دور الخصم
-  if (cfg.aiMode === "online" && !onlineManager.isMyTurn(currentPlayer)) return;
+  if (cfg.aiMode === "online" && !onlineManager.isMyTurn(state.currentPlayer)) return;
 
   const r1 = parseInt(edge.dataset.r1, 10);
   const c1 = parseInt(edge.dataset.c1, 10);
@@ -206,7 +206,7 @@ function handleEdgeClick(edge, cfg) {
   // 🌐 إرسال الحركة للخصم في وضع الأونلاين
   if (cfg.aiMode === "online") {
     const linesArray = Array.from(state.lines);
-    onlineManager.pushState(linesArray, currentPlayer, state.scores, key);
+    onlineManager.pushState(linesArray, state.currentPlayer, state.scores, key);
   }
 
   // 🤖 تحقق إذا دور AI وشغّله
@@ -340,7 +340,6 @@ export function resetState() {
 
 // 🌐 تطبيق حركة الخصم الأونلاين
 export function applyOnlineMove(lineKey, data, cfg) {
-  // إيجاد الخط من المفتاح
   const edges = document.querySelectorAll('#edges line');
   for (const edge of edges) {
     const r1 = parseInt(edge.dataset.r1);
@@ -349,6 +348,8 @@ export function applyOnlineMove(lineKey, data, cfg) {
     const c2 = parseInt(edge.dataset.c2);
     const key = makeKey(r1, c1, r2, c2);
     if (key === lineKey && !state.lines.has(key)) {
+      // حدّث currentPlayer في state قبل التطبيق عشان isMyTurn يشتغل صح
+      state.currentPlayer = data.lastMoveBy;
       handleEdgeClick(edge, cfg);
       return;
     }
