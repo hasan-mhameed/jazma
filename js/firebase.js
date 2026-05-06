@@ -87,17 +87,16 @@ export class OnlineManager {
     });
   }
 
-  // ══ الاستماع لانضمام اللاعب 2 (مرة وحدة فقط) ═══════════════
+  // ══ الاستماع لانضمام اللاعب 2 ══════════════════════════════
   _listenForPlayer2(code) {
-    const unsub = onValue(ref(db, `rooms/${code}/status`), (snap) => {
-      if (snap.val() === "playing" && !this._gameStarted) {
+    const unsub = onValue(ref(db, `rooms/${code}`), (snap) => {
+      if (!snap.exists()) return;
+      const room = snap.val();
+      if (room.status === "playing" && !this._gameStarted && room.p2name) {
         this._gameStarted = true;
-        // اجلب اسم اللاعب 2
-        get(ref(db, `rooms/${code}/p2name`)).then(s => {
-          this._cbJoined && this._cbJoined(s.val() || "اللاعب 2");
-        });
+        this._cbJoined && this._cbJoined(room.p2name);
       }
-      if (snap.val() === "finished" && this._gameStarted) {
+      if (room.status === "finished" && this._gameStarted) {
         this._cbLeft && this._cbLeft();
       }
     });
