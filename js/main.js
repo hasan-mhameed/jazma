@@ -256,6 +256,11 @@ document.addEventListener("DOMContentLoaded", () => {
     onlineManager.onOpponentLeft(() => {
       showDisconnectAlert();
     });
+
+    // إشعار restart من الخصم
+    onlineManager.onRestart(() => {
+      showRestartAlert();
+    });
   }
 
   function updateOnlineTurnIndicator() {
@@ -269,6 +274,21 @@ document.addEventListener("DOMContentLoaded", () => {
   function applyOpponentMove(lineKey) {
     applyOnlineMove(lineKey, config);
     updateOnlineTurnIndicator();
+  }
+
+  /* تنبيه restart من الخصم */
+  function showRestartAlert() {
+    const box = document.createElement("div");
+    box.style.cssText = `
+      position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+      background:#1e1e2e;border:2px solid #7c6af7;border-radius:16px;
+      padding:28px 36px;text-align:center;z-index:9999;box-shadow:0 8px 40px #0008;
+    `;
+    box.innerHTML = `
+      <p style="font-size:1.2rem;margin-bottom:16px;">🔄 الخصم أنهى اللعبة!</p>
+      <button onclick="location.reload()" style="background:#7c6af7;color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:1rem;">🏠 العودة للقائمة</button>
+    `;
+    document.body.appendChild(box);
   }
 
   /* تنبيه انقطاع الاتصال */
@@ -296,6 +316,7 @@ document.addEventListener("DOMContentLoaded", () => {
     restartBtn.addEventListener("click", async () => {
       audioManager.playButtonClick();
       audioManager.stopBackgroundMusic();
+      if (config.online) await onlineManager.sendRestart();
       if (config.online) await onlineManager.leaveRoom();
       aiPlayer = null;
       config.online = false;

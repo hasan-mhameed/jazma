@@ -50,6 +50,7 @@ export class OnlineManager {
     onDisconnect(ref(db, `rooms/${code}`)).remove();
     this._listenForPlayer2(code);
     this._listenForMoves(code);
+    this._listenForRestart(code);
     return code;
   }
 
@@ -71,6 +72,8 @@ export class OnlineManager {
 
     onDisconnect(ref(db, `rooms/${code}/status`)).set("finished");
     this._listenForMoves(code);
+    this._listenForOpponentLeave(code);
+    this._listenForRestart(code);
     return { cfg: room.cfg, p1name: room.p1name };
   }
 
@@ -94,6 +97,9 @@ export class OnlineManager {
           this._cbJoined && this._cbJoined(s.val() || "اللاعب 2");
         });
       }
+      if (snap.val() === "finished" && this._gameStarted) {
+        this._cbLeft && this._cbLeft();
+      }
     });
     this._unsubs.push(unsub);
   }
@@ -113,6 +119,18 @@ export class OnlineManager {
     this._unsubs.push(unsub);
   }
 
+  // ══ الاستماع لمغادرة الخصم (للاعب 2) ════════════════════════
+  _listenForOpponentLeave(code) {
+    let firstCall = true; // تجاهل أول استدعاء (القيمة الحالية)
+    const unsub = onValue(ref(db, `rooms/${code}/status`), (snap) => {
+      if (firstCall) { firstCall = false; return; }
+      if (snap.val() === "finished") {
+        this._cbLeft && this._cbLeft();
+      }
+    });
+    this._unsubs.push(unsub);
+  }
+
   // ══ مغادرة ══════════════════════════════════════════════════
   async leaveRoom() {
     this._unsubs.forEach(u => u());
@@ -127,10 +145,25 @@ export class OnlineManager {
     this._lastApplied = null;
   }
 
-  isMyTurn(cp)       { return cp === this.playerNum; }
-  onMove(cb)         { this._cbMove   = cb; }
-  onOpponentJoined(cb){ this._cbJoined = cb; }
-  onOpponentLeft(cb) { this._cbLeft   = cb; }
+  // ══ إرسال إشعار restart ═════════════════════════════════════
+  async sendRestart() {
+    if (!this.roomCode) return;
+    await update(ref(db, `rooms/${this.roomCode}`), { restart: this.playerNum });
+  }
+
+  // ══ الاستماع لـ restart ══════════════════════════════════════
+  _listenForRestart(code) {
+    const unsub = onValue(ref(db, `rooms/${code}/restart`), (snap) => {
+      if (!snap.exists()) return;
+      const by = snap.val();
+      if (by && by !== this.playerNum) {
+        this._cbRestart && this._cbRestart();
+      }
+    });
+    this._unsubs.push(unsub);
+  }
+
+  onRestart(cb) { this._cbRestart = cb; }
 }
 
 export const onlineManager = new OnlineManager();
