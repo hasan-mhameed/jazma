@@ -154,13 +154,8 @@ document.addEventListener("DOMContentLoaded", () => {
         config.online  = true;
         config.onlinePlayerNum = 1;
 
-        const code = await onlineManager.createRoom(config, name);
-        roomCodeDisplay.textContent = code;
-        showOnlineStep("lobby");
-        lobbyStatusText.textContent = "بانتظار الخصم...";
-
-        // لما ينضم الخصم
-        onlineManager.onOpponentJoined(async (oppName) => {
+        // ✅ سجّل الـ callback أولاً قبل createRoom
+        onlineManager.onOpponentJoined((oppName) => {
           const myName = name;
           config.onlinePlayerNames = { 1: myName, 2: oppName };
           onlineMyName.textContent  = myName;
@@ -168,6 +163,11 @@ document.addEventListener("DOMContentLoaded", () => {
           showOnlineStep("playing");
           launchOnlineGame(1);
         });
+
+        const code = await onlineManager.createRoom(config, name);
+        roomCodeDisplay.textContent = code;
+        showOnlineStep("lobby");
+        lobbyStatusText.textContent = "بانتظار الخصم...";
 
       } catch (e) {
         showOnlineError(e.message);
