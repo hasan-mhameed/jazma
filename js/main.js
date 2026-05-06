@@ -316,8 +316,12 @@ document.addEventListener("DOMContentLoaded", () => {
     restartBtn.addEventListener("click", async () => {
       audioManager.playButtonClick();
       audioManager.stopBackgroundMusic();
-      if (config.online) await onlineManager.sendRestart();
-      if (config.online) await onlineManager.leaveRoom();
+      if (config.online) {
+        await onlineManager.sendRestart();
+        // ننتظر 500ms عشان الإشعار يوصل للخصم قبل ما نمسح الـ listeners
+        await new Promise(r => setTimeout(r, 500));
+        await onlineManager.leaveRoom();
+      }
       aiPlayer = null;
       config.online = false;
       infoDiv.classList.add("hidden");

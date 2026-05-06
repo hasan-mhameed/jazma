@@ -148,12 +148,16 @@ export class OnlineManager {
   // ══ إرسال إشعار restart ═════════════════════════════════════
   async sendRestart() {
     if (!this.roomCode) return;
-    await update(ref(db, `rooms/${this.roomCode}`), { restart: this.playerNum });
+    // نكتب في node منفصل عشان ما يتداخل مع status
+    await update(ref(db, `rooms/${this.roomCode}/signals`), {
+      restart: this.playerNum,
+      ts: Date.now(),
+    });
   }
 
   // ══ الاستماع لـ restart ══════════════════════════════════════
   _listenForRestart(code) {
-    const unsub = onValue(ref(db, `rooms/${code}/restart`), (snap) => {
+    const unsub = onValue(ref(db, `rooms/${code}/signals/restart`), (snap) => {
       if (!snap.exists()) return;
       const by = snap.val();
       if (by && by !== this.playerNum) {
