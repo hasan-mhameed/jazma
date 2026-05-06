@@ -166,7 +166,11 @@ export class OnlineManager {
     this._unsubs.push(unsub);
   }
 
-  onRestart(cb) { this._cbRestart = cb; }
+  onRestart(cb)       { this._cbRestart = cb; }
+  onMove(cb)          { this._cbMove    = cb; }
+  onOpponentJoined(cb){ this._cbJoined  = cb; }
+  onOpponentLeft(cb)  { this._cbLeft    = cb; }
+  isMyTurn(cp)        { return cp === this.playerNum; }
 }
 
 export const onlineManager = new OnlineManager();
