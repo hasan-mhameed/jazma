@@ -663,3 +663,106 @@ h1 {
   margin-top: 4px;
   min-height: 22px;
 }
+
+/* ═══════════════════════════════════════
+   🔐 Auth Screen — v12.0
+═══════════════════════════════════════ */
+#auth-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 80vh;
+}
+
+#auth-box {
+  background: #1e1e2e;
+  border-radius: 20px;
+  padding: 48px 40px;
+  max-width: 380px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+}
+
+.auth-logo { font-size: 3.5rem; margin-bottom: 8px; }
+
+#auth-box h1 {
+  font-size: 2rem;
+  margin: 0 0 4px;
+  color: #fff;
+}
+
+.auth-subtitle {
+  color: #666;
+  font-size: 0.95rem;
+  margin-bottom: 32px;
+}
+
+#google-signin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 20px;
+  background: #fff;
+  color: #333;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 16px;
+}
+#google-signin-btn:hover { background: #f0f0f0; transform: translateY(-1px); }
+
+.auth-hint { color: #555; font-size: 0.85rem; }
+
+/* شريط المستخدم */
+#user-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: #1a1a2e;
+  border-bottom: 1px solid #2a2a3e;
+  gap: 12px;
+}
+
+#user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#user-photo {
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #7c6af7;
+}
+
+#user-name {
+  font-weight: bold;
+  font-size: 0.95rem;
+  color: #e0e0ff;
+}
+
+#user-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: #aaa;
+}
+
+#logout-btn {
+  background: none;
+  border: 1px solid #444;
+  color: #888;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+#logout-btn:hover { border-color: #f87171; color: #f87171; }

@@ -9,12 +9,21 @@ import { AIPlayer }                        from "./ai/aiPlayer.js";
 import { onlineManager }                   from "./firebase.js";
 import { applyOnlineMove }                 from "./ui/boardRenderer.js";
 import { state }                           from "./core/state.js";
+import { onUserChange, signInWithGoogle, logout, getUserProfile } from "./auth.js";
 
 let aiPlayer = null;
 
 document.addEventListener("DOMContentLoaded", () => {
 
   /* ── عناصر الـ DOM ── */
+  const authScreen        = document.getElementById("auth-screen");
+  const userBar           = document.getElementById("user-bar");
+  const userPhoto         = document.getElementById("user-photo");
+  const userNameEl        = document.getElementById("user-name");
+  const userWinsEl        = document.getElementById("user-wins");
+  const userLossesEl      = document.getElementById("user-losses");
+  const logoutBtn         = document.getElementById("logout-btn");
+  const googleSigninBtn   = document.getElementById("google-signin-btn");
   const setupScreen       = document.getElementById("setup-screen");
   const onlineScreen      = document.getElementById("online-screen");
   const infoDiv           = document.getElementById("info");
@@ -46,6 +55,47 @@ document.addEventListener("DOMContentLoaded", () => {
   const onlineMyName      = document.getElementById("online-my-name");
   const onlineOppName     = document.getElementById("online-opp-name");
   const onlineTurnInd     = document.getElementById("online-turn-indicator");
+
+  /* ── تسجيل الدخول ── */
+  onUserChange(async (user) => {
+    if (user) {
+      // مسجّل دخول
+      authScreen.classList.add("hidden");
+      userBar.classList.remove("hidden");
+      setupScreen.classList.remove("hidden");
+
+      userPhoto.src = user.photoURL || "";
+      userPhoto.style.display = user.photoURL ? "block" : "none";
+      userNameEl.textContent  = user.displayName || "لاعب";
+
+      // جلب الإحصائيات
+      const profile = await getUserProfile(user.uid);
+      if (profile) {
+        userWinsEl.textContent   = `🏆 ${profile.wins   || 0}`;
+        userLossesEl.textContent = `❌ ${profile.losses || 0}`;
+      }
+    } else {
+      // غير مسجّل
+      authScreen.classList.remove("hidden");
+      userBar.classList.add("hidden");
+      setupScreen.classList.add("hidden");
+    }
+  });
+
+  googleSigninBtn?.addEventListener("click", async () => {
+    try {
+      googleSigninBtn.disabled = true;
+      googleSigninBtn.textContent = "جاري الدخول...";
+      await signInWithGoogle();
+    } catch (e) {
+      googleSigninBtn.disabled = false;
+      googleSigninBtn.innerHTML = `<img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="20"/> تسجيل الدخول بـ Google`;
+    }
+  });
+
+  logoutBtn?.addEventListener("click", async () => {
+    await logout();
+  });
 
   /* ── معاينة اللوحة ── */
   function updateGridPreview(size) {

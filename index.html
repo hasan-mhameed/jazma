@@ -12,10 +12,38 @@
   </head>
   <body>
     <main id="app">
+
+      <!-- 🔐 شاشة تسجيل الدخول -->
+      <div id="auth-screen">
+        <div id="auth-box">
+          <div class="auth-logo">🎮</div>
+          <h1>جزمة</h1>
+          <p class="auth-subtitle">Dots & Boxes</p>
+          <button id="google-signin-btn">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="20"/>
+            تسجيل الدخول بـ Google
+          </button>
+          <p class="auth-hint">سجّل دخولك للعب أونلاين وحفظ إحصائياتك</p>
+        </div>
+      </div>
+
+      <!-- 👤 شريط المستخدم (يظهر بعد الدخول) -->
+      <div id="user-bar" class="hidden">
+        <div id="user-info">
+          <img id="user-photo" src="" alt="" width="32" height="32"/>
+          <span id="user-name"></span>
+        </div>
+        <div id="user-stats">
+          <span id="user-wins">🏆 0</span>
+          <span id="user-losses">❌ 0</span>
+        </div>
+        <button id="logout-btn">خروج</button>
+      </div>
+
       <h1>Dots & Boxes — SVG</h1>
       
       <!-- 🎮 شاشة الإعدادات -->
-      <div id="setup-screen">
+      <div id="setup-screen" class="hidden">
         <div id="setup-box">
           <h2>🎯 إعدادات اللعبة</h2>
           
