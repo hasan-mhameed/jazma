@@ -262,6 +262,16 @@ document.addEventListener("DOMContentLoaded", () => {
     stepLobby.classList.add("hidden");
     stepPlaying.classList.add("hidden");
     onlineError.classList.add("hidden");
+
+    // ✅ املأ الاسم تلقائياً من حساب المستخدم
+    if (step === "name" || step === "lobby") {
+      import("./auth.js").then(({ currentUser }) => {
+        if (currentUser?.displayName) {
+          playerNameInput.value = currentUser.displayName;
+        }
+      });
+    }
+
     if (step === "name")    stepName.classList.remove("hidden");
     if (step === "lobby")   stepLobby.classList.remove("hidden");
     if (step === "playing") stepPlaying.classList.remove("hidden");
