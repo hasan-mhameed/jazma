@@ -97,9 +97,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const name     = document.getElementById("register-name").value.trim();
     const email    = document.getElementById("register-email").value.trim();
     const password = document.getElementById("register-password").value;
-    if (!name)              return showAuthError("❗ أدخل اسمك");
-    if (!email)             return showAuthError("❗ أدخل الإيميل");
-    if (password.length < 6) return showAuthError("❗ كلمة السر 6 أحرف على الأقل");
+    if (!name)               return showAuthError("❗ أدخل اسمك");
+    if (!email)              return showAuthError("❗ أدخل الإيميل");
+    if (password.length < 8) return showAuthError("❗ كلمة السر 8 أحرف على الأقل");
+    if (!/[A-Z]/.test(password)) return showAuthError("❗ يجب أن تحتوي على حرف كبير");
+    if (!/[0-9]/.test(password)) return showAuthError("❗ يجب أن تحتوي على رقم");
+    if (!/[^A-Za-z0-9]/.test(password)) return showAuthError("❗ يجب أن تحتوي على رمز (!@#$...)");
     emailRegisterBtn.disabled = true;
     try {
       await registerWithEmail(name, email, password);
@@ -107,6 +110,23 @@ document.addEventListener("DOMContentLoaded", () => {
       showAuthError(getAuthError(e.code));
       emailRegisterBtn.disabled = false;
     }
+  });
+
+  // ── مؤشر قوة كلمة السر ──
+  document.getElementById("register-password")?.addEventListener("input", (e) => {
+    const password = e.target.value;
+    let strength = 0;
+    if (password.length >= 8)          strength++;
+    if (/[A-Z]/.test(password))        strength++;
+    if (/[0-9]/.test(password))        strength++;
+    if (/[^A-Za-z0-9]/.test(password)) strength++;
+
+    const indicator = document.getElementById("password-strength");
+    if (!indicator) return;
+    const labels = ["", "ضعيفة 🔴", "متوسطة 🟡", "جيدة 🟠", "قوية 🟢"];
+    const colors  = ["", "#f87171",  "#fbbf24",   "#fb923c",  "#4ade80"];
+    indicator.textContent  = password ? labels[strength] : "";
+    indicator.style.color  = colors[strength];
   });
 
   function getAuthError(code) {
