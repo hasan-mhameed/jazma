@@ -11,6 +11,8 @@ import { applyOnlineMove }                 from "./ui/boardRenderer.js";
 import { state }                           from "./core/state.js";
 import { onUserChange, signInWithGoogle, logout, getUserProfile,
          registerWithEmail, signInWithEmail } from "./auth.js";
+import { searchUsers, sendFriendRequest, acceptFriendRequest,
+         rejectFriendRequest, removeFriend, listenFriendRequests, listenFriends } from "./friends.js";
 
 let aiPlayer = null;
 
@@ -61,6 +63,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const emailLoginBtn     = document.getElementById("email-login-btn");
   const emailRegisterBtn  = document.getElementById("email-register-btn");
   const authTabs          = document.querySelectorAll(".auth-tab");
+
+  // أصدقاء
+  const friendsBtn        = document.getElementById("friends-btn");
+  const friendsPanel      = document.getElementById("friends-panel");
+  const closeFriendsBtn   = document.getElementById("close-friends-btn");
+  const friendsSearchInput= document.getElementById("friends-search-input");
+  const friendsSearchBtn  = document.getElementById("friends-search-btn");
+  const searchResults     = document.getElementById("search-results");
+  const friendRequestsSec = document.getElementById("friend-requests-section");
+  const friendRequestsList= document.getElementById("friend-requests-list");
+  const friendsList       = document.getElementById("friends-list");
+  const friendReqBadge    = document.getElementById("friend-requests-badge");
 
   // ── تبديل التبويبات ──
   authTabs.forEach(tab => {
@@ -160,6 +174,7 @@ document.addEventListener("DOMContentLoaded", () => {
         userWinsEl.textContent   = `🏆 ${profile.wins   || 0}`;
         userLossesEl.textContent = `❌ ${profile.losses || 0}`;
       }
+      initFriendsListeners();
     } else {
       // غير مسجّل
       authScreen.classList.remove("hidden");
@@ -182,6 +197,90 @@ document.addEventListener("DOMContentLoaded", () => {
   logoutBtn?.addEventListener("click", async () => {
     await logout();
   });
+
+  /* ══════════════════════════════════════
+     👥 منطق الأصدقاء
+  ══════════════════════════════════════ */
+  friendsBtn?.addEventListener("click", () => {
+    friendsPanel.classList.remove("hidden");
+  });
+
+  closeFriendsBtn?.addEventListener("click", () => {
+    friendsPanel.classList.add("hidden");
+    searchResults.innerHTML = "";
+    friendsSearchInput.value = "";
+  });
+
+  friendsPanel?.addEventListener("click", (e) => {
+    if (e.target === friendsPanel) {
+      friendsPanel.classList.add("hidden");
+      searchResults.innerHTML = "";
+    }
+  });
+
+  friendsSearchBtn?.addEventListener("click", doSearch);
+  friendsSearchInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
+
+  async function doSearch() {
+    const q = friendsSearchInput.value.trim();
+    if (!q) return;
+    friendsSearchBtn.textContent = "⏳";
+    const results = await searchUsers(q);
+    friendsSearchBtn.textContent = "🔍";
+    searchResults.innerHTML = "";
+    if (results.length === 0) {
+      searchResults.innerHTML = `<p class="friends-empty">لا نتائج</p>`;
+      return;
+    }
+    searchResults.innerHTML = `<p class="search-result-label">نتائج البحث:</p>`;
+    results.forEach(user => searchResults.appendChild(makeFriendCard(user, "search")));
+  }
+
+  function makeFriendCard(user, type) {
+    const card = document.createElement("div");
+    card.className = "friend-card";
+    const avatar = user.photo
+      ? `<img src="${user.photo}" alt="${user.name}"/>`
+      : `<div class="friend-avatar-placeholder">${user.name?.[0]?.toUpperCase() || "?"}</div>`;
+    let actions = "";
+    if (type === "search")  actions = `<button class="btn-add" data-uid="${user.uid}">➕ إضافة</button>`;
+    if (type === "request") actions = `<button class="btn-accept" data-uid="${user.uid}">✓ قبول</button><button class="btn-reject" data-uid="${user.uid}">✕ رفض</button>`;
+    if (type === "friend")  actions = `<button class="btn-remove" data-uid="${user.uid}">حذف</button>`;
+    card.innerHTML = `${avatar}<span class="friend-name">${user.name}</span><div class="friend-actions">${actions}</div>`;
+    card.querySelector(".btn-add")?.addEventListener("click", async (e) => {
+      e.target.textContent = "✅ أُرسل"; e.target.disabled = true;
+      await sendFriendRequest(user.uid);
+    });
+    card.querySelector(".btn-accept")?.addEventListener("click", async () => { await acceptFriendRequest(user.uid); });
+    card.querySelector(".btn-reject")?.addEventListener("click", async () => { await rejectFriendRequest(user.uid); });
+    card.querySelector(".btn-remove")?.addEventListener("click", async () => {
+      if (confirm(`حذف ${user.name} من الأصدقاء؟`)) await removeFriend(user.uid);
+    });
+    return card;
+  }
+
+  function initFriendsListeners() {
+    listenFriendRequests((requests) => {
+      if (requests.length > 0) {
+        friendReqBadge.textContent = requests.length;
+        friendReqBadge.classList.remove("hidden");
+        friendRequestsSec.classList.remove("hidden");
+        friendRequestsList.innerHTML = "";
+        requests.forEach(r => friendRequestsList.appendChild(makeFriendCard(r, "request")));
+      } else {
+        friendReqBadge.classList.add("hidden");
+        friendRequestsSec.classList.add("hidden");
+      }
+    });
+    listenFriends((friends) => {
+      friendsList.innerHTML = "";
+      if (friends.length === 0) {
+        friendsList.innerHTML = `<p class="friends-empty">لا يوجد أصدقاء بعد</p>`;
+        return;
+      }
+      friends.forEach(f => friendsList.appendChild(makeFriendCard(f, "friend")));
+    });
+  }
 
   /* ── معاينة اللوحة ── */
   function updateGridPreview(size) {

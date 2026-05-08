@@ -51,7 +51,7 @@
         </div>
       </div>
 
-      <!-- 👤 شريط المستخدم (يظهر بعد الدخول) -->
+      <!-- 👤 شريط المستخدم -->
       <div id="user-bar" class="hidden">
         <div id="user-info">
           <img id="user-photo" src="" alt="" width="32" height="32"/>
@@ -61,7 +61,37 @@
           <span id="user-wins">🏆 0</span>
           <span id="user-losses">❌ 0</span>
         </div>
-        <button id="logout-btn">خروج</button>
+        <div id="user-actions">
+          <button id="friends-btn">👥 أصدقاء <span id="friend-requests-badge" class="badge hidden"></span></button>
+          <button id="logout-btn">خروج</button>
+        </div>
+      </div>
+
+      <!-- 👥 لوحة الأصدقاء -->
+      <div id="friends-panel" class="hidden">
+        <div id="friends-box">
+          <div class="friends-header">
+            <h2>👥 الأصدقاء</h2>
+            <button id="close-friends-btn">✕</button>
+          </div>
+
+          <!-- بحث -->
+          <div class="friends-search-row">
+            <input id="friends-search-input" type="text" placeholder="ابحث عن لاعب..." autocomplete="off"/>
+            <button id="friends-search-btn">🔍</button>
+          </div>
+          <div id="search-results"></div>
+
+          <!-- طلبات واردة -->
+          <div id="friend-requests-section" class="hidden">
+            <h3 class="friends-section-title">📩 طلبات واردة</h3>
+            <div id="friend-requests-list"></div>
+          </div>
+
+          <!-- قائمة الأصدقاء -->
+          <h3 class="friends-section-title">🤝 أصدقائي</h3>
+          <div id="friends-list"><p class="friends-empty">لا يوجد أصدقاء بعد</p></div>
+        </div>
       </div>
 
       <h1>Dots & Boxes — SVG</h1>

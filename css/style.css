@@ -852,3 +852,144 @@ h1 {
   margin-top: 12px;
   font-size: 0.9rem;
 }
+
+/* ═══════════════════════════════════════
+   👥 Friends Panel — v12.1
+═══════════════════════════════════════ */
+#user-actions { display: flex; gap: 8px; align-items: center; }
+
+#friends-btn {
+  background: #2a2a3e;
+  border: 1px solid #444;
+  color: #ccc;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  position: relative;
+  transition: all 0.2s;
+}
+#friends-btn:hover { border-color: #7c6af7; color: #fff; }
+
+.badge {
+  background: #f87171;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  padding: 1px 5px;
+  margin-right: 4px;
+  font-weight: bold;
+}
+
+#friends-panel {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 60px 16px 16px;
+}
+
+#friends-box {
+  background: #1e1e2e;
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+}
+
+.friends-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.friends-header h2 { margin: 0; font-size: 1.3rem; }
+#close-friends-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+#close-friends-btn:hover { background: #2a2a3e; color: #fff; }
+
+.friends-search-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.friends-search-row input {
+  flex: 1;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1.5px solid #333;
+  background: #2a2a3e;
+  color: #fff;
+  font-size: 0.9rem;
+  text-align: right;
+}
+.friends-search-row input:focus { outline: none; border-color: #7c6af7; }
+#friends-search-btn {
+  padding: 9px 14px;
+  background: #7c6af7;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.friends-section-title {
+  font-size: 0.9rem;
+  color: #888;
+  margin: 16px 0 8px;
+  border-bottom: 1px solid #2a2a3e;
+  padding-bottom: 6px;
+}
+
+.friend-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #2a2a3e;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+.friend-card img {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #444;
+}
+.friend-card .friend-avatar-placeholder {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: #7c6af7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1rem;
+  color: #fff;
+  flex-shrink: 0;
+}
+.friend-name { flex: 1; font-size: 0.95rem; color: #e0e0ff; }
+.friend-actions { display: flex; gap: 6px; }
+.btn-accept  { background: #166534; color: #4ade80; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+.btn-reject  { background: #3d1a1a; color: #f87171; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+.btn-add     { background: #1e3a5f; color: #60a5fa; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+.btn-remove  { background: #2a2a3e; color: #888;    border: 1px solid #444; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+.btn-invite  { background: #3a1e5f; color: #c084fc; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+
+.friends-empty { color: #555; font-size: 0.9rem; text-align: center; padding: 16px 0; }
+.search-result-label { color: #666; font-size: 0.8rem; margin-bottom: 8px; }
