@@ -2,7 +2,8 @@
 // إدارة تسجيل الدخول عبر Firebase Authentication
 
 import { initializeApp, getApps }   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
+         createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile }
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getDatabase, ref, set, get, update }
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
@@ -24,10 +25,23 @@ const db   = getDatabase(app);
 
 export let currentUser = null;
 
-// ─── تسجيل الدخول بـ Google ──────────────────────────────────
+// ─── تسجيل بـ Google ──────────────────────────────────────────
 export async function signInWithGoogle() {
   const provider = new GoogleAuthProvider();
   const result   = await signInWithPopup(auth, provider);
+  return result.user;
+}
+
+// ─── تسجيل حساب جديد بإيميل ─────────────────────────────────
+export async function registerWithEmail(name, email, password) {
+  const result = await createUserWithEmailAndPassword(auth, email, password);
+  await updateProfile(result.user, { displayName: name });
+  return result.user;
+}
+
+// ─── تسجيل دخول بإيميل ───────────────────────────────────────
+export async function signInWithEmail(email, password) {
+  const result = await signInWithEmailAndPassword(auth, email, password);
   return result.user;
 }
 

@@ -19,11 +19,34 @@
           <div class="auth-logo">🎮</div>
           <h1>جزمة</h1>
           <p class="auth-subtitle">Dots & Boxes</p>
-          <button id="google-signin-btn">
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="20"/>
-            تسجيل الدخول بـ Google
-          </button>
-          <p class="auth-hint">سجّل دخولك للعب أونلاين وحفظ إحصائياتك</p>
+
+          <!-- تبويبات -->
+          <div class="auth-tabs">
+            <button class="auth-tab active" data-tab="login">دخول</button>
+            <button class="auth-tab" data-tab="register">حساب جديد</button>
+          </div>
+
+          <!-- تسجيل الدخول -->
+          <div id="tab-login" class="auth-tab-content">
+            <input id="login-email"    type="email"    placeholder="الإيميل" autocomplete="email"/>
+            <input id="login-password" type="password" placeholder="كلمة السر" autocomplete="current-password"/>
+            <button id="email-login-btn" class="btn-primary btn-auth">دخول</button>
+            <div class="auth-divider">— أو —</div>
+            <button id="google-signin-btn" class="btn-google">
+              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="18"/>
+              تسجيل الدخول بـ Google
+            </button>
+          </div>
+
+          <!-- تسجيل حساب جديد -->
+          <div id="tab-register" class="auth-tab-content hidden">
+            <input id="register-name"     type="text"     placeholder="الاسم" autocomplete="name"/>
+            <input id="register-email"    type="email"    placeholder="الإيميل" autocomplete="email"/>
+            <input id="register-password" type="password" placeholder="كلمة السر (6 أحرف على الأقل)" autocomplete="new-password"/>
+            <button id="email-register-btn" class="btn-primary btn-auth">إنشاء حساب</button>
+          </div>
+
+          <div id="auth-error" class="auth-error hidden"></div>
         </div>
       </div>
 

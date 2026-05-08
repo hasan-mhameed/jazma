@@ -9,7 +9,8 @@ import { AIPlayer }                        from "./ai/aiPlayer.js";
 import { onlineManager }                   from "./firebase.js";
 import { applyOnlineMove }                 from "./ui/boardRenderer.js";
 import { state }                           from "./core/state.js";
-import { onUserChange, signInWithGoogle, logout, getUserProfile } from "./auth.js";
+import { onUserChange, signInWithGoogle, logout, getUserProfile,
+         registerWithEmail, signInWithEmail } from "./auth.js";
 
 let aiPlayer = null;
 
@@ -55,6 +56,71 @@ document.addEventListener("DOMContentLoaded", () => {
   const onlineMyName      = document.getElementById("online-my-name");
   const onlineOppName     = document.getElementById("online-opp-name");
   const onlineTurnInd     = document.getElementById("online-turn-indicator");
+
+  const authError         = document.getElementById("auth-error");
+  const emailLoginBtn     = document.getElementById("email-login-btn");
+  const emailRegisterBtn  = document.getElementById("email-register-btn");
+  const authTabs          = document.querySelectorAll(".auth-tab");
+
+  // ── تبديل التبويبات ──
+  authTabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      authTabs.forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      document.querySelectorAll(".auth-tab-content").forEach(c => c.classList.add("hidden"));
+      document.getElementById(`tab-${tab.dataset.tab}`).classList.remove("hidden");
+      authError.classList.add("hidden");
+    });
+  });
+
+  function showAuthError(msg) {
+    authError.textContent = msg;
+    authError.classList.remove("hidden");
+  }
+
+  // ── دخول بإيميل ──
+  emailLoginBtn?.addEventListener("click", async () => {
+    const email    = document.getElementById("login-email").value.trim();
+    const password = document.getElementById("login-password").value;
+    if (!email || !password) return showAuthError("❗ أدخل الإيميل وكلمة السر");
+    emailLoginBtn.disabled = true;
+    try {
+      await signInWithEmail(email, password);
+    } catch (e) {
+      showAuthError(getAuthError(e.code));
+      emailLoginBtn.disabled = false;
+    }
+  });
+
+  // ── تسجيل حساب جديد ──
+  emailRegisterBtn?.addEventListener("click", async () => {
+    const name     = document.getElementById("register-name").value.trim();
+    const email    = document.getElementById("register-email").value.trim();
+    const password = document.getElementById("register-password").value;
+    if (!name)              return showAuthError("❗ أدخل اسمك");
+    if (!email)             return showAuthError("❗ أدخل الإيميل");
+    if (password.length < 6) return showAuthError("❗ كلمة السر 6 أحرف على الأقل");
+    emailRegisterBtn.disabled = true;
+    try {
+      await registerWithEmail(name, email, password);
+    } catch (e) {
+      showAuthError(getAuthError(e.code));
+      emailRegisterBtn.disabled = false;
+    }
+  });
+
+  function getAuthError(code) {
+    const errors = {
+      "auth/email-already-in-use":   "هذا الإيميل مسجّل مسبقاً",
+      "auth/invalid-email":          "إيميل غير صحيح",
+      "auth/wrong-password":         "كلمة السر غير صحيحة",
+      "auth/user-not-found":         "لا يوجد حساب بهذا الإيميل",
+      "auth/weak-password":          "كلمة السر ضعيفة جداً",
+      "auth/too-many-requests":      "محاولات كثيرة، حاول لاحقاً",
+      "auth/invalid-credential":     "الإيميل أو كلمة السر غير صحيحة",
+    };
+    return errors[code] || "حدث خطأ، حاول مرة ثانية";
+  }
 
   /* ── تسجيل الدخول ── */
   onUserChange(async (user) => {
