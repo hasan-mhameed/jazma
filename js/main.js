@@ -13,6 +13,7 @@ import { onUserChange, signInWithGoogle, logout, getUserProfile,
          registerWithEmail, signInWithEmail } from "./auth.js";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend, listenFriendRequests, listenFriends } from "./friends.js";
+import { sendGameInvite, listenForInvites, clearInvite } from "./invite.js";
 
 let aiPlayer = null;
 
@@ -175,6 +176,7 @@ document.addEventListener("DOMContentLoaded", () => {
         userLossesEl.textContent = `❌ ${profile.losses || 0}`;
       }
       initFriendsListeners();
+      initInviteListener();
     } else {
       // غير مسجّل
       authScreen.classList.remove("hidden");
@@ -245,7 +247,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let actions = "";
     if (type === "search")  actions = `<button class="btn-add" data-uid="${user.uid}">➕ إضافة</button>`;
     if (type === "request") actions = `<button class="btn-accept" data-uid="${user.uid}">✓ قبول</button><button class="btn-reject" data-uid="${user.uid}">✕ رفض</button>`;
-    if (type === "friend")  actions = `<button class="btn-remove" data-uid="${user.uid}">حذف</button>`;
+    if (type === "friend")  actions = `<button class="btn-invite" data-uid="${user.uid}">🎮 دعوة</button><button class="btn-remove" data-uid="${user.uid}">حذف</button>`;
     card.innerHTML = `${avatar}<span class="friend-name">${user.name}</span><div class="friend-actions">${actions}</div>`;
     card.querySelector(".btn-add")?.addEventListener("click", async (e) => {
       e.target.textContent = "✅ أُرسل"; e.target.disabled = true;
@@ -256,8 +258,105 @@ document.addEventListener("DOMContentLoaded", () => {
     card.querySelector(".btn-remove")?.addEventListener("click", async () => {
       if (confirm(`حذف ${user.name} من الأصدقاء؟`)) await removeFriend(user.uid);
     });
+    card.querySelector(".btn-invite")?.addEventListener("click", async (e) => {
+      e.target.textContent = "⏳";
+      e.target.disabled = true;
+      // أنشئ غرفة وأرسل دعوة
+      await startInviteGame(user);
+    });
     return card;
   }
+
+  // ── دعوة صديق للعب ──
+  async function startInviteGame(friend) {
+    const gridSize = +gridSizeSelect.value || 4;
+    config.rows = config.cols = gridSize;
+    config.players = 2;
+    config.online  = true;
+    config.onlinePlayerNum = 1;
+
+    onlineManager.onOpponentJoined((oppName) => {
+      config.onlinePlayerNames = { 1: currentUserName(), 2: oppName };
+      onlineMyName.textContent  = currentUserName();
+      onlineOppName.textContent = oppName;
+      friendsPanel.classList.add("hidden");
+      showOnlineStep("playing");
+      launchOnlineGame(1);
+    });
+
+    const code = await onlineManager.createRoom(config, currentUserName());
+    await sendGameInvite(friend.uid, code, config);
+
+    // أظهر Lobby
+    setupScreen.classList.add("hidden");
+    onlineScreen.classList.remove("hidden");
+    roomCodeDisplay.textContent = code;
+    showOnlineStep("lobby");
+    lobbyStatusText.textContent = `بانتظار ${friend.name}...`;
+    friendsPanel.classList.add("hidden");
+  }
+
+  function currentUserName() {
+    return document.getElementById("user-name")?.textContent || "لاعب";
+  }
+
+  // ── إشعار دعوة واردة ──
+  const inviteNotification = document.getElementById("invite-notification");
+  const inviteText         = document.getElementById("invite-text");
+  const inviteAcceptBtn    = document.getElementById("invite-accept-btn");
+  const inviteRejectBtn    = document.getElementById("invite-reject-btn");
+  let   pendingInvite      = null;
+
+  function initInviteListener() {
+    listenForInvites(async (invite) => {
+      if (!invite) {
+        inviteNotification.classList.add("hidden");
+        pendingInvite = null;
+        return;
+      }
+      pendingInvite = invite;
+      inviteText.textContent = `🎮 ${invite.fromName} يدعوك للعب!`;
+      inviteNotification.classList.remove("hidden");
+    });
+  }
+
+  inviteAcceptBtn?.addEventListener("click", async () => {
+    if (!pendingInvite) return;
+    inviteNotification.classList.add("hidden");
+    const invite = pendingInvite;
+    pendingInvite = null;
+    await clearInvite();
+
+    // انضم للغرفة
+    config.online = true;
+    config.onlinePlayerNum = 2;
+    roomCodeInput.value = invite.roomCode;
+    playerNameInput.value = currentUserName();
+
+    setupScreen.classList.add("hidden");
+    onlineScreen.classList.remove("hidden");
+    showOnlineStep("name");
+
+    try {
+      const roomData = await onlineManager.joinRoom(invite.roomCode, currentUserName());
+      config.rows = roomData.cfg.rows;
+      config.cols = roomData.cfg.cols;
+      config.players = 2;
+      config.onlinePlayerNames = { 1: invite.fromName, 2: currentUserName() };
+      onlineMyName.textContent  = currentUserName();
+      onlineOppName.textContent = invite.fromName;
+      showOnlineStep("playing");
+      launchOnlineGame(2);
+    } catch (e) {
+      showOnlineStep("name");
+    }
+  });
+
+  inviteRejectBtn?.addEventListener("click", async () => {
+    inviteNotification.classList.add("hidden");
+    pendingInvite = null;
+    await clearInvite();
+  });
 
   function initFriendsListeners() {
     listenFriendRequests((requests) => {

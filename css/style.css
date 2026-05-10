@@ -993,3 +993,48 @@ h1 {
 
 .friends-empty { color: #555; font-size: 0.9rem; text-align: center; padding: 16px 0; }
 .search-result-label { color: #666; font-size: 0.8rem; margin-bottom: 8px; }
+
+/* ── Game Invite Notification ── */
+#invite-notification {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateX(-50%) translateY(80px); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+}
+
+#invite-box {
+  background: #1e1e2e;
+  border: 2px solid #7c6af7;
+  border-radius: 14px;
+  padding: 16px 24px;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  min-width: 280px;
+}
+
+#invite-text {
+  font-size: 1rem;
+  margin-bottom: 12px;
+  color: #e0e0ff;
+}
+
+.invite-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.invite-actions button {
+  padding: 8px 20px;
+  border-radius: 8px;
+  border: none;
+  font-size: 0.95rem;
+  cursor: pointer;
+  font-weight: bold;
+}
