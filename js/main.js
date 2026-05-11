@@ -287,10 +287,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const code = await onlineManager.createRoom(config, currentUserName());
     await sendGameInvite(friend.uid, code, config);
 
-    // أظهر Lobby
+    // أظهر Lobby بدون كود (لأن الدعوة أُرسلت مباشرة)
     setupScreen.classList.add("hidden");
     onlineScreen.classList.remove("hidden");
-    roomCodeDisplay.textContent = code;
+    roomCodeDisplay.classList.add("hidden");
+    copyCodeBtn.classList.add("hidden");
     showOnlineStep("lobby");
     lobbyStatusText.textContent = `بانتظار ${friend.name}...`;
     friendsPanel.classList.add("hidden");
@@ -510,6 +511,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const code = await onlineManager.createRoom(config, name);
         roomCodeDisplay.textContent = code;
+        roomCodeDisplay.classList.remove("hidden");
+        copyCodeBtn.classList.remove("hidden");
         showOnlineStep("lobby");
         lobbyStatusText.textContent = "بانتظار الخصم...";
 
