@@ -68,6 +68,9 @@ export function listenForInviteRejection(cb) {
   });
   return unsub;
 }
+
+// ─── حذف الدعوة بعد القبول ───────────────────────────────────
+export async function clearInvite() {
   const myUid = currentUser?.uid;
   if (!myUid) return;
   await remove(ref(db, `invites/${myUid}`));
