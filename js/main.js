@@ -297,7 +297,7 @@ document.addEventListener("DOMContentLoaded", () => {
     friendsPanel.classList.add("hidden");
 
     // إشعار لو رفض الصديق
-    listenForInviteRejection(friend.name);
+    watchForRejection(friend.name);
   }
 
   function currentUserName() {
@@ -363,10 +363,9 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // ── الاستماع لرفض دعوتي ──
-  function listenForInviteRejection(friendName) {
+  function watchForRejection(friendName) {
     const unsub = listenForInviteRejection((data) => {
       unsub();
-      // أرجع للقائمة الرئيسية مع إشعار
       onlineManager.leaveRoom();
       onlineScreen.classList.add("hidden");
       setupScreen.classList.remove("hidden");
