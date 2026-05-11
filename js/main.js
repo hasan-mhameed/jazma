@@ -13,7 +13,7 @@ import { onUserChange, signInWithGoogle, logout, getUserProfile,
          registerWithEmail, signInWithEmail } from "./auth.js";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend, listenFriendRequests, listenFriends } from "./friends.js";
-import { sendGameInvite, listenForInvites, clearInvite } from "./invite.js";
+import { sendGameInvite, listenForInvites, clearInvite, rejectInvite, listenForInviteRejection } from "./invite.js";
 
 let aiPlayer = null;
 
@@ -287,14 +287,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const code = await onlineManager.createRoom(config, currentUserName());
     await sendGameInvite(friend.uid, code, config);
 
-    // أظهر Lobby بدون كود (لأن الدعوة أُرسلت مباشرة)
     setupScreen.classList.add("hidden");
     onlineScreen.classList.remove("hidden");
     roomCodeDisplay.classList.add("hidden");
     copyCodeBtn.classList.add("hidden");
+    document.getElementById("lobby-share-hint").classList.add("hidden");
     showOnlineStep("lobby");
     lobbyStatusText.textContent = `بانتظار ${friend.name}...`;
     friendsPanel.classList.add("hidden");
+
+    // إشعار لو رفض الصديق
+    listenForInviteRejection(friend.name);
   }
 
   function currentUserName() {
@@ -355,9 +358,36 @@ document.addEventListener("DOMContentLoaded", () => {
 
   inviteRejectBtn?.addEventListener("click", async () => {
     inviteNotification.classList.add("hidden");
+    if (pendingInvite) await rejectInvite(pendingInvite);
     pendingInvite = null;
-    await clearInvite();
   });
+
+  // ── الاستماع لرفض دعوتي ──
+  function listenForInviteRejection(friendName) {
+    const unsub = listenForInviteRejection((data) => {
+      unsub();
+      // أرجع للقائمة الرئيسية مع إشعار
+      onlineManager.leaveRoom();
+      onlineScreen.classList.add("hidden");
+      setupScreen.classList.remove("hidden");
+      showRejectionAlert(friendName);
+    });
+  }
+
+  function showRejectionAlert(name) {
+    const box = document.createElement("div");
+    box.style.cssText = `
+      position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+      background:#1e1e2e;border:2px solid #f87171;border-radius:16px;
+      padding:28px 36px;text-align:center;z-index:9999;box-shadow:0 8px 40px #0008;
+    `;
+    box.innerHTML = `
+      <p style="font-size:1.1rem;margin-bottom:16px;">😔 ${name} رفض الدعوة</p>
+      <button onclick="this.parentElement.remove()" style="background:#7c6af7;color:#fff;border:none;padding:9px 22px;border-radius:8px;cursor:pointer;">حسناً</button>
+    `;
+    document.body.appendChild(box);
+    setTimeout(() => box.remove(), 5000);
+  }
 
   function initFriendsListeners() {
     listenFriendRequests((requests) => {
@@ -513,6 +543,7 @@ document.addEventListener("DOMContentLoaded", () => {
         roomCodeDisplay.textContent = code;
         roomCodeDisplay.classList.remove("hidden");
         copyCodeBtn.classList.remove("hidden");
+        document.getElementById("lobby-share-hint").classList.remove("hidden");
         showOnlineStep("lobby");
         lobbyStatusText.textContent = "بانتظار الخصم...";
 

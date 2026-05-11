@@ -43,8 +43,31 @@ export function listenForInvites(cb) {
   return unsub;
 }
 
-// ─── حذف الدعوة بعد القبول أو الرفض ─────────────────────────
-export async function clearInvite() {
+// ─── إرسال إشعار رفض الدعوة ──────────────────────────────────
+export async function rejectInvite(invite) {
+  const myUid = currentUser?.uid;
+  if (!myUid) return;
+  // أرسل إشعار رفض لصاحب الدعوة
+  await set(ref(db, `inviteRejections/${invite.fromUid}`), {
+    rejectedBy: myUid,
+    name: currentUser.displayName || "لاعب",
+    ts: Date.now(),
+  });
+  await clearInvite();
+}
+
+// ─── الاستماع لرفض الدعوة ────────────────────────────────────
+export function listenForInviteRejection(cb) {
+  const myUid = currentUser?.uid;
+  if (!myUid) return () => {};
+  const unsub = onValue(ref(db, `inviteRejections/${myUid}`), async (snap) => {
+    if (snap.exists()) {
+      cb(snap.val());
+      await remove(ref(db, `inviteRejections/${myUid}`));
+    }
+  });
+  return unsub;
+}
   const myUid = currentUser?.uid;
   if (!myUid) return;
   await remove(ref(db, `invites/${myUid}`));
