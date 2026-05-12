@@ -88,8 +88,18 @@ export async function getUserProfile(uid) {
   return snap.exists() ? snap.val() : null;
 }
 
-// ─── تحديث اسم المستخدم ──────────────────────────────────────
-export async function updateDisplayName(newName) {
+// ─── تحديث الإحصائيات بعد المباراة ──────────────────────────
+export async function updateStats(won) {
+  if (!currentUser) return;
+  const userRef  = ref(db, `users/${currentUser.uid}`);
+  const snap     = await get(userRef);
+  if (!snap.exists()) return;
+  const data     = snap.val();
+  await update(userRef, {
+    wins:   (data.wins   || 0) + (won ? 1 : 0),
+    losses: (data.losses || 0) + (won ? 0 : 1),
+  });
+}
   if (!currentUser) return;
   await update(ref(db, `users/${currentUser.uid}`), { name: newName });
 }

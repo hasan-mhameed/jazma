@@ -1038,3 +1038,89 @@ h1 {
   cursor: pointer;
   font-weight: bold;
 }
+
+/* ── Leaderboard ── */
+#leaderboard-btn {
+  background: #2a2a3e;
+  border: 1px solid #444;
+  color: #fbbf24;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+#leaderboard-btn:hover { border-color: #fbbf24; }
+
+#leaderboard-panel {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 60px 16px 16px;
+}
+
+#leaderboard-box {
+  background: #1e1e2e;
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+}
+
+.leaderboard-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #2a2a3e;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.leaderboard-rank {
+  font-size: 1.1rem;
+  font-weight: bold;
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.rank-1 { color: #fbbf24; }
+.rank-2 { color: #94a3b8; }
+.rank-3 { color: #b45309; }
+
+.leaderboard-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #444;
+  flex-shrink: 0;
+}
+.leaderboard-avatar-placeholder {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: #7c6af7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.leaderboard-info { flex: 1; }
+.leaderboard-name  { font-size: 0.95rem; color: #e0e0ff; font-weight: bold; }
+.leaderboard-stats { font-size: 0.8rem; color: #888; margin-top: 2px; }
+
+.leaderboard-wins {
+  font-size: 1rem;
+  font-weight: bold;
+  color: #4ade80;
+  flex-shrink: 0;
+}

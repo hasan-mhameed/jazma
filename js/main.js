@@ -10,10 +10,11 @@ import { onlineManager }                   from "./firebase.js";
 import { applyOnlineMove }                 from "./ui/boardRenderer.js";
 import { state }                           from "./core/state.js";
 import { onUserChange, signInWithGoogle, logout, getUserProfile,
-         registerWithEmail, signInWithEmail } from "./auth.js";
+         registerWithEmail, signInWithEmail, updateStats } from "./auth.js";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend, listenFriendRequests, listenFriends } from "./friends.js";
 import { sendGameInvite, listenForInvites, clearInvite, rejectInvite, listenForInviteRejection } from "./invite.js";
+import { getLeaderboard } from "./leaderboard.js";
 
 let aiPlayer = null;
 
@@ -67,6 +68,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // أصدقاء
   const friendsBtn        = document.getElementById("friends-btn");
+  const leaderboardBtn    = document.getElementById("leaderboard-btn");
+  const leaderboardPanel  = document.getElementById("leaderboard-panel");
+  const leaderboardList   = document.getElementById("leaderboard-list");
+  const closeLeaderboardBtn = document.getElementById("close-leaderboard-btn");
   const friendsPanel      = document.getElementById("friends-panel");
   const closeFriendsBtn   = document.getElementById("close-friends-btn");
   const friendsSearchInput= document.getElementById("friends-search-input");
@@ -177,6 +182,17 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       initFriendsListeners();
       initInviteListener();
+
+      // ── تحديث شريط الإحصائيات بعد كل مباراة ──
+      async function refreshStats() {
+        const profile = await getUserProfile(user.uid);
+        if (profile) {
+          userWinsEl.textContent   = `🏆 ${profile.wins   || 0}`;
+          userLossesEl.textContent = `❌ ${profile.losses || 0}`;
+        }
+      }
+      // نحدّث كل 10 ثواني لو اللاعب بالأونلاين
+      setInterval(refreshStats, 10000);
     } else {
       // غير مسجّل
       authScreen.classList.remove("hidden");
@@ -198,6 +214,46 @@ document.addEventListener("DOMContentLoaded", () => {
 
   logoutBtn?.addEventListener("click", async () => {
     await logout();
+  });
+
+  // ── لوحة المتصدرين ──
+  leaderboardBtn?.addEventListener("click", async () => {
+    leaderboardPanel.classList.remove("hidden");
+    leaderboardList.innerHTML = `<p class="friends-empty">⏳ جاري التحميل...</p>`;
+    const players = await getLeaderboard();
+    leaderboardList.innerHTML = "";
+    if (players.length === 0) {
+      leaderboardList.innerHTML = `<p class="friends-empty">لا يوجد لاعبون بعد</p>`;
+      return;
+    }
+    const medals = ["🥇","🥈","🥉"];
+    players.forEach((p, i) => {
+      const avatar = p.photo
+        ? `<img class="leaderboard-avatar" src="${p.photo}" alt="${p.name}"/>`
+        : `<div class="leaderboard-avatar-placeholder">${p.name?.[0]?.toUpperCase()||"?"}</div>`;
+      const row = document.createElement("div");
+      row.className = "leaderboard-row";
+      row.innerHTML = `
+        <div class="leaderboard-rank ${i<3?`rank-${i+1}`:''}">
+          ${medals[i] || i+1}
+        </div>
+        ${avatar}
+        <div class="leaderboard-info">
+          <div class="leaderboard-name">${p.name}</div>
+          <div class="leaderboard-stats">نسبة الفوز: ${p.winRate}% • ${p.totalGames} مباراة</div>
+        </div>
+        <div class="leaderboard-wins">🏆 ${p.wins}</div>
+      `;
+      leaderboardList.appendChild(row);
+    });
+  });
+
+  closeLeaderboardBtn?.addEventListener("click", () => {
+    leaderboardPanel.classList.add("hidden");
+  });
+
+  leaderboardPanel?.addEventListener("click", (e) => {
+    if (e.target === leaderboardPanel) leaderboardPanel.classList.add("hidden");
   });
 
   /* ══════════════════════════════════════
