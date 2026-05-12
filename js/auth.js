@@ -100,6 +100,9 @@ export async function updateStats(won) {
     losses: (data.losses || 0) + (won ? 0 : 1),
   });
 }
+
+// ─── تحديث اسم المستخدم ──────────────────────────────────────
+export async function updateDisplayName(newName) {
   if (!currentUser) return;
   await update(ref(db, `users/${currentUser.uid}`), { name: newName });
 }
