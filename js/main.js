@@ -331,15 +331,14 @@ document.addEventListener("DOMContentLoaded", () => {
     pendingInvite = null;
     await clearInvite();
 
-    // انضم للغرفة
     config.online = true;
     config.onlinePlayerNum = 2;
-    roomCodeInput.value = invite.roomCode;
     playerNameInput.value = currentUserName();
 
     setupScreen.classList.add("hidden");
     onlineScreen.classList.remove("hidden");
-    showOnlineStep("name");
+    // ✅ اذهب مباشرة للـ playing بدون إظهار name
+    showOnlineStep("playing");
 
     try {
       const roomData = await onlineManager.joinRoom(invite.roomCode, currentUserName());
@@ -349,10 +348,10 @@ document.addEventListener("DOMContentLoaded", () => {
       config.onlinePlayerNames = { 1: invite.fromName, 2: currentUserName() };
       onlineMyName.textContent  = currentUserName();
       onlineOppName.textContent = invite.fromName;
-      showOnlineStep("playing");
       launchOnlineGame(2);
     } catch (e) {
-      showOnlineStep("name");
+      onlineScreen.classList.add("hidden");
+      setupScreen.classList.remove("hidden");
     }
   });
 
@@ -363,9 +362,14 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // ── الاستماع لرفض دعوتي ──
+  let _rejectionUnsub = null;
+
   function watchForRejection(friendName) {
-    const unsub = listenForInviteRejection((data) => {
-      unsub();
+    // ألغِ أي listener قديم أولاً
+    if (_rejectionUnsub) { _rejectionUnsub(); _rejectionUnsub = null; }
+
+    _rejectionUnsub = listenForInviteRejection((data) => {
+      if (_rejectionUnsub) { _rejectionUnsub(); _rejectionUnsub = null; }
       onlineManager.leaveRoom();
       onlineScreen.classList.add("hidden");
       setupScreen.classList.remove("hidden");
