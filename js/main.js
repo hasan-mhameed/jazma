@@ -15,6 +15,7 @@ import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend, listenFriendRequests, listenFriends } from "./friends.js";
 import { sendGameInvite, listenForInvites, clearInvite, rejectInvite, listenForInviteRejection } from "./invite.js";
 import { getLeaderboard } from "./leaderboard.js";
+import { sendMessage, listenMessages, listenUnread, markAsRead } from "./chat.js";
 
 let aiPlayer = null;
 
@@ -303,7 +304,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let actions = "";
     if (type === "search")  actions = `<button class="btn-add" data-uid="${user.uid}">➕ إضافة</button>`;
     if (type === "request") actions = `<button class="btn-accept" data-uid="${user.uid}">✓ قبول</button><button class="btn-reject" data-uid="${user.uid}">✕ رفض</button>`;
-    if (type === "friend")  actions = `<button class="btn-invite" data-uid="${user.uid}">🎮 دعوة</button><button class="btn-remove" data-uid="${user.uid}">حذف</button>`;
+    if (type === "friend")  actions = `<button class="btn-invite" data-uid="${user.uid}">🎮 دعوة</button><button class="btn-chat" data-uid="${user.uid}">💬</button><button class="btn-remove" data-uid="${user.uid}">حذف</button>`;
     card.innerHTML = `${avatar}<span class="friend-name">${user.name}</span><div class="friend-actions">${actions}</div>`;
     card.querySelector(".btn-add")?.addEventListener("click", async (e) => {
       e.target.textContent = "✅ أُرسل"; e.target.disabled = true;
@@ -314,7 +315,9 @@ document.addEventListener("DOMContentLoaded", () => {
     card.querySelector(".btn-remove")?.addEventListener("click", async () => {
       if (confirm(`حذف ${user.name} من الأصدقاء؟`)) await removeFriend(user.uid);
     });
-    card.querySelector(".btn-invite")?.addEventListener("click", async (e) => {
+    card.querySelector(".btn-chat")?.addEventListener("click", () => {
+      openChat(user);
+    });
       e.target.textContent = "⏳";
       e.target.disabled = true;
       // أنشئ غرفة وأرسل دعوة
@@ -419,6 +422,82 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ── الاستماع لرفض دعوتي ──
   let _rejectionUnsub = null;
+
+  // ══════════════════════════════════════
+  // 💬 منطق المحادثة
+  // ══════════════════════════════════════
+  const chatPanel      = document.getElementById("chat-panel");
+  const chatMessages   = document.getElementById("chat-messages");
+  const chatInput      = document.getElementById("chat-input");
+  const chatSendBtn    = document.getElementById("chat-send-btn");
+  const chatBackBtn    = document.getElementById("chat-back-btn");
+  const chatWithName   = document.getElementById("chat-with-name");
+  const chatWithAvatar = document.getElementById("chat-with-avatar");
+  const chatInviteBtn  = document.getElementById("chat-invite-btn");
+
+  let currentChatFriend = null;
+  let chatUnsub = null;
+
+  function openChat(friend) {
+    currentChatFriend = friend;
+    chatWithName.textContent = friend.name;
+    chatWithAvatar.textContent = friend.name?.[0]?.toUpperCase() || "?";
+    chatMessages.innerHTML = "";
+    markAsRead(friend.uid);
+    chatPanel.classList.remove("hidden");
+    chatInput.focus();
+
+    // استمع للرسائل
+    if (chatUnsub) chatUnsub();
+    chatUnsub = listenMessages(friend.uid, (msgs) => {
+      renderMessages(msgs);
+      markAsRead(friend.uid);
+    });
+
+    // زر التحدي داخل الشات
+    chatInviteBtn.onclick = () => {
+      chatPanel.classList.add("hidden");
+      startInviteGame(friend);
+    };
+  }
+
+  function renderMessages(msgs) {
+    const myUid = currentUser?.uid;
+    const wasAtBottom = chatMessages.scrollHeight - chatMessages.scrollTop <= chatMessages.clientHeight + 50;
+    chatMessages.innerHTML = "";
+
+    if (msgs.length === 0) {
+      chatMessages.innerHTML = `<p class="friends-empty">لا رسائل بعد، ابدأ المحادثة!</p>`;
+      return;
+    }
+
+    msgs.forEach(msg => {
+      const isMine = msg.fromUid === myUid;
+      const div = document.createElement("div");
+      div.className = `chat-msg ${isMine ? "mine" : "theirs"}`;
+      const time = new Date(msg.ts).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" });
+      div.innerHTML = `${msg.text}<div class="chat-msg-time">${time}</div>`;
+      chatMessages.appendChild(div);
+    });
+
+    if (wasAtBottom) chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  async function doSendMessage() {
+    const text = chatInput.value.trim();
+    if (!text || !currentChatFriend) return;
+    chatInput.value = "";
+    await sendMessage(currentChatFriend.uid, text);
+  }
+
+  chatSendBtn?.addEventListener("click", doSendMessage);
+  chatInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") doSendMessage(); });
+
+  chatBackBtn?.addEventListener("click", () => {
+    chatPanel.classList.add("hidden");
+    if (chatUnsub) { chatUnsub(); chatUnsub = null; }
+    currentChatFriend = null;
+  });
 
   function watchForRejection(friendName) {
     // ألغِ أي listener قديم أولاً
