@@ -624,24 +624,24 @@ document.addEventListener("DOMContentLoaded", () => {
     config.aiMode = "online";
     _moveSeq = 0;
     aiPlayer = null;
-    launchGame();
-    updateOnlineTurnIndicator();
 
-    // ✅ سجّل onMove بعد ما اللوحة تتبنى (requestAnimationFrame يضمن إن الـ DOM جاهز)
-    requestAnimationFrame(() => {
-      onlineManager.onMove((lineKey) => {
-        applyOpponentMove(lineKey);
+    // ✅ شاشة تحميل قصيرة قبل ما تبدأ اللعبة
+    onlineTurnInd.textContent = "⏳ جاري تحميل اللعبة...";
+    onlineTurnInd.style.color = "#888";
+
+    setTimeout(() => {
+      launchGame();
+      updateOnlineTurnIndicator();
+
+      requestAnimationFrame(() => {
+        onlineManager.onMove((lineKey) => {
+          applyOpponentMove(lineKey);
+        });
       });
-    });
 
-    onlineManager.onOpponentLeft(() => {
-      showDisconnectAlert();
-    });
-
-    // إشعار restart من الخصم
-    onlineManager.onRestart(() => {
-      showRestartAlert();
-    });
+      onlineManager.onOpponentLeft(() => { showDisconnectAlert(); });
+      onlineManager.onRestart(() => { showRestartAlert(); });
+    }, 800); // 800ms تعطي إحساس انتقال سلس
   }
 
   function updateOnlineTurnIndicator() {
