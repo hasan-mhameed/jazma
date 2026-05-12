@@ -194,12 +194,21 @@ h1 {
   stroke: #ccc;
   stroke-width: 2;
   cursor: pointer;
-  transition: stroke 0.3s ease, stroke-width 0.3s ease; /* 🆕 انيميشن */
+  transition: stroke 0.3s ease, stroke-width 0.3s ease;
 }
 
 .edge:hover {
   stroke: #888;
   stroke-width: 3;
+}
+
+/* 🚫 لما مش دور اللاعب — نخفي الـ hover */
+#board.not-my-turn .edge {
+  cursor: default;
+}
+#board.not-my-turn .edge:hover {
+  stroke: #ccc;
+  stroke-width: 2;
 }
 
 .edge-p1 {

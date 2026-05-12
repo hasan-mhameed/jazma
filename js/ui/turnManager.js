@@ -13,6 +13,16 @@ export function updateTurn(cfg) {
 }
 
 export function updateTurnUI(cfg) {
+  const board = document.getElementById("board");
+
+  // 🚫 أضف/شيل class الـ hover حسب الدور
+  if (board) {
+    const isMyTurn =
+      cfg.aiMode === "online"  ? state.currentPlayer === cfg.onlinePlayerNum :
+      cfg.aiMode === "ai"      ? state.currentPlayer === 1 :
+      true;
+    board.classList.toggle("not-my-turn", !isMyTurn);
+  }
   for (let i = 1; i <= cfg.players; i++) {
     const span = document.getElementById(`p${i}`);
     if (!span) continue;
