@@ -318,9 +318,9 @@ document.addEventListener("DOMContentLoaded", () => {
     card.querySelector(".btn-chat")?.addEventListener("click", () => {
       openChat(user);
     });
+    card.querySelector(".btn-invite")?.addEventListener("click", async (e) => {
       e.target.textContent = "⏳";
       e.target.disabled = true;
-      // أنشئ غرفة وأرسل دعوة
       await startInviteGame(user);
     });
     return card;
