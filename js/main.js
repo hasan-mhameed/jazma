@@ -485,9 +485,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function doSendMessage() {
     const text = chatInput.value.trim();
-    if (!text || !currentChatFriend) return;
+    if (!text || !currentChatFriend) {
+      console.log("❌ doSendMessage blocked:", { text, friend: currentChatFriend });
+      return;
+    }
     chatInput.value = "";
-    await sendMessage(currentChatFriend.uid, text);
+    chatSendBtn.disabled = true;
+    try {
+      await sendMessage(currentChatFriend.uid, text);
+    } finally {
+      chatSendBtn.disabled = false;
+      chatInput.focus();
+    }
   }
 
   chatSendBtn?.addEventListener("click", doSendMessage);
