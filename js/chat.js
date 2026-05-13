@@ -25,22 +25,28 @@ function chatKey(uid1, uid2) {
 // ─── إرسال رسالة ─────────────────────────────────────────────
 export async function sendMessage(toUid, text) {
   const from = getCurrentUser();
+  console.log("📤 sendMessage:", { fromUid: from?.uid, toUid, text });
   if (!from || !text.trim()) return;
   const key = chatKey(from.uid, toUid);
+  console.log("🔑 key:", key);
   await push(ref(db, `chats/${key}`), {
     fromUid:  from.uid,
     fromName: from.displayName || "لاعب",
     text:     text.trim(),
     ts:       Date.now(),
   });
+  console.log("✅ sent");
 }
 
 // ─── الاستماع للرسائل ────────────────────────────────────────
 export function listenMessages(toUid, cb) {
   const from = getCurrentUser();
+  console.log("👂 listenMessages:", { fromUid: from?.uid, toUid });
   if (!from) return () => {};
   const key  = chatKey(from.uid, toUid);
+  console.log("🔑 listening on:", key);
   const unsub = onValue(ref(db, `chats/${key}`), (snap) => {
+    console.log("📨 received:", snap.val());
     const messages = [];
     snap.forEach(child => messages.push({ id: child.key, ...child.val() }));
     cb(messages);
