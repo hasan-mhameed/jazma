@@ -499,13 +499,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  chatSendBtn?.addEventListener("click", doSendMessage);
-  chatInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") doSendMessage(); });
+  // ── استخدام event delegation للشات ──
+  document.addEventListener("click", (e) => {
+    if (e.target.id === "chat-send-btn") doSendMessage();
+    if (e.target.id === "chat-back-btn") {
+      document.getElementById("chat-panel").classList.add("hidden");
+      if (chatUnsub) { chatUnsub(); chatUnsub = null; }
+      currentChatFriend = null;
+    }
+  });
 
-  chatBackBtn?.addEventListener("click", () => {
-    chatPanel.classList.add("hidden");
-    if (chatUnsub) { chatUnsub(); chatUnsub = null; }
-    currentChatFriend = null;
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && document.activeElement?.id === "chat-input") doSendMessage();
   });
 
   function watchForRejection(friendName) {
