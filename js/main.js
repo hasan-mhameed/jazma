@@ -481,19 +481,19 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function doSendMessage() {
-    const text = chatInput.value.trim();
+    const input = document.getElementById("chat-input");
+    const text = input?.value.trim();
     if (!text || !currentChatFriend) {
       console.log("❌ doSendMessage blocked:", { text, friend: currentChatFriend });
       return;
     }
-    chatInput.value = "";
-    chatSendBtn.disabled = true;
+    input.value = "";
     try {
       await sendMessage(currentChatFriend.uid, text);
-    } finally {
-      chatSendBtn.disabled = false;
-      chatInput.focus();
+    } catch(e) {
+      console.error("send error:", e);
     }
+    input.focus();
   }
 
   // ── استخدام event delegation للشات ──
