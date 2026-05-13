@@ -462,7 +462,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderMessages(msgs) {
-    const myUid = currentUser?.uid;
+    const myUid = getCurrentUser()?.uid;
     const wasAtBottom = chatMessages.scrollHeight - chatMessages.scrollTop <= chatMessages.clientHeight + 50;
     chatMessages.innerHTML = "";
 
@@ -633,8 +633,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // ✅ املأ الاسم تلقائياً من حساب المستخدم
     if (step === "name" || step === "lobby") {
       import("./auth.js").then(({ currentUser }) => {
-        if (currentUser?.displayName) {
-          playerNameInput.value = currentUser.displayName;
+        if (getCurrentUser()?.displayName) {
+          playerNameInput.value = getCurrentUser().displayName;
         }
       });
     }
