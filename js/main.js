@@ -440,23 +440,66 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function openChat(friend) {
     currentChatFriend = friend;
-    const myUid = getCurrentUser()?.uid; // نحفظه هنا مرة وحدة
-    chatWithName.textContent = friend.name;
-    chatWithAvatar.textContent = friend.name?.[0]?.toUpperCase() || "?";
-    chatMessages.innerHTML = "";
+    const myUid = getCurrentUser()?.uid;
+
+    // جيب العناصر مباشرة هنا
+    const _chatInput      = document.getElementById("chat-input");
+    const _chatSendBtn    = document.getElementById("chat-send-btn");
+    const _chatBackBtn    = document.getElementById("chat-back-btn");
+    const _chatInviteBtn  = document.getElementById("chat-invite-btn");
+    const _chatWithName   = document.getElementById("chat-with-name");
+    const _chatWithAvatar = document.getElementById("chat-with-avatar");
+    const _chatPanel      = document.getElementById("chat-panel");
+    const _chatMessages   = document.getElementById("chat-messages");
+
+    _chatWithName.textContent   = friend.name;
+    _chatWithAvatar.textContent = friend.name?.[0]?.toUpperCase() || "?";
+    _chatMessages.innerHTML     = "";
     markAsRead(friend.uid);
-    chatPanel.classList.remove("hidden");
+    _chatPanel.classList.remove("hidden");
+    _chatInput.focus();
 
-    if (chatUnsub) chatUnsub();
-    chatUnsub = listenMessages(friend.uid, (msgs) => {
-      renderMessages(msgs, myUid); // نمرر myUid مباشرة
-      markAsRead(friend.uid);
-    });
+    // سجّل listener الإرسال مباشرة
+    const sendHandler = async () => {
+      const text = _chatInput.value.trim();
+      if (!text) return;
+      _chatInput.value = "";
+      await sendMessage(friend.uid, text);
+      _chatInput.focus();
+    };
 
-    chatInviteBtn.onclick = () => {
-      chatPanel.classList.add("hidden");
+    const keyHandler = (e) => { if (e.key === "Enter") sendHandler(); };
+
+    // ازل الـ listeners القديمة وأضف جديدة
+    _chatSendBtn.replaceWith(_chatSendBtn.cloneNode(true));
+    _chatInput.replaceWith(_chatInput.cloneNode(true));
+
+    const newSendBtn = document.getElementById("chat-send-btn");
+    const newInput   = document.getElementById("chat-input");
+
+    newSendBtn.addEventListener("click", sendHandler);
+    newInput.addEventListener("keydown", keyHandler);
+    newInput.focus();
+
+    // زر الرجوع
+    _chatBackBtn.onclick = () => {
+      _chatPanel.classList.add("hidden");
+      if (chatUnsub) { chatUnsub(); chatUnsub = null; }
+      currentChatFriend = null;
+    };
+
+    // زر التحدي
+    _chatInviteBtn.onclick = () => {
+      _chatPanel.classList.add("hidden");
       startInviteGame(friend);
     };
+
+    // استمع للرسائل
+    if (chatUnsub) chatUnsub();
+    chatUnsub = listenMessages(friend.uid, (msgs) => {
+      renderMessages(msgs, myUid);
+      markAsRead(friend.uid);
+    });
   }
 
   function renderMessages(msgs, myUid) {
@@ -495,20 +538,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     input.focus();
   }
-
-  // ── استخدام event delegation للشات ──
-  document.addEventListener("click", (e) => {
-    if (e.target.id === "chat-send-btn") doSendMessage();
-    if (e.target.id === "chat-back-btn") {
-      document.getElementById("chat-panel").classList.add("hidden");
-      if (chatUnsub) { chatUnsub(); chatUnsub = null; }
-      currentChatFriend = null;
-    }
-  });
-
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && document.activeElement?.id === "chat-input") doSendMessage();
-  });
 
   function watchForRejection(friendName) {
     // ألغِ أي listener قديم أولاً
