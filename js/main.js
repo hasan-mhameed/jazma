@@ -460,22 +460,22 @@ document.addEventListener("DOMContentLoaded", () => {
     _chatInput.focus();
 
     // سجّل listener الإرسال مباشرة
-    const sendHandler = async () => {
-      const text = _chatInput.value.trim();
-      if (!text) return;
-      _chatInput.value = "";
-      await sendMessage(friend.uid, text);
-      _chatInput.focus();
-    };
-
-    const keyHandler = (e) => { if (e.key === "Enter") sendHandler(); };
-
-    // ازل الـ listeners القديمة وأضف جديدة
+    // ازل الـ listeners القديمة
     _chatSendBtn.replaceWith(_chatSendBtn.cloneNode(true));
     _chatInput.replaceWith(_chatInput.cloneNode(true));
 
     const newSendBtn = document.getElementById("chat-send-btn");
     const newInput   = document.getElementById("chat-input");
+
+    const sendHandler = async () => {
+      const text = newInput.value.trim();
+      if (!text) return;
+      newInput.value = "";
+      await sendMessage(friend.uid, text);
+      newInput.focus();
+    };
+
+    const keyHandler = (e) => { if (e.key === "Enter") sendHandler(); };
 
     newSendBtn.addEventListener("click", sendHandler);
     newInput.addEventListener("keydown", keyHandler);
