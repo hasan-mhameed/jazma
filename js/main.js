@@ -10,7 +10,7 @@ import { onlineManager }                   from "./firebase.js";
 import { applyOnlineMove }                 from "./ui/boardRenderer.js";
 import { state }                           from "./core/state.js";
 import { onUserChange, signInWithGoogle, logout, getUserProfile,
-         registerWithEmail, signInWithEmail, updateStats, currentUser } from "./auth.js";
+         registerWithEmail, signInWithEmail, updateStats, currentUser, getCurrentUser } from "./auth.js";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend, listenFriendRequests, listenFriends } from "./friends.js";
 import { sendGameInvite, listenForInvites, clearInvite, rejectInvite, listenForInviteRejection } from "./invite.js";
