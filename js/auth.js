@@ -24,6 +24,7 @@ const auth = getAuth(app);
 const db   = getDatabase(app);
 
 export let currentUser = null;
+export function getCurrentUser() { return currentUser; }
 
 // ─── تسجيل بـ Google ──────────────────────────────────────────
 export async function signInWithGoogle() {

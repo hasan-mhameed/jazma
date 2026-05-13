@@ -5,7 +5,7 @@ import { getDatabase, ref, get, update, onValue, remove }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { currentUser } from "./auth.js";
+import { getCurrentUser } from "./auth.js";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -26,7 +26,7 @@ export async function searchUsers(query) {
   const results = [];
   snap.forEach(child => {
     const user = child.val();
-    if (user.uid === currentUser?.uid) return; // استثني نفسك
+    if (user.uid === getCurrentUser()?.uid) return; // استثني نفسك
     if (user.name?.toLowerCase().includes(query.toLowerCase())) {
       results.push(user);
     }
@@ -36,7 +36,7 @@ export async function searchUsers(query) {
 
 // ─── إرسال طلب صداقة ─────────────────────────────────────────
 export async function sendFriendRequest(toUid) {
-  const fromUid = currentUser?.uid;
+  const fromUid = getCurrentUser()?.uid;
   if (!fromUid) return;
 
   // تحقق إذا موجود مسبقاً
@@ -56,7 +56,7 @@ export async function sendFriendRequest(toUid) {
 
 // ─── قبول طلب صداقة ──────────────────────────────────────────
 export async function acceptFriendRequest(fromUid) {
-  const myUid = currentUser?.uid;
+  const myUid = getCurrentUser()?.uid;
   if (!myUid) return;
 
   const fromSnap = await get(ref(db, `users/${fromUid}`));
@@ -84,14 +84,14 @@ export async function acceptFriendRequest(fromUid) {
 
 // ─── رفض طلب صداقة ───────────────────────────────────────────
 export async function rejectFriendRequest(fromUid) {
-  const myUid = currentUser?.uid;
+  const myUid = getCurrentUser()?.uid;
   if (!myUid) return;
   await remove(ref(db, `users/${myUid}/friendRequests/${fromUid}`));
 }
 
 // ─── حذف صديق ────────────────────────────────────────────────
 export async function removeFriend(friendUid) {
-  const myUid = currentUser?.uid;
+  const myUid = getCurrentUser()?.uid;
   if (!myUid) return;
   await remove(ref(db, `users/${myUid}/friends/${friendUid}`));
   await remove(ref(db, `users/${friendUid}/friends/${myUid}`));
@@ -99,7 +99,7 @@ export async function removeFriend(friendUid) {
 
 // ─── جلب قائمة الأصدقاء ──────────────────────────────────────
 export async function getFriends() {
-  const myUid = currentUser?.uid;
+  const myUid = getCurrentUser()?.uid;
   if (!myUid) return [];
   const snap = await get(ref(db, `users/${myUid}/friends`));
   if (!snap.exists()) return [];
@@ -108,7 +108,7 @@ export async function getFriends() {
 
 // ─── الاستماع لطلبات الصداقة الواردة ────────────────────────
 export function listenFriendRequests(cb) {
-  const myUid = currentUser?.uid;
+  const myUid = getCurrentUser()?.uid;
   if (!myUid) return () => {};
   const unsub = onValue(ref(db, `users/${myUid}/friendRequests`), (snap) => {
     const requests = snap.exists() ? Object.values(snap.val()) : [];
@@ -119,7 +119,7 @@ export function listenFriendRequests(cb) {
 
 // ─── الاستماع للأصدقاء ───────────────────────────────────────
 export function listenFriends(cb) {
-  const myUid = currentUser?.uid;
+  const myUid = getCurrentUser()?.uid;
   if (!myUid) return () => {};
   const unsub = onValue(ref(db, `users/${myUid}/friends`), (snap) => {
     const friends = snap.exists() ? Object.values(snap.val()) : [];

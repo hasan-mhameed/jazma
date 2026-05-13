@@ -5,7 +5,7 @@ import { getDatabase, ref, set, onValue, update, remove }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { currentUser } from "./auth.js";
+import { getCurrentUser } from "./auth.js";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -21,7 +21,7 @@ const db  = getDatabase(app);
 
 // ─── إرسال دعوة لعب ──────────────────────────────────────────
 export async function sendGameInvite(toUid, roomCode, cfg) {
-  const from = currentUser;
+  const from = getCurrentUser();
   if (!from) return;
   await set(ref(db, `invites/${toUid}`), {
     fromUid:  from.uid,
@@ -34,7 +34,7 @@ export async function sendGameInvite(toUid, roomCode, cfg) {
 
 // ─── الاستماع للدعوات الواردة ─────────────────────────────────
 export function listenForInvites(cb) {
-  const myUid = currentUser?.uid;
+  const myUid = getCurrentUser()?.uid;
   if (!myUid) return () => {};
   const unsub = onValue(ref(db, `invites/${myUid}`), (snap) => {
     if (snap.exists()) cb(snap.val());
@@ -45,12 +45,12 @@ export function listenForInvites(cb) {
 
 // ─── إرسال إشعار رفض الدعوة ──────────────────────────────────
 export async function rejectInvite(invite) {
-  const myUid = currentUser?.uid;
+  const myUid = getCurrentUser()?.uid;
   if (!myUid) return;
   // أرسل إشعار رفض لصاحب الدعوة
   await set(ref(db, `inviteRejections/${invite.fromUid}`), {
     rejectedBy: myUid,
-    name: currentUser.displayName || "لاعب",
+    name: getCurrentUser()?.displayName || "لاعب",
     ts: Date.now(),
   });
   await clearInvite();
@@ -58,7 +58,7 @@ export async function rejectInvite(invite) {
 
 // ─── الاستماع لرفض الدعوة ────────────────────────────────────
 export function listenForInviteRejection(cb) {
-  const myUid = currentUser?.uid;
+  const myUid = getCurrentUser()?.uid;
   if (!myUid) return () => {};
   const unsub = onValue(ref(db, `inviteRejections/${myUid}`), async (snap) => {
     if (snap.exists()) {
@@ -71,7 +71,7 @@ export function listenForInviteRejection(cb) {
 
 // ─── حذف الدعوة بعد القبول ───────────────────────────────────
 export async function clearInvite() {
-  const myUid = currentUser?.uid;
+  const myUid = getCurrentUser()?.uid;
   if (!myUid) return;
   await remove(ref(db, `invites/${myUid}`));
 }

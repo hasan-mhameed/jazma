@@ -3,7 +3,7 @@ import { getDatabase, ref, push, onValue, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { currentUser } from "./auth.js";
+import { getCurrentUser } from "./auth.js";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -24,7 +24,7 @@ function chatKey(uid1, uid2) {
 
 // ─── إرسال رسالة ─────────────────────────────────────────────
 export async function sendMessage(toUid, text) {
-  const from = currentUser;
+  const from = getCurrentUser();
   if (!from || !text.trim()) return;
   const key = chatKey(from.uid, toUid);
   await push(ref(db, `chats/${key}`), {
@@ -37,7 +37,7 @@ export async function sendMessage(toUid, text) {
 
 // ─── الاستماع للرسائل ────────────────────────────────────────
 export function listenMessages(toUid, cb) {
-  const from = currentUser;
+  const from = getCurrentUser();
   if (!from) return () => {};
   const key  = chatKey(from.uid, toUid);
   const unsub = onValue(ref(db, `chats/${key}`), (snap) => {
@@ -50,7 +50,7 @@ export function listenMessages(toUid, cb) {
 
 // ─── الاستماع للرسائل الجديدة (badge) ───────────────────────
 export function listenUnread(friends, cb) {
-  const myUid = currentUser?.uid;
+  const myUid = getCurrentUser()?.uid;
   if (!myUid) return () => {};
   const unsubs = [];
   let unreadCount = 0;
@@ -77,7 +77,7 @@ export function listenUnread(friends, cb) {
 
 // ─── تعليم المحادثة كمقروءة ──────────────────────────────────
 export function markAsRead(toUid) {
-  const myUid = currentUser?.uid;
+  const myUid = getCurrentUser()?.uid;
   if (!myUid) return;
   const key = chatKey(myUid, toUid);
   localStorage.setItem(`lastRead_${key}`, Date.now().toString());
