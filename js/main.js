@@ -440,29 +440,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function openChat(friend) {
     currentChatFriend = friend;
+    const myUid = getCurrentUser()?.uid; // نحفظه هنا مرة وحدة
     chatWithName.textContent = friend.name;
     chatWithAvatar.textContent = friend.name?.[0]?.toUpperCase() || "?";
     chatMessages.innerHTML = "";
     markAsRead(friend.uid);
     chatPanel.classList.remove("hidden");
-    chatInput.focus();
 
-    // استمع للرسائل
     if (chatUnsub) chatUnsub();
     chatUnsub = listenMessages(friend.uid, (msgs) => {
-      renderMessages(msgs);
+      renderMessages(msgs, myUid); // نمرر myUid مباشرة
       markAsRead(friend.uid);
     });
 
-    // زر التحدي داخل الشات
     chatInviteBtn.onclick = () => {
       chatPanel.classList.add("hidden");
       startInviteGame(friend);
     };
   }
 
-  function renderMessages(msgs) {
-    const myUid = getCurrentUser()?.uid;
+  function renderMessages(msgs, myUid) {
     const wasAtBottom = chatMessages.scrollHeight - chatMessages.scrollTop <= chatMessages.clientHeight + 50;
     chatMessages.innerHTML = "";
 
