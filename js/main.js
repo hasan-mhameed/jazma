@@ -507,16 +507,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function doSendMessage() {} // placeholder
 
-    }
-    input.value = "";
-    try {
-      await sendMessage(currentChatFriend.uid, text);
-    } catch(e) {
-      console.error("send error:", e);
-    }
-    input.focus();
-  }
-
   function watchForRejection(friendName) {
     // ألغِ أي listener قديم أولاً
     if (_rejectionUnsub) { _rejectionUnsub(); _rejectionUnsub = null; }
