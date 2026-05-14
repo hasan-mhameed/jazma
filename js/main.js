@@ -423,112 +423,88 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── الاستماع لرفض دعوتي ──
   let _rejectionUnsub = null;
 
+
   // ══════════════════════════════════════
   // 💬 منطق المحادثة
   // ══════════════════════════════════════
-  const chatPanel      = document.getElementById("chat-panel");
-  const chatMessages   = document.getElementById("chat-messages");
-  const chatInput      = document.getElementById("chat-input");
-  const chatSendBtn    = document.getElementById("chat-send-btn");
-  const chatBackBtn    = document.getElementById("chat-back-btn");
-  const chatWithName   = document.getElementById("chat-with-name");
-  const chatWithAvatar = document.getElementById("chat-with-avatar");
-  const chatInviteBtn  = document.getElementById("chat-invite-btn");
-
   let currentChatFriend = null;
   let chatUnsub = null;
+  let currentMyUid = null;
+
+  // نستخدم onclick مباشرة — أبسط وأضمن
+  document.getElementById("chat-send-btn").onclick = async () => {
+    const input = document.getElementById("chat-input");
+    const text  = input.value.trim();
+    if (!text || !currentChatFriend) return;
+    input.value = "";
+    await sendMessage(currentChatFriend.uid, text);
+    input.focus();
+  };
+
+  document.getElementById("chat-input").onkeydown = (e) => {
+    if (e.key !== "Enter") return;
+    const input = document.getElementById("chat-input");
+    const text  = input.value.trim();
+    if (!text || !currentChatFriend) return;
+    input.value = "";
+    sendMessage(currentChatFriend.uid, text);
+    input.focus();
+  };
+
+  document.getElementById("chat-back-btn").onclick = () => {
+    document.getElementById("chat-panel").classList.add("hidden");
+    if (chatUnsub) { chatUnsub(); chatUnsub = null; }
+    currentChatFriend = null;
+  };
 
   function openChat(friend) {
     currentChatFriend = friend;
-    const myUid = getCurrentUser()?.uid;
+    currentMyUid = getCurrentUser()?.uid;
 
-    // جيب العناصر مباشرة هنا
-    const _chatInput      = document.getElementById("chat-input");
-    const _chatSendBtn    = document.getElementById("chat-send-btn");
-    const _chatBackBtn    = document.getElementById("chat-back-btn");
-    const _chatInviteBtn  = document.getElementById("chat-invite-btn");
-    const _chatWithName   = document.getElementById("chat-with-name");
-    const _chatWithAvatar = document.getElementById("chat-with-avatar");
-    const _chatPanel      = document.getElementById("chat-panel");
-    const _chatMessages   = document.getElementById("chat-messages");
-
-    _chatWithName.textContent   = friend.name;
-    _chatWithAvatar.textContent = friend.name?.[0]?.toUpperCase() || "?";
-    _chatMessages.innerHTML     = "";
-    markAsRead(friend.uid);
-    _chatPanel.classList.remove("hidden");
-    _chatInput.focus();
-
-    // سجّل listener الإرسال مباشرة
-    // ازل الـ listeners القديمة
-    _chatSendBtn.replaceWith(_chatSendBtn.cloneNode(true));
-    _chatInput.replaceWith(_chatInput.cloneNode(true));
-
-    const newSendBtn = document.getElementById("chat-send-btn");
-    const newInput   = document.getElementById("chat-input");
-
-    const sendHandler = async () => {
-      const text = newInput.value.trim();
-      if (!text) return;
-      newInput.value = "";
-      await sendMessage(friend.uid, text);
-      newInput.focus();
-    };
-
-    const keyHandler = (e) => { if (e.key === "Enter") sendHandler(); };
-
-    newSendBtn.addEventListener("click", sendHandler);
-    newInput.addEventListener("keydown", keyHandler);
-    newInput.focus();
-
-    // زر الرجوع
-    _chatBackBtn.onclick = () => {
-      _chatPanel.classList.add("hidden");
-      if (chatUnsub) { chatUnsub(); chatUnsub = null; }
-      currentChatFriend = null;
-    };
-
-    // زر التحدي
-    _chatInviteBtn.onclick = () => {
-      _chatPanel.classList.add("hidden");
+    document.getElementById("chat-with-name").textContent   = friend.name;
+    document.getElementById("chat-with-avatar").textContent = friend.name?.[0]?.toUpperCase() || "?";
+    document.getElementById("chat-messages").innerHTML      = "";
+    document.getElementById("chat-invite-btn").onclick = () => {
+      document.getElementById("chat-panel").classList.add("hidden");
       startInviteGame(friend);
     };
 
-    // استمع للرسائل
+    markAsRead(friend.uid);
+    document.getElementById("chat-panel").classList.remove("hidden");
+    document.getElementById("chat-input").focus();
+
     if (chatUnsub) chatUnsub();
     chatUnsub = listenMessages(friend.uid, (msgs) => {
-      renderMessages(msgs, myUid);
+      renderMessages(msgs, currentMyUid);
       markAsRead(friend.uid);
     });
   }
 
   function renderMessages(msgs, myUid) {
-    const wasAtBottom = chatMessages.scrollHeight - chatMessages.scrollTop <= chatMessages.clientHeight + 50;
-    chatMessages.innerHTML = "";
+    const box = document.getElementById("chat-messages");
+    if (!box) return;
+    const atBottom = box.scrollHeight - box.scrollTop <= box.clientHeight + 50;
+    box.innerHTML = "";
 
     if (msgs.length === 0) {
-      chatMessages.innerHTML = `<p class="friends-empty">لا رسائل بعد، ابدأ المحادثة!</p>`;
+      box.innerHTML = `<p class="friends-empty">لا رسائل بعد، ابدأ المحادثة!</p>`;
       return;
     }
 
     msgs.forEach(msg => {
       const isMine = msg.fromUid === myUid;
-      const div = document.createElement("div");
+      const div    = document.createElement("div");
       div.className = `chat-msg ${isMine ? "mine" : "theirs"}`;
-      const time = new Date(msg.ts).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" });
+      const time    = new Date(msg.ts).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" });
       div.innerHTML = `${msg.text}<div class="chat-msg-time">${time}</div>`;
-      chatMessages.appendChild(div);
+      box.appendChild(div);
     });
 
-    if (wasAtBottom) chatMessages.scrollTop = chatMessages.scrollHeight;
+    if (atBottom) box.scrollTop = box.scrollHeight;
   }
 
-  async function doSendMessage() {
-    const input = document.getElementById("chat-input");
-    const text = input?.value.trim();
-    if (!text || !currentChatFriend) {
-      console.log("❌ doSendMessage blocked:", { text, friend: currentChatFriend });
-      return;
+  async function doSendMessage() {} // placeholder
+
     }
     input.value = "";
     try {
