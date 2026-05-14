@@ -460,6 +460,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function openChat(friend) {
     currentChatFriend = friend;
     currentMyUid = getCurrentUser()?.uid;
+    console.log("💬 openChat:", friend.name, "myUid:", currentMyUid);
 
     document.getElementById("chat-with-name").textContent   = friend.name;
     document.getElementById("chat-with-avatar").textContent = friend.name?.[0]?.toUpperCase() || "?";
@@ -471,6 +472,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     markAsRead(friend.uid);
     document.getElementById("chat-panel").classList.remove("hidden");
+    console.log("💬 chat-panel shown");
     document.getElementById("chat-input").focus();
 
     if (chatUnsub) chatUnsub();
