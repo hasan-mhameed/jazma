@@ -477,6 +477,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (chatUnsub) chatUnsub();
     chatUnsub = listenMessages(friend.uid, (msgs) => {
+      console.log("🎨 renderMessages:", msgs.length, "myUid:", currentMyUid);
       renderMessages(msgs, currentMyUid);
       markAsRead(friend.uid);
     });
