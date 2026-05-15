@@ -24,7 +24,6 @@ function chatKey(uid1, uid2) {
 
 export async function sendMessage(toUid, text) {
   const from = getCurrentUser();
-  console.log("📤 sendMessage from:", from?.uid, "to:", toUid);
   if (!from || !text.trim()) return;
   const key = chatKey(from.uid, toUid);
   await push(ref(db, `chats/${key}`), {
@@ -33,15 +32,11 @@ export async function sendMessage(toUid, text) {
     text:     text.trim(),
     ts:       Date.now(),
   });
-  console.log("✅ pushed to:", key);
 }
 
 export function listenMessages(toUid, cb) {
   const from = getCurrentUser();
-  console.log("👂 listenMessages from:", from?.uid, "to:", toUid);
-  if (!from) { console.log("❌ no user!"); return () => {}; }
   const key = chatKey(from.uid, toUid);
-  console.log("🔑 key:", key);
   const chatQuery = query(ref(db, `chats/${key}`), limitToLast(100));
   onValue(chatQuery, (snap) => {
     const messages = [];
