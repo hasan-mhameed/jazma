@@ -453,6 +453,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("chat-back-btn").onclick = () => {
     document.getElementById("chat-panel").classList.add("hidden");
+    document.getElementById("friends-panel").classList.remove("hidden");
     if (chatUnsub) { chatUnsub(); chatUnsub = null; }
     currentChatFriend = null;
   };
@@ -471,6 +472,7 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     markAsRead(friend.uid);
+    document.getElementById("friends-panel").classList.add("hidden"); // أخفِ لوحة الأصدقاء
     document.getElementById("chat-panel").classList.remove("hidden");
     console.log("💬 chat-panel shown");
     document.getElementById("chat-input").focus();
