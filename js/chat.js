@@ -44,10 +44,14 @@ export function listenMessages(toUid, cb) {
   console.log("🔑 key:", key);
   const chatQuery = query(ref(db, `chats/${key}`), limitToLast(100));
   onValue(chatQuery, (snap) => {
-    console.log("📨 snap:", snap.val());
     const messages = [];
-    snap.forEach(child => messages.push({ id: child.key, ...child.val() }));
-    messages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    snap.forEach(child => {
+      const val = child.val();
+      // serverTimestamp يرجع object أحياناً — نحوله لرقم
+      const ts = typeof val.ts === 'number' ? val.ts : 0;
+      messages.push({ id: child.key, ...val, ts });
+    });
+    messages.sort((a, b) => a.ts - b.ts);
     cb(messages);
   });
   return () => off(chatQuery);
