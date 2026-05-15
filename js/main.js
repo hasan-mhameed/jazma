@@ -209,7 +209,7 @@ document.addEventListener("DOMContentLoaded", () => {
       await signInWithGoogle();
     } catch (e) {
       googleSigninBtn.disabled = false;
-      googleSigninBtn.innerHTML = `<img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="20"/> تسجيل الدخول بـ Google`;
+      googleSigninBtn.innerHTML = `<img src="/jazma/images/google.svg" alt="Google" width="20"/> تسجيل الدخول بـ Google`;
     }
   });
 
@@ -461,7 +461,6 @@ document.addEventListener("DOMContentLoaded", () => {
   function openChat(friend) {
     currentChatFriend = friend;
     currentMyUid = getCurrentUser()?.uid;
-    console.log("💬 openChat:", friend.name, "myUid:", currentMyUid);
 
     document.getElementById("chat-with-name").textContent   = friend.name;
     document.getElementById("chat-with-avatar").textContent = friend.name?.[0]?.toUpperCase() || "?";
@@ -472,9 +471,8 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     markAsRead(friend.uid);
-    document.getElementById("friends-panel").classList.add("hidden"); // أخفِ لوحة الأصدقاء
+    document.getElementById("friends-panel").classList.add("hidden");
     document.getElementById("chat-panel").classList.remove("hidden");
-    console.log("💬 chat-panel shown");
     document.getElementById("chat-input").focus();
 
     if (chatUnsub) chatUnsub();

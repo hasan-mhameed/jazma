@@ -1,5 +1,6 @@
-// 📄 chat.js — v12.4
-import { getDatabase, ref, push, onValue, serverTimestamp }
+// 📄 chat.js — v12.4 Production Ready
+
+import { getDatabase, ref, push, onValue, off, serverTimestamp, query, limitToLast }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -17,12 +18,10 @@ const firebaseConfig = {
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
-// ─── مفتاح المحادثة (نفسه لكلا الطرفين) ─────────────────────
 function chatKey(uid1, uid2) {
   return [uid1, uid2].sort().join("_");
 }
 
-// ─── إرسال رسالة ─────────────────────────────────────────────
 export async function sendMessage(toUid, text) {
   const from = getCurrentUser();
   if (!from || !text.trim()) return;
@@ -31,51 +30,47 @@ export async function sendMessage(toUid, text) {
     fromUid:  from.uid,
     fromName: from.displayName || "لاعب",
     text:     text.trim(),
-    ts:       Date.now(),
+    ts:       serverTimestamp(),
   });
 }
 
-// ─── الاستماع للرسائل ────────────────────────────────────────
 export function listenMessages(toUid, cb) {
   const from = getCurrentUser();
   if (!from) return () => {};
-  const key  = chatKey(from.uid, toUid);
-  const unsub = onValue(ref(db, `chats/${key}`), (snap) => {
+  const key = chatKey(from.uid, toUid);
+  const chatQuery = query(ref(db, `chats/${key}`), limitToLast(100));
+  const listener = onValue(chatQuery, (snap) => {
     const messages = [];
     snap.forEach(child => messages.push({ id: child.key, ...child.val() }));
+    messages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
     cb(messages);
   });
-  return unsub;
+  return () => off(chatQuery);
 }
 
-// ─── الاستماع للرسائل الجديدة (badge) ───────────────────────
 export function listenUnread(friends, cb) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid) return () => {};
   const unsubs = [];
-  let unreadCount = 0;
   const unreadMap = {};
-
   friends.forEach(friend => {
-    const key = chatKey(myUid, friend.uid);
+    const key      = chatKey(myUid, friend.uid);
     const lastRead = parseInt(localStorage.getItem(`lastRead_${key}`) || "0");
-    const unsub = onValue(ref(db, `chats/${key}`), (snap) => {
+    const chatQuery = query(ref(db, `chats/${key}`), limitToLast(50));
+    onValue(chatQuery, (snap) => {
       let count = 0;
       snap.forEach(child => {
         const msg = child.val();
-        if (msg.fromUid !== myUid && msg.ts > lastRead) count++;
+        if (msg.fromUid !== myUid && (msg.ts || 0) > lastRead) count++;
       });
       unreadMap[friend.uid] = count;
-      const total = Object.values(unreadMap).reduce((a,b) => a+b, 0);
-      cb(total);
+      cb(Object.values(unreadMap).reduce((a, b) => a + b, 0));
     });
-    unsubs.push(unsub);
+    unsubs.push(() => off(chatQuery));
   });
-
-  return () => unsubs.forEach(u => u());
+  return () => unsubs.forEach(fn => fn());
 }
 
-// ─── تعليم المحادثة كمقروءة ──────────────────────────────────
 export function markAsRead(toUid) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid) return;
