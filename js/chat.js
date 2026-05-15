@@ -1,6 +1,6 @@
 // 📄 chat.js — v12.4 Production Ready
 
-import { getDatabase, ref, push, onValue, off, serverTimestamp, query, limitToLast }
+import { getDatabase, ref, push, onValue, off, query, limitToLast }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -24,22 +24,27 @@ function chatKey(uid1, uid2) {
 
 export async function sendMessage(toUid, text) {
   const from = getCurrentUser();
+  console.log("📤 sendMessage from:", from?.uid, "to:", toUid);
   if (!from || !text.trim()) return;
   const key = chatKey(from.uid, toUid);
   await push(ref(db, `chats/${key}`), {
     fromUid:  from.uid,
     fromName: from.displayName || "لاعب",
     text:     text.trim(),
-    ts:       serverTimestamp(),
+    ts:       Date.now(),
   });
+  console.log("✅ pushed to:", key);
 }
 
 export function listenMessages(toUid, cb) {
   const from = getCurrentUser();
-  if (!from) return () => {};
+  console.log("👂 listenMessages from:", from?.uid, "to:", toUid);
+  if (!from) { console.log("❌ no user!"); return () => {}; }
   const key = chatKey(from.uid, toUid);
+  console.log("🔑 key:", key);
   const chatQuery = query(ref(db, `chats/${key}`), limitToLast(100));
-  const listener = onValue(chatQuery, (snap) => {
+  onValue(chatQuery, (snap) => {
+    console.log("📨 snap:", snap.val());
     const messages = [];
     snap.forEach(child => messages.push({ id: child.key, ...child.val() }));
     messages.sort((a, b) => (a.ts || 0) - (b.ts || 0));

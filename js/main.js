@@ -494,11 +494,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     msgs.forEach(msg => {
+      if (!msg.text) return; // تجاهل رسائل فارغة
       const isMine = msg.fromUid === myUid;
       const div    = document.createElement("div");
       div.className = `chat-msg ${isMine ? "mine" : "theirs"}`;
-      const time    = new Date(msg.ts).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" });
-      div.innerHTML = `${msg.text}<div class="chat-msg-time">${time}</div>`;
+      // ts ممكن يكون null مؤقتاً مع serverTimestamp
+      const time = msg.ts ? new Date(msg.ts).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" }) : "";
+      div.innerHTML = `${msg.text}${time ? `<div class="chat-msg-time">${time}</div>` : ""}`;
       box.appendChild(div);
     });
 
