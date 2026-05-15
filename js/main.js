@@ -15,7 +15,8 @@ import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend, listenFriendRequests, listenFriends } from "./friends.js";
 import { sendGameInvite, listenForInvites, clearInvite, rejectInvite, listenForInviteRejection } from "./invite.js";
 import { getLeaderboard } from "./leaderboard.js";
-import { sendMessage, listenMessages, listenUnread, markAsRead } from "./chat.js";
+import { sendMessage, listenMessages, listenUnread, markAsRead, markDelivered, markRead } from "./chat.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 let aiPlayer = null;
 
@@ -183,6 +184,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       initFriendsListeners();
       initInviteListener();
+      initChatNotifications();
 
       // ── تحديث شريط الإحصائيات بعد كل مباراة ──
       async function refreshStats() {
@@ -425,18 +427,40 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   // ══════════════════════════════════════
-  // 💬 منطق المحادثة
+  // 💬 منطق المحادثة v12.5
   // ══════════════════════════════════════
   let currentChatFriend = null;
   let chatUnsub = null;
   let currentMyUid = null;
+  let chatNotifTimeout = null;
+  const db_main = getDatabase();
 
-  // نستخدم onclick مباشرة — أبسط وأضمن
+  // ── إيموجي ──
+  const EMOJIS = ["😊","😂","❤️","👍","🔥","🎮","😍","🤣","😭","💯",
+                  "🙏","👏","😎","🤔","😅","🥳","😢","💪","🤝","✌️",
+                  "👋","🎉","😆","🙈","💀","😤","🥰","😏","🤩","👀"];
+  const emojiPicker = document.getElementById("emoji-picker");
+  EMOJIS.forEach(emoji => {
+    const span = document.createElement("span");
+    span.className = "emoji-item";
+    span.textContent = emoji;
+    span.onclick = () => {
+      const input = document.getElementById("chat-input");
+      input.value += emoji;
+      input.focus();
+      emojiPicker.classList.add("hidden");
+    };
+    emojiPicker?.appendChild(span);
+  });
+  document.getElementById("emoji-btn").onclick = () => emojiPicker.classList.toggle("hidden");
+
+  // ── إرسال ──
   document.getElementById("chat-send-btn").onclick = async () => {
     const input = document.getElementById("chat-input");
     const text  = input.value.trim();
     if (!text || !currentChatFriend) return;
     input.value = "";
+    emojiPicker?.classList.add("hidden");
     await sendMessage(currentChatFriend.uid, text);
     input.focus();
   };
@@ -447,6 +471,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const text  = input.value.trim();
     if (!text || !currentChatFriend) return;
     input.value = "";
+    emojiPicker?.classList.add("hidden");
     sendMessage(currentChatFriend.uid, text);
     input.focus();
   };
@@ -454,6 +479,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("chat-back-btn").onclick = () => {
     document.getElementById("chat-panel").classList.add("hidden");
     document.getElementById("friends-panel").classList.remove("hidden");
+    emojiPicker?.classList.add("hidden");
     if (chatUnsub) { chatUnsub(); chatUnsub = null; }
     currentChatFriend = null;
   };
@@ -461,7 +487,6 @@ document.addEventListener("DOMContentLoaded", () => {
   function openChat(friend) {
     currentChatFriend = friend;
     currentMyUid = getCurrentUser()?.uid;
-
     document.getElementById("chat-with-name").textContent   = friend.name;
     document.getElementById("chat-with-avatar").textContent = friend.name?.[0]?.toUpperCase() || "?";
     document.getElementById("chat-messages").innerHTML      = "";
@@ -469,16 +494,17 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("chat-panel").classList.add("hidden");
       startInviteGame(friend);
     };
-
     markAsRead(friend.uid);
+    markRead(friend.uid);
+    markDelivered(friend.uid);
     document.getElementById("friends-panel").classList.add("hidden");
     document.getElementById("chat-panel").classList.remove("hidden");
     document.getElementById("chat-input").focus();
-
     if (chatUnsub) chatUnsub();
     chatUnsub = listenMessages(friend.uid, (msgs) => {
       renderMessages(msgs, currentMyUid);
       markAsRead(friend.uid);
+      markRead(friend.uid);
     });
   }
 
@@ -487,27 +513,92 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!box) return;
     const atBottom = box.scrollHeight - box.scrollTop <= box.clientHeight + 50;
     box.innerHTML = "";
-
     if (msgs.length === 0) {
       box.innerHTML = `<p class="friends-empty">لا رسائل بعد، ابدأ المحادثة!</p>`;
       return;
     }
-
     msgs.forEach(msg => {
-      if (!msg.text) return; // تجاهل رسائل فارغة
+      if (!msg.text) return;
       const isMine = msg.fromUid === myUid;
       const div    = document.createElement("div");
       div.className = `chat-msg ${isMine ? "mine" : "theirs"}`;
-      // ts ممكن يكون null مؤقتاً مع serverTimestamp
-      const time = msg.ts ? new Date(msg.ts).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" }) : "";
-      div.innerHTML = `${msg.text}${time ? `<div class="chat-msg-time">${time}</div>` : ""}`;
+      const time   = msg.ts ? new Date(msg.ts).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" }) : "";
+      let statusIcon = "";
+      if (isMine) {
+        if      (msg.status === "read")      statusIcon = `<span class="msg-status status-read">✓✓</span>`;
+        else if (msg.status === "delivered") statusIcon = `<span class="msg-status status-delivered">✓✓</span>`;
+        else                                  statusIcon = `<span class="msg-status status-sent">✓</span>`;
+      }
+      div.innerHTML = `${msg.text}<div class="chat-msg-time">${statusIcon}${time}</div>`;
       box.appendChild(div);
     });
-
     if (atBottom) box.scrollTop = box.scrollHeight;
   }
 
+  // ── إشعارات رسائل جديدة ──
+  function initChatNotifications() {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+    const myUid = getCurrentUser()?.uid;
+    if (!myUid) return;
+    onValue(ref(db_main, `users/${myUid}/friends`), (snap) => {
+      if (!snap.exists()) return;
+      Object.values(snap.val()).forEach(friend => {
+        listenMessages(friend.uid, (msgs) => {
+          if (!msgs.length) return;
+          const lastMsg  = msgs[msgs.length - 1];
+          const isFromFriend = lastMsg.fromUid === friend.uid;
+          const isRecent     = Date.now() - (lastMsg.ts || 0) < 5000;
+          const chatOpen     = currentChatFriend?.uid === friend.uid;
+          if (isFromFriend && isRecent && !chatOpen) {
+            showChatNotification(friend, lastMsg.text);
+            markDelivered(friend.uid);
+          }
+        });
+      });
+    });
+  }
+
+  function showChatNotification(friend, text) {
+    let notif = document.getElementById("chat-notification");
+    if (!notif) {
+      notif = document.createElement("div");
+      notif.id = "chat-notification";
+      document.body.appendChild(notif);
+    }
+    notif.innerHTML = `
+      <span style="font-size:1.2rem">💬</span>
+      <div class="notif-text">
+        <div class="notif-name">${friend.name}</div>
+        <div>${text.length > 30 ? text.slice(0,30) + "..." : text}</div>
+      </div>
+    `;
+    notif.style.display = "flex";
+    notif.onclick = () => {
+      notif.style.display = "none";
+      document.getElementById("friends-panel").classList.remove("hidden");
+      openChat(friend);
+    };
+    if (chatNotifTimeout) clearTimeout(chatNotifTimeout);
+    chatNotifTimeout = setTimeout(() => { notif.style.display = "none"; }, 5000);
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(`💬 ${friend.name}`, { body: text, icon: "/jazma/images/google.svg" });
+    }
+    try {
+      const ctx  = new AudioContext();
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start(); osc.stop(ctx.currentTime + 0.3);
+    } catch(e) {}
+  }
+
   async function doSendMessage() {} // placeholder
+
 
   function watchForRejection(friendName) {
     // ألغِ أي listener قديم أولاً
