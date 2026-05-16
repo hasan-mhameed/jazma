@@ -582,6 +582,7 @@ document.addEventListener("DOMContentLoaded", () => {
     `;
     notif.style.display = "flex";
     notif.onclick = () => {
+      audioManager.playButtonClick(); // صوت عند الضغط على الإشعار
       notif.style.display = "none";
       document.getElementById("friends-panel").classList.remove("hidden");
       openChat(friend);
@@ -591,8 +592,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if ("Notification" in window && Notification.permission === "granted") {
       new Notification(`💬 ${friend.name}`, { body: text, icon: "/jazma/images/google.svg" });
     }
-    // صوت إشعار
-    audioManager.playButtonClick();
+    // الصوت يشتغل لما المستخدم يضغط على الإشعار
   }
 
   async function doSendMessage() {} // placeholder
