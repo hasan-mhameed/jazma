@@ -591,8 +591,16 @@ document.addEventListener("DOMContentLoaded", () => {
     if ("Notification" in window && Notification.permission === "granted") {
       new Notification(`💬 ${friend.name}`, { body: text, icon: "/jazma/images/google.svg" });
     }
-    // صوت إشعار — نستخدم audioManager
-    audioManager.playButtonClick();
+    // صوت إشعار — نشغله عند أول تفاعل قادم من المستخدم
+    const playNotifSound = () => {
+      audioManager.playButtonClick();
+      document.removeEventListener("mousemove", playNotifSound);
+      document.removeEventListener("click", playNotifSound);
+      document.removeEventListener("keydown", playNotifSound);
+    };
+    document.addEventListener("mousemove", playNotifSound, { once: true });
+    document.addEventListener("click", playNotifSound, { once: true });
+    document.addEventListener("keydown", playNotifSound, { once: true });
   }
 
   async function doSendMessage() {} // placeholder
