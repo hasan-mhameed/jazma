@@ -32,7 +32,12 @@ class AudioManager {
   // تشغيل صوت باستخدام frequency
   playTone(frequency, duration, type = 'sine', volume = null) {
     if (!this.enabled || !this.audioContext) return;
-    
+
+    // resume إذا كان الـ context suspended
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume();
+    }
+
     const oscillator = this.audioContext.createOscillator();
     const gainNode = this.audioContext.createGain();
     
