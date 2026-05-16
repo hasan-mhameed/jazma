@@ -21,11 +21,11 @@ import { playNotifSound } from "./audio/notif.js";
 
 let aiPlayer = null;
 
-// AudioContext مشترك
-let _audioCtx = null;
-document.addEventListener("click", () => {
-  if (!_audioCtx) _audioCtx = new AudioContext();
-}, { once: false });
+// تسجيل Service Worker للـ PWA
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/jazma/service-worker.js")
+    .catch(() => {});
+}
 
 document.addEventListener("DOMContentLoaded", () => {
 
