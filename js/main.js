@@ -17,6 +17,7 @@ import { sendGameInvite, listenForInvites, clearInvite, rejectInvite, listenForI
 import { getLeaderboard } from "./leaderboard.js";
 import { sendMessage, listenMessages, listenUnread, markAsRead, markDelivered, markRead } from "./chat.js";
 import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { playNotifSound } from "./audio/notif.js";
 
 let aiPlayer = null;
 
@@ -593,6 +594,7 @@ document.addEventListener("DOMContentLoaded", () => {
       new Notification(`💬 ${friend.name}`, { body: text, icon: "/jazma/images/google.svg" });
     }
     // الصوت يشتغل لما المستخدم يضغط على الإشعار
+    playNotifSound();
   }
 
   async function doSendMessage() {} // placeholder
