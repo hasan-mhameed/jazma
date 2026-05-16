@@ -21,8 +21,21 @@ class AudioManager {
   
   initAudioContext() {
     try {
-      // إنشاء AudioContext (يدعم كل المتصفحات)
       this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      // resume عند أول تفاعل من المستخدم
+      const resume = () => {
+        if (this.audioContext.state === 'suspended') {
+          this.audioContext.resume();
+        }
+        document.removeEventListener('click',     resume);
+        document.removeEventListener('keydown',   resume);
+        document.removeEventListener('mousemove', resume);
+        document.removeEventListener('touchstart',resume);
+      };
+      document.addEventListener('click',     resume);
+      document.addEventListener('keydown',   resume);
+      document.addEventListener('mousemove', resume);
+      document.addEventListener('touchstart',resume);
     } catch (e) {
       console.warn('Web Audio API not supported', e);
       this.enabled = false;
@@ -33,28 +46,25 @@ class AudioManager {
   playTone(frequency, duration, type = 'sine', volume = null) {
     if (!this.enabled || !this.audioContext) return;
 
-    // resume إذا كان الـ context suspended
-    if (this.audioContext.state === 'suspended') {
-      this.audioContext.resume();
-    }
+    const play = () => {
+      const oscillator = this.audioContext.createOscillator();
+      const gainNode   = this.audioContext.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(this.audioContext.destination);
+      oscillator.frequency.value = frequency;
+      oscillator.type = type;
+      const vol = volume !== null ? volume : this.volume;
+      gainNode.gain.setValueAtTime(vol, this.audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + duration);
+      oscillator.start(this.audioContext.currentTime);
+      oscillator.stop(this.audioContext.currentTime + duration);
+    };
 
-    const oscillator = this.audioContext.createOscillator();
-    const gainNode = this.audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(this.audioContext.destination);
-    
-    oscillator.frequency.value = frequency;
-    oscillator.type = type;
-    
-    const vol = volume !== null ? volume : this.volume;
-    gainNode.gain.setValueAtTime(vol, this.audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + duration);
-    
-    oscillator.start(this.audioContext.currentTime);
-    oscillator.stop(this.audioContext.currentTime + duration);
-    
-    return { oscillator, gainNode };
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume().then(play);
+    } else {
+      play();
+    }
   }
   
   // 🎵 بدء الموسيقى المصرية الخلفية
