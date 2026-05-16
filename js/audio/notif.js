@@ -13,7 +13,7 @@ document.addEventListener("touchstart", unlock);
 export function playNotifSound() {
   if (!_unlocked) return;
   try {
-    const audio = new Audio("/jazma/sounds/notif.wav");
+    const audio = new Audio("sounds/notif.wav");
     audio.volume = 0.5;
     audio.play().catch(() => {});
   } catch(e) {}
