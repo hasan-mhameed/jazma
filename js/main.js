@@ -21,6 +21,8 @@ import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10
 let aiPlayer = null;
 
 document.addEventListener("DOMContentLoaded", () => {
+  // تتبع تفاعل المستخدم عشان نقدر نشغل الصوت
+  document.addEventListener("click", () => { document._userInteracted = true; }, { once: true });
 
   /* ── عناصر الـ DOM ── */
   const authScreen        = document.getElementById("auth-screen");
@@ -585,16 +587,19 @@ document.addEventListener("DOMContentLoaded", () => {
     if ("Notification" in window && Notification.permission === "granted") {
       new Notification(`💬 ${friend.name}`, { body: text, icon: "/jazma/images/google.svg" });
     }
-    try {
-      const ctx  = new AudioContext();
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.frequency.value = 880;
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-      osc.start(); osc.stop(ctx.currentTime + 0.3);
-    } catch(e) {}
+    // صوت إشعار — بس بعد تفاعل المستخدم
+    if (document._userInteracted) {
+      try {
+        const ctx  = new AudioContext();
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+        osc.start(); osc.stop(ctx.currentTime + 0.3);
+      } catch(e) {}
+    }
   }
 
   async function doSendMessage() {} // placeholder
