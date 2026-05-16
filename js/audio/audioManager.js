@@ -22,7 +22,8 @@ class AudioManager {
     if (this._initialized) return;
     try {
       this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      if (this.audioContext.state === "suspended") this.audioContext.resume();
+      // resume بشكل صامت — نتجاهل التحذير
+      this.audioContext.resume().catch(() => {});
       this._initialized = true;
     } catch(e) {
       this.enabled = false;
