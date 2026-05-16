@@ -4,42 +4,33 @@
 
 class AudioManager {
   constructor() {
-    this.enabled = true;
-    this.volume = 0.5;
+    this.enabled      = true;
+    this.volume       = 0.5;
     this.musicEnabled = true;
-    this.musicVolume = 0.3;
-    
-    // إنشاء AudioContext للمؤثرات الصوتية
+    this.musicVolume  = 0.3;
     this.audioContext = null;
-    
-    // HTML5 Audio للموسيقى المصرية
     this.egyptianMusic = null;
-    
-    // تهيئة الأصوات
-    this.initAudioContext();
+    this._initialized = false;
+
+    // نهيّئ الصوت بعد أول تفاعل فقط
+    document.addEventListener("click", () => this._initAudio(), { once: true });
+    document.addEventListener("keydown", () => this._initAudio(), { once: true });
+    document.addEventListener("touchstart", () => this._initAudio(), { once: true });
   }
-  
-  initAudioContext() {
+
+  _initAudio() {
+    if (this._initialized) return;
     try {
       this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      // resume عند أول تفاعل من المستخدم
-      const resume = () => {
-        if (this.audioContext.state === 'suspended') {
-          this.audioContext.resume();
-        }
-        document.removeEventListener('click',     resume);
-        document.removeEventListener('keydown',   resume);
-        document.removeEventListener('mousemove', resume);
-        document.removeEventListener('touchstart',resume);
-      };
-      document.addEventListener('click',     resume);
-      document.addEventListener('keydown',   resume);
-      document.addEventListener('mousemove', resume);
-      document.addEventListener('touchstart',resume);
-    } catch (e) {
-      console.warn('Web Audio API not supported', e);
+      if (this.audioContext.state === "suspended") this.audioContext.resume();
+      this._initialized = true;
+    } catch(e) {
       this.enabled = false;
     }
+  }
+
+  initAudioContext() {
+    // kept for compatibility — الآن التهيئة تصير تلقائياً
   }
   
   // تشغيل صوت باستخدام frequency
