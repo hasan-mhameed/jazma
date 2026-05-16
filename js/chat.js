@@ -35,38 +35,42 @@ export async function sendMessage(toUid, text) {
 }
 
 // ─── تعليم الرسائل كـ delivered ──────────────────────────────
-export async function markDelivered(toUid) {
+export function markDelivered(toUid) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid) return;
-  const key  = chatKey(myUid, toUid);
-  const q    = query(ref(db, `chats/${key}`), limitToLast(50));
-  const snap = await new Promise(res => { const u = onValue(q, s => { u(); res(s); }); });
-  const updates = {};
-  snap.forEach(child => {
-    const msg = child.val();
-    if (msg.fromUid !== myUid && msg.status === "sent") {
-      updates[`chats/${key}/${child.key}/status`] = "delivered";
-    }
+  const key = chatKey(myUid, toUid);
+  const q   = query(ref(db, `chats/${key}`), limitToLast(50));
+  const unsub = onValue(q, (snap) => {
+    unsub(); // مرة وحدة بس
+    const updates = {};
+    snap.forEach(child => {
+      const msg = child.val();
+      if (msg.fromUid !== myUid && msg.status === "sent") {
+        updates[`chats/${key}/${child.key}/status`] = "delivered";
+      }
+    });
+    if (Object.keys(updates).length > 0) update(ref(db), updates);
   });
-  if (Object.keys(updates).length > 0) await update(ref(db), updates);
 }
 
 // ─── تعليم الرسائل كـ read ────────────────────────────────────
-export async function markRead(toUid) {
+export function markRead(toUid) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid) return;
-  const key  = chatKey(myUid, toUid);
+  const key = chatKey(myUid, toUid);
   localStorage.setItem(`lastRead_${key}`, Date.now().toString());
-  const q    = query(ref(db, `chats/${key}`), limitToLast(50));
-  const snap = await new Promise(res => { const u = onValue(q, s => { u(); res(s); }); });
-  const updates = {};
-  snap.forEach(child => {
-    const msg = child.val();
-    if (msg.fromUid !== myUid && msg.status !== "read") {
-      updates[`chats/${key}/${child.key}/status`] = "read";
-    }
+  const q   = query(ref(db, `chats/${key}`), limitToLast(50));
+  const unsub = onValue(q, (snap) => {
+    unsub(); // مرة وحدة بس
+    const updates = {};
+    snap.forEach(child => {
+      const msg = child.val();
+      if (msg.fromUid !== myUid && msg.status !== "read") {
+        updates[`chats/${key}/${child.key}/status`] = "read";
+      }
+    });
+    if (Object.keys(updates).length > 0) update(ref(db), updates);
   });
-  if (Object.keys(updates).length > 0) await update(ref(db), updates);
 }
 
 // ─── الاستماع للرسائل ────────────────────────────────────────
