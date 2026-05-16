@@ -13,9 +13,15 @@ class AudioManager {
     this._initialized = false;
 
     // نهيّئ الصوت بعد أول تفاعل فقط
-    document.addEventListener("click", () => this._initAudio(), { once: true });
-    document.addEventListener("keydown", () => this._initAudio(), { once: true });
-    document.addEventListener("touchstart", () => this._initAudio(), { once: true });
+    const initOnGesture = () => {
+      this._initAudio();
+      document.removeEventListener("click",      initOnGesture);
+      document.removeEventListener("keydown",    initOnGesture);
+      document.removeEventListener("touchstart", initOnGesture);
+    };
+    document.addEventListener("click",      initOnGesture);
+    document.addEventListener("keydown",    initOnGesture);
+    document.addEventListener("touchstart", initOnGesture);
   }
 
   _initAudio() {
