@@ -20,15 +20,13 @@ import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10
 
 let aiPlayer = null;
 
+// AudioContext مشترك
+let _audioCtx = null;
+document.addEventListener("click", () => {
+  if (!_audioCtx) _audioCtx = new AudioContext();
+}, { once: false });
+
 document.addEventListener("DOMContentLoaded", () => {
-  // تهيئة AudioContext بعد أول تفاعل
-  let _audioCtx = null;
-  document.addEventListener("click", () => {
-    document._userInteracted = true;
-    if (!_audioCtx) {
-      _audioCtx = new AudioContext();
-    }
-  }, { once: false });
 
   /* ── عناصر الـ DOM ── */
   const authScreen        = document.getElementById("auth-screen");
@@ -593,18 +591,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if ("Notification" in window && Notification.permission === "granted") {
       new Notification(`💬 ${friend.name}`, { body: text, icon: "/jazma/images/google.svg" });
     }
-    // صوت إشعار
-    if (_audioCtx) {
-      try {
-        const osc  = _audioCtx.createOscillator();
-        const gain = _audioCtx.createGain();
-        osc.connect(gain); gain.connect(_audioCtx.destination);
-        osc.frequency.value = 880;
-        gain.gain.setValueAtTime(0.1, _audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + 0.3);
-        osc.start(); osc.stop(_audioCtx.currentTime + 0.3);
-      } catch(e) {}
-    }
+    // صوت إشعار — نستخدم audioManager
+    audioManager.playButtonClick();
   }
 
   async function doSendMessage() {} // placeholder

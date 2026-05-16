@@ -1,5 +1,5 @@
 // 📄 chat.js — v12.5
-import { getDatabase, ref, push, onValue, off, update, query, limitToLast }
+import { getDatabase, ref, push, onValue, off, update, get, query, limitToLast }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -40,8 +40,7 @@ export function markDelivered(toUid) {
   if (!myUid) return;
   const key = chatKey(myUid, toUid);
   const q   = query(ref(db, `chats/${key}`), limitToLast(50));
-  const unsub = onValue(q, (snap) => {
-    unsub(); // مرة وحدة بس
+  get(q).then(snap => {
     const updates = {};
     snap.forEach(child => {
       const msg = child.val();
@@ -59,9 +58,8 @@ export function markRead(toUid) {
   if (!myUid) return;
   const key = chatKey(myUid, toUid);
   localStorage.setItem(`lastRead_${key}`, Date.now().toString());
-  const q   = query(ref(db, `chats/${key}`), limitToLast(50));
-  const unsub = onValue(q, (snap) => {
-    unsub(); // مرة وحدة بس
+  const q = query(ref(db, `chats/${key}`), limitToLast(50));
+  get(q).then(snap => {
     const updates = {};
     snap.forEach(child => {
       const msg = child.val();
