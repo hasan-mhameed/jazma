@@ -22,10 +22,21 @@ import { playNotifSound } from "./audio/notif.js";
 let aiPlayer = null;
 
 // تسجيل Service Worker للـ PWA
+let _deferredInstallPrompt = null;
+
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/jazma/service-worker.js")
     .catch(() => {});
 }
+
+// التقاط حدث التثبيت
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+  // أظهر زر التثبيت
+  const installBtn = document.getElementById("install-btn");
+  if (installBtn) installBtn.classList.remove("hidden");
+});
 
 document.addEventListener("DOMContentLoaded", () => {
 
@@ -192,6 +203,35 @@ document.addEventListener("DOMContentLoaded", () => {
       initFriendsListeners();
       initInviteListener();
       initChatNotifications();
+
+      // ── زر تفعيل الإشعارات ──
+      const notifBtn = document.getElementById("notif-btn");
+      if (notifBtn) {
+        // أظهر الزر لو الإشعارات مش مفعّلة
+        if ("Notification" in window && Notification.permission !== "granted") {
+          notifBtn.classList.remove("hidden");
+        }
+        notifBtn.addEventListener("click", async () => {
+          const perm = await Notification.requestPermission();
+          if (perm === "granted") {
+            notifBtn.classList.add("hidden");
+            // اختبر الصوت
+            playNotifSound();
+          }
+        });
+      }
+
+      // ── زر التثبيت ──
+      const installBtn = document.getElementById("install-btn");
+      if (installBtn) {
+        installBtn.addEventListener("click", async () => {
+          if (!_deferredInstallPrompt) return;
+          _deferredInstallPrompt.prompt();
+          const { outcome } = await _deferredInstallPrompt.userChoice;
+          if (outcome === "accepted") installBtn.classList.add("hidden");
+          _deferredInstallPrompt = null;
+        });
+      }
 
       // ── تحديث شريط الإحصائيات بعد كل مباراة ──
       async function refreshStats() {
@@ -544,9 +584,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ── إشعارات رسائل جديدة ──
   function initChatNotifications() {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
     const myUid = getCurrentUser()?.uid;
     if (!myUid) return;
     onValue(ref(db_main, `users/${myUid}/friends`), (snap) => {
