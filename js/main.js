@@ -605,13 +605,23 @@ document.addEventListener("DOMContentLoaded", () => {
           const lastSeen     = _lastSeenMsg.get(friend.uid) || 0;
           const isNew        = lastMsg.ts > lastSeen;
 
+          console.log("📨 notif check:", {
+            from: friend.name,
+            isFromFriend,
+            isNew,
+            chatOpen,
+            lastMsg: lastMsg.text,
+            lastMsgTs: lastMsg.ts,
+            lastSeen
+          });
+
           if (isFromFriend && isNew && !chatOpen) {
             _lastSeenMsg.set(friend.uid, lastMsg.ts);
+            console.log("🔔 showing notification!");
             showChatNotification(friend, lastMsg.text);
             markDelivered(friend.uid);
           }
 
-          // نحدّث lastSeen دايماً
           if (lastMsg.ts > lastSeen) {
             _lastSeenMsg.set(friend.uid, lastMsg.ts);
           }
