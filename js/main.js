@@ -585,6 +585,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── إشعارات رسائل جديدة ──
   const _notifUnsubs  = new Map();
   const _lastSeenMsg  = new Map(); // نتتبع آخر رسالة شُوفت لكل صديق
+  const _notifReady    = new Set(); // نتجاهل snapshot البداية عشان ما ننبه على رسائل قديمة
 
   function initChatNotifications() {
     const myUid = getCurrentUser()?.uid;
@@ -598,15 +599,29 @@ document.addEventListener("DOMContentLoaded", () => {
         if (_notifUnsubs.has(friend.uid)) return;
 
         const unsub = listenMessages(friend.uid, (msgs) => {
+          const lastMsg = msgs[msgs.length - 1];
+          const lastTs  = lastMsg?.ts || 0;
+
+          if (!_notifReady.has(friend.uid)) {
+            _notifReady.add(friend.uid);
+            _lastSeenMsg.set(friend.uid, lastTs);
+            return;
+          }
+
           if (!msgs.length) return;
-          const lastMsg      = msgs[msgs.length - 1];
+
           const isFromFriend = lastMsg.fromUid === friend.uid;
           const chatOpen     = currentChatFriend?.uid === friend.uid;
           const lastSeen     = _lastSeenMsg.get(friend.uid) || 0;
-          const isNew        = lastMsg.ts > lastSeen;
+          const isNew        = lastTs > lastSeen;
 
-          if (isFromFriend && isNew && !chatOpen) {
-            _lastSeenMsg.set(friend.uid, lastMsg.ts); // نحدّث فقط هنا
+          if (chatOpen || !isFromFriend) {
+            if (isNew) _lastSeenMsg.set(friend.uid, lastTs);
+            return;
+          }
+
+          if (isNew) {
+            _lastSeenMsg.set(friend.uid, lastTs);
             showChatNotification(friend, lastMsg.text);
             markDelivered(friend.uid);
           }
@@ -1030,4 +1045,3 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
 });
-
