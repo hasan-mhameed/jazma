@@ -21,6 +21,31 @@ import { playNotifSound } from "./audio/notif.js";
 
 let aiPlayer = null;
 
+function asText(value, fallback = "") {
+  const text = value === undefined || value === null ? fallback : value;
+  return String(text);
+}
+
+function firstInitial(name) {
+  return asText(name, "?").trim().charAt(0).toUpperCase() || "?";
+}
+
+function safeImageUrl(url) {
+  try {
+    const parsed = new URL(asText(url), window.location.href);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch (_) {
+    return false;
+  }
+}
+
+function makeEmptyMessage(text) {
+  const p = document.createElement("p");
+  p.className = "friends-empty";
+  p.textContent = text;
+  return p;
+}
+
 // تسجيل Service Worker للـ PWA
 let _deferredInstallPrompt = null;
 
@@ -278,22 +303,42 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     const medals = ["🥇","🥈","🥉"];
     players.forEach((p, i) => {
-      const avatar = p.photo
-        ? `<img class="leaderboard-avatar" src="${p.photo}" alt="${p.name}"/>`
-        : `<div class="leaderboard-avatar-placeholder">${p.name?.[0]?.toUpperCase()||"?"}</div>`;
       const row = document.createElement("div");
       row.className = "leaderboard-row";
-      row.innerHTML = `
-        <div class="leaderboard-rank ${i<3?`rank-${i+1}`:''}">
-          ${medals[i] || i+1}
-        </div>
-        ${avatar}
-        <div class="leaderboard-info">
-          <div class="leaderboard-name">${p.name}</div>
-          <div class="leaderboard-stats">نسبة الفوز: ${p.winRate}% • ${p.totalGames} مباراة</div>
-        </div>
-        <div class="leaderboard-wins">🏆 ${p.wins}</div>
-      `;
+
+      const rank = document.createElement("div");
+      rank.className = `leaderboard-rank ${i < 3 ? `rank-${i + 1}` : ""}`;
+      rank.textContent = medals[i] || String(i + 1);
+
+      let avatar;
+      if (p.photo && safeImageUrl(p.photo)) {
+        avatar = document.createElement("img");
+        avatar.className = "leaderboard-avatar";
+        avatar.src = p.photo;
+        avatar.alt = asText(p.name, "لاعب");
+      } else {
+        avatar = document.createElement("div");
+        avatar.className = "leaderboard-avatar-placeholder";
+        avatar.textContent = firstInitial(p.name);
+      }
+
+      const info = document.createElement("div");
+      info.className = "leaderboard-info";
+
+      const name = document.createElement("div");
+      name.className = "leaderboard-name";
+      name.textContent = asText(p.name, "لاعب");
+
+      const stats = document.createElement("div");
+      stats.className = "leaderboard-stats";
+      stats.textContent = `نسبة الفوز: ${Number(p.winRate) || 0}% • ${Number(p.totalGames) || 0} مباراة`;
+
+      const wins = document.createElement("div");
+      wins.className = "leaderboard-wins";
+      wins.textContent = `🏆 ${Number(p.wins) || 0}`;
+
+      info.append(name, stats);
+      row.append(rank, avatar, info, wins);
       leaderboardList.appendChild(row);
     });
   });
@@ -347,14 +392,47 @@ document.addEventListener("DOMContentLoaded", () => {
   function makeFriendCard(user, type) {
     const card = document.createElement("div");
     card.className = "friend-card";
-    const avatar = user.photo
-      ? `<img src="${user.photo}" alt="${user.name}"/>`
-      : `<div class="friend-avatar-placeholder">${user.name?.[0]?.toUpperCase() || "?"}</div>`;
-    let actions = "";
-    if (type === "search")  actions = `<button class="btn-add" data-uid="${user.uid}">➕ إضافة</button>`;
-    if (type === "request") actions = `<button class="btn-accept" data-uid="${user.uid}">✓ قبول</button><button class="btn-reject" data-uid="${user.uid}">✕ رفض</button>`;
-    if (type === "friend")  actions = `<button class="btn-invite" data-uid="${user.uid}">🎮 دعوة</button><button class="btn-chat" data-uid="${user.uid}">💬</button><button class="btn-remove" data-uid="${user.uid}">حذف</button>`;
-    card.innerHTML = `${avatar}<span class="friend-name">${user.name}</span><div class="friend-actions">${actions}</div>`;
+    const userName = asText(user.name, "لاعب");
+
+    let avatar;
+    if (user.photo && safeImageUrl(user.photo)) {
+      avatar = document.createElement("img");
+      avatar.src = user.photo;
+      avatar.alt = userName;
+    } else {
+      avatar = document.createElement("div");
+      avatar.className = "friend-avatar-placeholder";
+      avatar.textContent = firstInitial(userName);
+    }
+
+    const name = document.createElement("span");
+    name.className = "friend-name";
+    name.textContent = userName;
+
+    const actions = document.createElement("div");
+    actions.className = "friend-actions";
+
+    function addAction(className, text) {
+      const btn = document.createElement("button");
+      btn.className = className;
+      btn.dataset.uid = asText(user.uid);
+      btn.textContent = text;
+      actions.appendChild(btn);
+      return btn;
+    }
+
+    if (type === "search")  addAction("btn-add", "➕ إضافة");
+    if (type === "request") {
+      addAction("btn-accept", "✓ قبول");
+      addAction("btn-reject", "✕ رفض");
+    }
+    if (type === "friend") {
+      addAction("btn-invite", "🎮 دعوة");
+      addAction("btn-chat", "💬");
+      addAction("btn-remove", "حذف");
+    }
+
+    card.append(avatar, name, actions);
     card.querySelector(".btn-add")?.addEventListener("click", async (e) => {
       e.target.textContent = "✅ أُرسل"; e.target.disabled = true;
       await sendFriendRequest(user.uid);
@@ -362,7 +440,7 @@ document.addEventListener("DOMContentLoaded", () => {
     card.querySelector(".btn-accept")?.addEventListener("click", async () => { await acceptFriendRequest(user.uid); });
     card.querySelector(".btn-reject")?.addEventListener("click", async () => { await rejectFriendRequest(user.uid); });
     card.querySelector(".btn-remove")?.addEventListener("click", async () => {
-      if (confirm(`حذف ${user.name} من الأصدقاء؟`)) await removeFriend(user.uid);
+      if (confirm(`حذف ${userName} من الأصدقاء؟`)) await removeFriend(user.uid);
     });
     card.querySelector(".btn-chat")?.addEventListener("click", () => {
       openChat(user);
@@ -561,7 +639,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const atBottom = box.scrollHeight - box.scrollTop <= box.clientHeight + 50;
     box.innerHTML = "";
     if (msgs.length === 0) {
-      box.innerHTML = `<p class="friends-empty">لا رسائل بعد، ابدأ المحادثة!</p>`;
+      box.appendChild(makeEmptyMessage("لا رسائل بعد، ابدأ المحادثة!"));
       return;
     }
     msgs.forEach(msg => {
@@ -570,13 +648,26 @@ document.addEventListener("DOMContentLoaded", () => {
       const div    = document.createElement("div");
       div.className = `chat-msg ${isMine ? "mine" : "theirs"}`;
       const time   = msg.ts ? new Date(msg.ts).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" }) : "";
-      let statusIcon = "";
+      div.appendChild(document.createTextNode(asText(msg.text)));
+
+      const timeEl = document.createElement("div");
+      timeEl.className = "chat-msg-time";
       if (isMine) {
-        if      (msg.status === "read")      statusIcon = `<span class="msg-status status-read">✓✓</span>`;
-        else if (msg.status === "delivered") statusIcon = `<span class="msg-status status-delivered">✓✓</span>`;
-        else                                  statusIcon = `<span class="msg-status status-sent">✓</span>`;
+        const statusEl = document.createElement("span");
+        if (msg.status === "read") {
+          statusEl.className = "msg-status status-read";
+          statusEl.textContent = "✓✓";
+        } else if (msg.status === "delivered") {
+          statusEl.className = "msg-status status-delivered";
+          statusEl.textContent = "✓✓";
+        } else {
+          statusEl.className = "msg-status status-sent";
+          statusEl.textContent = "✓";
+        }
+        timeEl.appendChild(statusEl);
       }
-      div.innerHTML = `${msg.text}<div class="chat-msg-time">${statusIcon}${time}</div>`;
+      timeEl.appendChild(document.createTextNode(time));
+      div.appendChild(timeEl);
       box.appendChild(div);
     });
     if (atBottom) box.scrollTop = box.scrollHeight;
@@ -639,13 +730,25 @@ document.addEventListener("DOMContentLoaded", () => {
       notif.id = "chat-notification";
       document.body.appendChild(notif);
     }
-    notif.innerHTML = `
-      <span style="font-size:1.2rem">💬</span>
-      <div class="notif-text">
-        <div class="notif-name">${friend.name}</div>
-        <div>${text.length > 30 ? text.slice(0,30) + "..." : text}</div>
-      </div>
-    `;
+    notif.textContent = "";
+
+    const icon = document.createElement("span");
+    icon.style.fontSize = "1.2rem";
+    icon.textContent = "💬";
+
+    const content = document.createElement("div");
+    content.className = "notif-text";
+
+    const name = document.createElement("div");
+    name.className = "notif-name";
+    name.textContent = asText(friend.name, "لاعب");
+
+    const preview = document.createElement("div");
+    const safeText = asText(text);
+    preview.textContent = safeText.length > 30 ? `${safeText.slice(0, 30)}...` : safeText;
+
+    content.append(name, preview);
+    notif.append(icon, content);
     notif.style.display = "flex";
     notif.onclick = () => {
       audioManager.playButtonClick(); // صوت عند الضغط على الإشعار
@@ -685,10 +788,16 @@ document.addEventListener("DOMContentLoaded", () => {
       background:#1e1e2e;border:2px solid #f87171;border-radius:16px;
       padding:28px 36px;text-align:center;z-index:9999;box-shadow:0 8px 40px #0008;
     `;
-    box.innerHTML = `
-      <p style="font-size:1.1rem;margin-bottom:16px;">😔 ${name} رفض الدعوة</p>
-      <button onclick="this.parentElement.remove()" style="background:#7c6af7;color:#fff;border:none;padding:9px 22px;border-radius:8px;cursor:pointer;">حسناً</button>
-    `;
+    const message = document.createElement("p");
+    message.style.cssText = "font-size:1.1rem;margin-bottom:16px;";
+    message.textContent = `😔 ${asText(name, "اللاعب")} رفض الدعوة`;
+
+    const okButton = document.createElement("button");
+    okButton.style.cssText = "background:#7c6af7;color:#fff;border:none;padding:9px 22px;border-radius:8px;cursor:pointer;";
+    okButton.textContent = "حسناً";
+    okButton.addEventListener("click", () => box.remove());
+
+    box.append(message, okButton);
     document.body.appendChild(box);
     setTimeout(() => box.remove(), 5000);
   }

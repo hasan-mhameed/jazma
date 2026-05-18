@@ -54,14 +54,17 @@ export async function endGame(cfg, scores) {
   winnerMessage.textContent = message;
 
   if (winnerDetails) {
-    winnerDetails.innerHTML = ranking.map((p, i) => {
+    winnerDetails.textContent = "";
+    ranking.forEach((p, i) => {
       const color = cfg.colors[p.player - 1] || "#999";
-      return `
-        <div style="color:${color};padding:6px 0;font-size:1.05rem;
-          border-bottom:1px solid rgba(255,255,255,0.08);">
-          ${i + 1}. ${playerName(p.player)}: ${p.score} نقطة
-        </div>`;
-    }).join("");
+      const row = document.createElement("div");
+      row.style.color = color;
+      row.style.padding = "6px 0";
+      row.style.fontSize = "1.05rem";
+      row.style.borderBottom = "1px solid rgba(255,255,255,0.08)";
+      row.textContent = `${i + 1}. ${playerName(p.player)}: ${p.score} نقطة`;
+      winnerDetails.appendChild(row);
+    });
   }
 
   winnerScreen.classList.remove("hidden");
