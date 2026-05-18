@@ -206,19 +206,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // ── زر تفعيل الإشعارات ──
       const notifBtn = document.getElementById("notif-btn");
-      if (notifBtn) {
-        // أظهر الزر لو الإشعارات مش مفعّلة
-        if ("Notification" in window && Notification.permission !== "granted") {
+      if (notifBtn && "Notification" in window) {
+        if (Notification.permission === "granted") {
+          notifBtn.classList.add("hidden");
+        } else {
           notifBtn.classList.remove("hidden");
+          notifBtn.addEventListener("click", async () => {
+            const perm = await Notification.requestPermission();
+            if (perm === "granted") {
+              notifBtn.classList.add("hidden");
+              playNotifSound();
+            }
+          });
         }
-        notifBtn.addEventListener("click", async () => {
-          const perm = await Notification.requestPermission();
-          if (perm === "granted") {
-            notifBtn.classList.add("hidden");
-            // اختبر الصوت
-            playNotifSound();
-          }
-        });
       }
 
       // ── زر التثبيت ──
@@ -583,15 +583,24 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ── إشعارات رسائل جديدة ──
+  const _notifUnsubs = new Map(); // نتتبع الـ listeners عشان ما نكررها
+
   function initChatNotifications() {
     const myUid = getCurrentUser()?.uid;
     if (!myUid) return;
+
+    // نستمع للأصدقاء مرة وحدة
     onValue(ref(db_main, `users/${myUid}/friends`), (snap) => {
       if (!snap.exists()) return;
-      Object.values(snap.val()).forEach(friend => {
-        listenMessages(friend.uid, (msgs) => {
+      const friends = Object.values(snap.val());
+
+      friends.forEach(friend => {
+        // لو عندنا listener لهاد الصديق ما نضيف ثاني
+        if (_notifUnsubs.has(friend.uid)) return;
+
+        const unsub = listenMessages(friend.uid, (msgs) => {
           if (!msgs.length) return;
-          const lastMsg  = msgs[msgs.length - 1];
+          const lastMsg      = msgs[msgs.length - 1];
           const isFromFriend = lastMsg.fromUid === friend.uid;
           const isRecent     = Date.now() - (lastMsg.ts || 0) < 5000;
           const chatOpen     = currentChatFriend?.uid === friend.uid;
@@ -600,6 +609,8 @@ document.addEventListener("DOMContentLoaded", () => {
             markDelivered(friend.uid);
           }
         });
+
+        _notifUnsubs.set(friend.uid, unsub);
       });
     });
   }
