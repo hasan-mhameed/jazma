@@ -1075,10 +1075,16 @@ document.addEventListener("DOMContentLoaded", () => {
       background:#1e1e2e;border:2px solid #7c6af7;border-radius:16px;
       padding:28px 36px;text-align:center;z-index:9999;box-shadow:0 8px 40px #0008;
     `;
-    box.innerHTML = `
-      <p style="font-size:1.2rem;margin-bottom:16px;">🔄 الخصم أنهى اللعبة!</p>
-      <button onclick="location.reload()" style="background:#7c6af7;color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:1rem;">🏠 العودة للقائمة</button>
-    `;
+    const message = document.createElement("p");
+    message.style.cssText = "font-size:1.2rem;margin-bottom:16px;";
+    message.textContent = "🔄 الخصم أنهى اللعبة!";
+
+    const button = document.createElement("button");
+    button.style.cssText = "background:#7c6af7;color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:1rem;";
+    button.textContent = "🏠 العودة للقائمة";
+    button.addEventListener("click", () => location.reload());
+
+    box.append(message, button);
     document.body.appendChild(box);
   }
 
@@ -1090,10 +1096,16 @@ document.addEventListener("DOMContentLoaded", () => {
       background:#1e1e2e;border:2px solid #f87171;border-radius:16px;
       padding:28px 36px;text-align:center;z-index:9999;box-shadow:0 8px 40px #0008;
     `;
-    box.innerHTML = `
-      <p style="font-size:1.2rem;margin-bottom:16px;">❌ انقطع اتصال الخصم!</p>
-      <button onclick="location.reload()" style="background:#7c6af7;color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:1rem;">🔄 العودة للقائمة</button>
-    `;
+    const message = document.createElement("p");
+    message.style.cssText = "font-size:1.2rem;margin-bottom:16px;";
+    message.textContent = "❌ انقطع اتصال الخصم!";
+
+    const button = document.createElement("button");
+    button.style.cssText = "background:#7c6af7;color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:1rem;";
+    button.textContent = "🔄 العودة للقائمة";
+    button.addEventListener("click", () => location.reload());
+
+    box.append(message, button);
     document.body.appendChild(box);
   }
 
