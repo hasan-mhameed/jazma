@@ -37,7 +37,8 @@ class AudioManager {
   }
 
   initAudioContext() {
-    // kept for compatibility — الآن التهيئة تصير تلقائياً
+    this._initAudio();
+    return this.audioContext;
   }
   
   // تشغيل صوت باستخدام frequency

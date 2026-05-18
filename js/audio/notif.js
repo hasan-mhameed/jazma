@@ -2,10 +2,23 @@
 import { audioManager } from "./audioManager.js";
 
 let _unlocked = false;
+let _pending = false;
 
 function unlock() {
   if (_unlocked) return;
   _unlocked = true;
+  const ctx = audioManager?.initAudioContext?.();
+  if (ctx?.state === "suspended") {
+    ctx.resume().then(() => {
+      if (_pending) {
+        _pending = false;
+        playNotifSound();
+      }
+    }).catch(() => {});
+  } else if (_pending) {
+    _pending = false;
+    playNotifSound();
+  }
 }
 
 document.addEventListener("click",      unlock);
@@ -13,9 +26,15 @@ document.addEventListener("keydown",    unlock);
 document.addEventListener("touchstart", unlock);
 
 export function playNotifSound() {
-  if (!_unlocked) return;
-  const ctx = audioManager?.audioContext;
-  if (!ctx) return;
+  if (!_unlocked) {
+    _pending = true;
+    return;
+  }
+  const ctx = audioManager?.audioContext || audioManager?.initAudioContext?.();
+  if (!ctx) {
+    _pending = true;
+    return;
+  }
   // نعمل resume لو suspended
   const play = () => {
     try {
