@@ -8,7 +8,7 @@ export function showWinner(winner, details) {
   const winMsg = document.getElementById('winner-message');
   const winDetails = document.getElementById('winner-details');
   if (winMsg) winMsg.textContent = `Player ${winner} Wins!`;
-  if (winDetails) winDetails.textContent = details || '';
+  if (winDetails) winDetails.innerHTML = details || '';
   if (winScreen) winScreen.classList.remove('hidden');
 }
 
