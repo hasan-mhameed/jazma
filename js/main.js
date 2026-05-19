@@ -17,18 +17,53 @@ import { sendGameInvite, listenForInvites, clearInvite, rejectInvite, listenForI
 import { getLeaderboard } from "./leaderboard.js";
 import { sendMessage, listenMessages, listenUnread, markAsRead, markDelivered, markRead } from "./chat.js";
 import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { playNotifSound } from "./audio/notif.js";
 
 let aiPlayer = null;
 
+function asText(value, fallback = "") {
+  const text = value === undefined || value === null ? fallback : value;
+  return String(text);
+}
+
+function firstInitial(name) {
+  return asText(name, "?").trim().charAt(0).toUpperCase() || "?";
+}
+
+function safeImageUrl(url) {
+  try {
+    const parsed = new URL(asText(url), window.location.href);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch (_) {
+    return false;
+  }
+}
+
+function makeEmptyMessage(text) {
+  const p = document.createElement("p");
+  p.className = "friends-empty";
+  p.textContent = text;
+  return p;
+}
+
+// تسجيل Service Worker للـ PWA
+let _deferredInstallPrompt = null;
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/jazma/service-worker.js")
+    .catch(() => {});
+}
+
+// التقاط حدث التثبيت
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+  // أظهر زر التثبيت
+  const installBtn = document.getElementById("install-btn");
+  if (installBtn) installBtn.classList.remove("hidden");
+});
+
 document.addEventListener("DOMContentLoaded", () => {
-  // تهيئة AudioContext بعد أول تفاعل
-  let _audioCtx = null;
-  document.addEventListener("click", () => {
-    document._userInteracted = true;
-    if (!_audioCtx) {
-      _audioCtx = new AudioContext();
-    }
-  }, { once: false });
 
   /* ── عناصر الـ DOM ── */
   const authScreen        = document.getElementById("auth-screen");
@@ -194,6 +229,35 @@ document.addEventListener("DOMContentLoaded", () => {
       initInviteListener();
       initChatNotifications();
 
+      // ── زر تفعيل الإشعارات ──
+      const notifBtn = document.getElementById("notif-btn");
+      if (notifBtn && "Notification" in window) {
+        if (Notification.permission === "granted") {
+          notifBtn.classList.add("hidden");
+        } else {
+          notifBtn.classList.remove("hidden");
+          notifBtn.addEventListener("click", async () => {
+            const perm = await Notification.requestPermission();
+            if (perm === "granted") {
+              notifBtn.classList.add("hidden");
+              playNotifSound();
+            }
+          });
+        }
+      }
+
+      // ── زر التثبيت ──
+      const installBtn = document.getElementById("install-btn");
+      if (installBtn) {
+        installBtn.addEventListener("click", async () => {
+          if (!_deferredInstallPrompt) return;
+          _deferredInstallPrompt.prompt();
+          const { outcome } = await _deferredInstallPrompt.userChoice;
+          if (outcome === "accepted") installBtn.classList.add("hidden");
+          _deferredInstallPrompt = null;
+        });
+      }
+
       // ── تحديث شريط الإحصائيات بعد كل مباراة ──
       async function refreshStats() {
         const profile = await getUserProfile(user.uid);
@@ -239,22 +303,42 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     const medals = ["🥇","🥈","🥉"];
     players.forEach((p, i) => {
-      const avatar = p.photo
-        ? `<img class="leaderboard-avatar" src="${p.photo}" alt="${p.name}"/>`
-        : `<div class="leaderboard-avatar-placeholder">${p.name?.[0]?.toUpperCase()||"?"}</div>`;
       const row = document.createElement("div");
       row.className = "leaderboard-row";
-      row.innerHTML = `
-        <div class="leaderboard-rank ${i<3?`rank-${i+1}`:''}">
-          ${medals[i] || i+1}
-        </div>
-        ${avatar}
-        <div class="leaderboard-info">
-          <div class="leaderboard-name">${p.name}</div>
-          <div class="leaderboard-stats">نسبة الفوز: ${p.winRate}% • ${p.totalGames} مباراة</div>
-        </div>
-        <div class="leaderboard-wins">🏆 ${p.wins}</div>
-      `;
+
+      const rank = document.createElement("div");
+      rank.className = `leaderboard-rank ${i < 3 ? `rank-${i + 1}` : ""}`;
+      rank.textContent = medals[i] || String(i + 1);
+
+      let avatar;
+      if (p.photo && safeImageUrl(p.photo)) {
+        avatar = document.createElement("img");
+        avatar.className = "leaderboard-avatar";
+        avatar.src = p.photo;
+        avatar.alt = asText(p.name, "لاعب");
+      } else {
+        avatar = document.createElement("div");
+        avatar.className = "leaderboard-avatar-placeholder";
+        avatar.textContent = firstInitial(p.name);
+      }
+
+      const info = document.createElement("div");
+      info.className = "leaderboard-info";
+
+      const name = document.createElement("div");
+      name.className = "leaderboard-name";
+      name.textContent = asText(p.name, "لاعب");
+
+      const stats = document.createElement("div");
+      stats.className = "leaderboard-stats";
+      stats.textContent = `نسبة الفوز: ${Number(p.winRate) || 0}% • ${Number(p.totalGames) || 0} مباراة`;
+
+      const wins = document.createElement("div");
+      wins.className = "leaderboard-wins";
+      wins.textContent = `🏆 ${Number(p.wins) || 0}`;
+
+      info.append(name, stats);
+      row.append(rank, avatar, info, wins);
       leaderboardList.appendChild(row);
     });
   });
@@ -308,14 +392,47 @@ document.addEventListener("DOMContentLoaded", () => {
   function makeFriendCard(user, type) {
     const card = document.createElement("div");
     card.className = "friend-card";
-    const avatar = user.photo
-      ? `<img src="${user.photo}" alt="${user.name}"/>`
-      : `<div class="friend-avatar-placeholder">${user.name?.[0]?.toUpperCase() || "?"}</div>`;
-    let actions = "";
-    if (type === "search")  actions = `<button class="btn-add" data-uid="${user.uid}">➕ إضافة</button>`;
-    if (type === "request") actions = `<button class="btn-accept" data-uid="${user.uid}">✓ قبول</button><button class="btn-reject" data-uid="${user.uid}">✕ رفض</button>`;
-    if (type === "friend")  actions = `<button class="btn-invite" data-uid="${user.uid}">🎮 دعوة</button><button class="btn-chat" data-uid="${user.uid}">💬</button><button class="btn-remove" data-uid="${user.uid}">حذف</button>`;
-    card.innerHTML = `${avatar}<span class="friend-name">${user.name}</span><div class="friend-actions">${actions}</div>`;
+    const userName = asText(user.name, "لاعب");
+
+    let avatar;
+    if (user.photo && safeImageUrl(user.photo)) {
+      avatar = document.createElement("img");
+      avatar.src = user.photo;
+      avatar.alt = userName;
+    } else {
+      avatar = document.createElement("div");
+      avatar.className = "friend-avatar-placeholder";
+      avatar.textContent = firstInitial(userName);
+    }
+
+    const name = document.createElement("span");
+    name.className = "friend-name";
+    name.textContent = userName;
+
+    const actions = document.createElement("div");
+    actions.className = "friend-actions";
+
+    function addAction(className, text) {
+      const btn = document.createElement("button");
+      btn.className = className;
+      btn.dataset.uid = asText(user.uid);
+      btn.textContent = text;
+      actions.appendChild(btn);
+      return btn;
+    }
+
+    if (type === "search")  addAction("btn-add", "➕ إضافة");
+    if (type === "request") {
+      addAction("btn-accept", "✓ قبول");
+      addAction("btn-reject", "✕ رفض");
+    }
+    if (type === "friend") {
+      addAction("btn-invite", "🎮 دعوة");
+      addAction("btn-chat", "💬");
+      addAction("btn-remove", "حذف");
+    }
+
+    card.append(avatar, name, actions);
     card.querySelector(".btn-add")?.addEventListener("click", async (e) => {
       e.target.textContent = "✅ أُرسل"; e.target.disabled = true;
       await sendFriendRequest(user.uid);
@@ -323,7 +440,7 @@ document.addEventListener("DOMContentLoaded", () => {
     card.querySelector(".btn-accept")?.addEventListener("click", async () => { await acceptFriendRequest(user.uid); });
     card.querySelector(".btn-reject")?.addEventListener("click", async () => { await rejectFriendRequest(user.uid); });
     card.querySelector(".btn-remove")?.addEventListener("click", async () => {
-      if (confirm(`حذف ${user.name} من الأصدقاء؟`)) await removeFriend(user.uid);
+      if (confirm(`حذف ${userName} من الأصدقاء؟`)) await removeFriend(user.uid);
     });
     card.querySelector(".btn-chat")?.addEventListener("click", () => {
       openChat(user);
@@ -522,7 +639,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const atBottom = box.scrollHeight - box.scrollTop <= box.clientHeight + 50;
     box.innerHTML = "";
     if (msgs.length === 0) {
-      box.innerHTML = `<p class="friends-empty">لا رسائل بعد، ابدأ المحادثة!</p>`;
+      box.appendChild(makeEmptyMessage("لا رسائل بعد، ابدأ المحادثة!"));
       return;
     }
     msgs.forEach(msg => {
@@ -531,54 +648,76 @@ document.addEventListener("DOMContentLoaded", () => {
       const div    = document.createElement("div");
       div.className = `chat-msg ${isMine ? "mine" : "theirs"}`;
       const time   = msg.ts ? new Date(msg.ts).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" }) : "";
-      let statusIcon = "";
+      div.appendChild(document.createTextNode(asText(msg.text)));
+
+      const timeEl = document.createElement("div");
+      timeEl.className = "chat-msg-time";
       if (isMine) {
-        if      (msg.status === "read")      statusIcon = `<span class="msg-status status-read">✓✓</span>`;
-        else if (msg.status === "delivered") statusIcon = `<span class="msg-status status-delivered">✓✓</span>`;
-        else                                  statusIcon = `<span class="msg-status status-sent">✓</span>`;
+        const statusEl = document.createElement("span");
+        if (msg.status === "read") {
+          statusEl.className = "msg-status status-read";
+          statusEl.textContent = "✓✓";
+        } else if (msg.status === "delivered") {
+          statusEl.className = "msg-status status-delivered";
+          statusEl.textContent = "✓✓";
+        } else {
+          statusEl.className = "msg-status status-sent";
+          statusEl.textContent = "✓";
+        }
+        timeEl.appendChild(statusEl);
       }
-      div.innerHTML = `${msg.text}<div class="chat-msg-time">${statusIcon}${time}</div>`;
+      timeEl.appendChild(document.createTextNode(time));
+      div.appendChild(timeEl);
       box.appendChild(div);
     });
     if (atBottom) box.scrollTop = box.scrollHeight;
   }
 
   // ── إشعارات رسائل جديدة ──
-  const _notifUnsubs = new Map();
-  const _notifReady  = new Set();
-  const _lastSeenMsg = new Map();
+  const _notifUnsubs  = new Map();
+  const _lastSeenMsg  = new Map(); // نتتبع آخر رسالة شُوفت لكل صديق
+  const _notifReady    = new Set(); // نتجاهل snapshot البداية عشان ما ننبه على رسائل قديمة
 
   function initChatNotifications() {
     const myUid = getCurrentUser()?.uid;
     if (!myUid) return;
+
     onValue(ref(db_main, `users/${myUid}/friends`), (snap) => {
       if (!snap.exists()) return;
-      Object.values(snap.val()).forEach(friend => {
+      const friends = Object.values(snap.val());
+
+      friends.forEach(friend => {
         if (_notifUnsubs.has(friend.uid)) return;
+
         const unsub = listenMessages(friend.uid, (msgs) => {
           const lastMsg = msgs[msgs.length - 1];
           const lastTs  = lastMsg?.ts || 0;
-          // أول callback — نحفظ الـ ts ونتجاهل (رسائل قديمة)
+
           if (!_notifReady.has(friend.uid)) {
             _notifReady.add(friend.uid);
             _lastSeenMsg.set(friend.uid, lastTs);
             return;
           }
+
           if (!msgs.length) return;
+
           const isFromFriend = lastMsg.fromUid === friend.uid;
           const chatOpen     = currentChatFriend?.uid === friend.uid;
           const lastSeen     = _lastSeenMsg.get(friend.uid) || 0;
           const isNew        = lastTs > lastSeen;
+
           if (chatOpen || !isFromFriend) {
             if (isNew) _lastSeenMsg.set(friend.uid, lastTs);
             return;
           }
+
           if (isNew) {
             _lastSeenMsg.set(friend.uid, lastTs);
             showChatNotification(friend, lastMsg.text);
             markDelivered(friend.uid);
           }
         });
+
         _notifUnsubs.set(friend.uid, unsub);
       });
     });
@@ -591,15 +730,28 @@ document.addEventListener("DOMContentLoaded", () => {
       notif.id = "chat-notification";
       document.body.appendChild(notif);
     }
-    notif.innerHTML = `
-      <span style="font-size:1.2rem">💬</span>
-      <div class="notif-text">
-        <div class="notif-name">${friend.name}</div>
-        <div>${text.length > 30 ? text.slice(0,30) + "..." : text}</div>
-      </div>
-    `;
+    notif.textContent = "";
+
+    const icon = document.createElement("span");
+    icon.style.fontSize = "1.2rem";
+    icon.textContent = "💬";
+
+    const content = document.createElement("div");
+    content.className = "notif-text";
+
+    const name = document.createElement("div");
+    name.className = "notif-name";
+    name.textContent = asText(friend.name, "لاعب");
+
+    const preview = document.createElement("div");
+    const safeText = asText(text);
+    preview.textContent = safeText.length > 30 ? `${safeText.slice(0, 30)}...` : safeText;
+
+    content.append(name, preview);
+    notif.append(icon, content);
     notif.style.display = "flex";
     notif.onclick = () => {
+      audioManager.playButtonClick(); // صوت عند الضغط على الإشعار
       notif.style.display = "none";
       document.getElementById("friends-panel").classList.remove("hidden");
       openChat(friend);
@@ -609,18 +761,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if ("Notification" in window && Notification.permission === "granted") {
       new Notification(`💬 ${friend.name}`, { body: text, icon: "/jazma/images/google.svg" });
     }
-    // صوت إشعار
-    if (_audioCtx) {
-      try {
-        const osc  = _audioCtx.createOscillator();
-        const gain = _audioCtx.createGain();
-        osc.connect(gain); gain.connect(_audioCtx.destination);
-        osc.frequency.value = 880;
-        gain.gain.setValueAtTime(0.1, _audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + 0.3);
-        osc.start(); osc.stop(_audioCtx.currentTime + 0.3);
-      } catch(e) {}
-    }
+    // الصوت يشتغل لما المستخدم يضغط على الإشعار
+    playNotifSound();
   }
 
   async function doSendMessage() {} // placeholder
@@ -646,10 +788,16 @@ document.addEventListener("DOMContentLoaded", () => {
       background:#1e1e2e;border:2px solid #f87171;border-radius:16px;
       padding:28px 36px;text-align:center;z-index:9999;box-shadow:0 8px 40px #0008;
     `;
-    box.innerHTML = `
-      <p style="font-size:1.1rem;margin-bottom:16px;">😔 ${name} رفض الدعوة</p>
-      <button onclick="this.parentElement.remove()" style="background:#7c6af7;color:#fff;border:none;padding:9px 22px;border-radius:8px;cursor:pointer;">حسناً</button>
-    `;
+    const message = document.createElement("p");
+    message.style.cssText = "font-size:1.1rem;margin-bottom:16px;";
+    message.textContent = `😔 ${asText(name, "اللاعب")} رفض الدعوة`;
+
+    const okButton = document.createElement("button");
+    okButton.style.cssText = "background:#7c6af7;color:#fff;border:none;padding:9px 22px;border-radius:8px;cursor:pointer;";
+    okButton.textContent = "حسناً";
+    okButton.addEventListener("click", () => box.remove());
+
+    box.append(message, okButton);
     document.body.appendChild(box);
     setTimeout(() => box.remove(), 5000);
   }
@@ -927,10 +1075,16 @@ document.addEventListener("DOMContentLoaded", () => {
       background:#1e1e2e;border:2px solid #7c6af7;border-radius:16px;
       padding:28px 36px;text-align:center;z-index:9999;box-shadow:0 8px 40px #0008;
     `;
-    box.innerHTML = `
-      <p style="font-size:1.2rem;margin-bottom:16px;">🔄 الخصم أنهى اللعبة!</p>
-      <button onclick="location.reload()" style="background:#7c6af7;color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:1rem;">🏠 العودة للقائمة</button>
-    `;
+    const message = document.createElement("p");
+    message.style.cssText = "font-size:1.2rem;margin-bottom:16px;";
+    message.textContent = "🔄 الخصم أنهى اللعبة!";
+
+    const button = document.createElement("button");
+    button.style.cssText = "background:#7c6af7;color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:1rem;";
+    button.textContent = "🏠 العودة للقائمة";
+    button.addEventListener("click", () => location.reload());
+
+    box.append(message, button);
     document.body.appendChild(box);
   }
 
@@ -942,10 +1096,16 @@ document.addEventListener("DOMContentLoaded", () => {
       background:#1e1e2e;border:2px solid #f87171;border-radius:16px;
       padding:28px 36px;text-align:center;z-index:9999;box-shadow:0 8px 40px #0008;
     `;
-    box.innerHTML = `
-      <p style="font-size:1.2rem;margin-bottom:16px;">❌ انقطع اتصال الخصم!</p>
-      <button onclick="location.reload()" style="background:#7c6af7;color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:1rem;">🔄 العودة للقائمة</button>
-    `;
+    const message = document.createElement("p");
+    message.style.cssText = "font-size:1.2rem;margin-bottom:16px;";
+    message.textContent = "❌ انقطع اتصال الخصم!";
+
+    const button = document.createElement("button");
+    button.style.cssText = "background:#7c6af7;color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:1rem;";
+    button.textContent = "🔄 العودة للقائمة";
+    button.addEventListener("click", () => location.reload());
+
+    box.append(message, button);
     document.body.appendChild(box);
   }
 
@@ -1006,4 +1166,3 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
 });
-

@@ -4,52 +4,66 @@
 
 class AudioManager {
   constructor() {
-    this.enabled = true;
-    this.volume = 0.5;
+    this.enabled      = true;
+    this.volume       = 0.5;
     this.musicEnabled = true;
-    this.musicVolume = 0.3;
-    
-    // إنشاء AudioContext للمؤثرات الصوتية
+    this.musicVolume  = 0.3;
     this.audioContext = null;
-    
-    // HTML5 Audio للموسيقى المصرية
     this.egyptianMusic = null;
-    
-    // تهيئة الأصوات
-    this.initAudioContext();
+    this._initialized = false;
+
+    // نهيّئ الصوت بعد أول تفاعل فقط
+    const initOnGesture = () => {
+      this._initAudio();
+      document.removeEventListener("click",      initOnGesture);
+      document.removeEventListener("keydown",    initOnGesture);
+      document.removeEventListener("touchstart", initOnGesture);
+    };
+    document.addEventListener("click",      initOnGesture);
+    document.addEventListener("keydown",    initOnGesture);
+    document.addEventListener("touchstart", initOnGesture);
   }
-  
-  initAudioContext() {
+
+  _initAudio() {
+    if (this._initialized) return;
     try {
-      // إنشاء AudioContext (يدعم كل المتصفحات)
       this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    } catch (e) {
-      console.warn('Web Audio API not supported', e);
+      // resume بشكل صامت — نتجاهل التحذير
+      this.audioContext.resume().catch(() => {});
+      this._initialized = true;
+    } catch(e) {
       this.enabled = false;
     }
+  }
+
+  initAudioContext() {
+    this._initAudio();
+    return this.audioContext;
   }
   
   // تشغيل صوت باستخدام frequency
   playTone(frequency, duration, type = 'sine', volume = null) {
     if (!this.enabled || !this.audioContext) return;
-    
-    const oscillator = this.audioContext.createOscillator();
-    const gainNode = this.audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(this.audioContext.destination);
-    
-    oscillator.frequency.value = frequency;
-    oscillator.type = type;
-    
-    const vol = volume !== null ? volume : this.volume;
-    gainNode.gain.setValueAtTime(vol, this.audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + duration);
-    
-    oscillator.start(this.audioContext.currentTime);
-    oscillator.stop(this.audioContext.currentTime + duration);
-    
-    return { oscillator, gainNode };
+
+    const play = () => {
+      const oscillator = this.audioContext.createOscillator();
+      const gainNode   = this.audioContext.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(this.audioContext.destination);
+      oscillator.frequency.value = frequency;
+      oscillator.type = type;
+      const vol = volume !== null ? volume : this.volume;
+      gainNode.gain.setValueAtTime(vol, this.audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + duration);
+      oscillator.start(this.audioContext.currentTime);
+      oscillator.stop(this.audioContext.currentTime + duration);
+    };
+
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume().then(play);
+    } else {
+      play();
+    }
   }
   
   // 🎵 بدء الموسيقى المصرية الخلفية
