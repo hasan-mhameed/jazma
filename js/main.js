@@ -258,17 +258,26 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
 
-      // ── تحديث شريط الإحصائيات بعد كل مباراة ──
+      // ── تحديث شريط الإحصائيات ──
       async function refreshStats() {
         const profile = await getUserProfile(user.uid);
-        if (profile) {
-          userWinsEl.textContent   = `🏆 ${profile.wins   || 0}`;
-          userLossesEl.textContent = `❌ ${profile.losses || 0}`;
+        if (!profile) return;
+        const stats = profile.stats || {};
+        const aiW   = stats.ai?.wins    || 0;
+        const aiL   = stats.ai?.losses  || 0;
+        // مجموع كل الإحصائيات للعرض في الشريط
+        let totalW = aiW + (stats.local?.wins || 0);
+        let totalL = aiL + (stats.local?.losses || 0);
+        if (stats.online) {
+          Object.values(stats.online).forEach(s => {
+            totalW += s.wins   || 0;
+            totalL += s.losses || 0;
+          });
         }
+        userWinsEl.textContent   = `🏆 ${totalW}`;
+        userLossesEl.textContent = `❌ ${totalL}`;
       }
-      // نحدّث كل 10 ثواني
       setInterval(refreshStats, 10000);
-      // نجعلها متاحة عالمياً عشان gameEnd يستدعيها
       window._refreshStats = refreshStats;
     } else {
       // غير مسجّل
@@ -1036,6 +1045,11 @@ document.addEventListener("DOMContentLoaded", () => {
     config.aiMode = "online";
     _moveSeq = 0;
     aiPlayer = null;
+
+    // جيب uid الخصم وحفظه في config
+    onlineManager.getOpponentUid().then(uid => {
+      config.onlineOpponentUid = uid;
+    });
 
     // ✅ شاشة تحميل قصيرة قبل ما تبدأ اللعبة
     onlineTurnInd.textContent = "⏳ جاري تحميل اللعبة...";

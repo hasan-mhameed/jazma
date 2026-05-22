@@ -1,6 +1,6 @@
-// 📄 gameEnd.js — v12.3
+// 📄 gameEnd.js — v12.8
 import { audioManager } from "../audio/audioManager.js";
-import { updateStats, currentUser } from "../auth.js";
+import { updateAIStats, updateLocalStats, updateOnlineStats, currentUser } from "../auth.js";
 
 export async function endGame(cfg, scores) {
   const totalSquares = (cfg.rows - 1) * (cfg.cols - 1);
@@ -16,7 +16,6 @@ export async function endGame(cfg, scores) {
   const isDraw     = topPlayers.length > 1;
   const winnerNum  = isDraw ? null : ranking[0].player;
 
-  // ── اسم اللاعب ──────────────────────────────────────────────
   function playerName(num) {
     if (cfg.aiMode === "online" && cfg.onlinePlayerNames) {
       return cfg.onlinePlayerNames[num] || `لاعب ${num}`;
@@ -25,7 +24,6 @@ export async function endGame(cfg, scores) {
     return `لاعب ${num}`;
   }
 
-  // ── رسالة الفائز ─────────────────────────────────────────────
   let message;
   if (isDraw) {
     message = "🤝 تعادل!";
@@ -39,15 +37,18 @@ export async function endGame(cfg, scores) {
 
   // ── تحديث الإحصائيات ─────────────────────────────────────────
   if (currentUser) {
-    if (cfg.aiMode === "online") {
-      const myNum = cfg.onlinePlayerNum;
-      const won   = !isDraw && winnerNum === myNum;
-      await updateStats(won);
-    } else if (cfg.aiMode === "ai") {
+    if (cfg.aiMode === "ai") {
       const won = !isDraw && winnerNum === 1;
-      await updateStats(won);
+      await updateAIStats(won);
+    } else if (cfg.aiMode === "online") {
+      const myNum       = cfg.onlinePlayerNum;
+      const opponentUid = cfg.onlineOpponentUid;
+      const won         = !isDraw && winnerNum === myNum;
+      await updateOnlineStats(won, opponentUid);
+    } else {
+      const won = !isDraw && winnerNum === 1;
+      await updateLocalStats(won);
     }
-    // نحدّث شريط الإحصائيات فوراً
     window._refreshStats?.();
   }
 

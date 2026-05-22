@@ -2,6 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getCurrentUser }   from "./auth.js";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -43,7 +44,9 @@ export class OnlineManager {
       cfg:    { rows: cfg.rows, cols: cfg.cols },
       status: "waiting",
       p1name: name,
+      p1uid:  getCurrentUser()?.uid || "",
       p2name: "",
+      p2uid:  "",
       move: { key: "", by: 0, seq: 0 },  // ✅ نستخدم seq لتمييز الحركات
     });
 
@@ -67,6 +70,7 @@ export class OnlineManager {
 
     await update(ref(db, `rooms/${code}`), {
       p2name: name,
+      p2uid:  getCurrentUser()?.uid || "",
       status: "playing",
     });
 
@@ -74,7 +78,7 @@ export class OnlineManager {
     this._listenForMoves(code);
     this._listenForOpponentLeave(code);
     this._listenForRestart(code);
-    return { cfg: room.cfg, p1name: room.p1name };
+    return { cfg: room.cfg, p1name: room.p1name, p1uid: room.p1uid };
   }
 
   // ══ إرسال حركة ══════════════════════════════════════════════
@@ -171,6 +175,14 @@ export class OnlineManager {
   onOpponentJoined(cb){ this._cbJoined  = cb; }
   onOpponentLeft(cb)  { this._cbLeft    = cb; }
   isMyTurn(cp)        { return cp === this.playerNum; }
+
+  async getOpponentUid() {
+    if (!this.roomCode) return null;
+    const snap = await get(ref(db, `rooms/${this.roomCode}`));
+    if (!snap.exists()) return null;
+    const room = snap.val();
+    return this.playerNum === 1 ? room.p2uid : room.p1uid;
+  }
 }
 
 export const onlineManager = new OnlineManager();
