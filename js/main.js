@@ -266,8 +266,10 @@ document.addEventListener("DOMContentLoaded", () => {
           userLossesEl.textContent = `❌ ${profile.losses || 0}`;
         }
       }
-      // نحدّث كل 10 ثواني لو اللاعب بالأونلاين
+      // نحدّث كل 10 ثواني
       setInterval(refreshStats, 10000);
+      // نجعلها متاحة عالمياً عشان gameEnd يستدعيها
+      window._refreshStats = refreshStats;
     } else {
       // غير مسجّل
       authScreen.classList.remove("hidden");

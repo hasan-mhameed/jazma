@@ -37,11 +37,18 @@ export async function endGame(cfg, scores) {
       : `🎉 ${playerName(winnerNum)} فاز!`;
   }
 
-  // ── تحديث الإحصائيات للوضع الأونلاين ────────────────────────
-  if (cfg.aiMode === "online" && currentUser) {
-    const myNum = cfg.onlinePlayerNum;
-    const won   = !isDraw && winnerNum === myNum;
-    await updateStats(won);
+  // ── تحديث الإحصائيات ─────────────────────────────────────────
+  if (currentUser) {
+    if (cfg.aiMode === "online") {
+      const myNum = cfg.onlinePlayerNum;
+      const won   = !isDraw && winnerNum === myNum;
+      await updateStats(won);
+    } else if (cfg.aiMode === "ai") {
+      const won = !isDraw && winnerNum === 1;
+      await updateStats(won);
+    }
+    // نحدّث شريط الإحصائيات فوراً
+    window._refreshStats?.();
   }
 
   // ── عرض شاشة النتيجة ─────────────────────────────────────────
