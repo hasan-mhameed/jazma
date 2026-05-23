@@ -258,18 +258,19 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
 
-      // ── إحصائيات real-time من Firebase ──
+      // نخفي القديم فوراً
+      userWinsEl.textContent   = `🏆 -`;
+      userLossesEl.textContent = `❌ -`;
+
+      // ── إحصائيات real-time من Firebase (stats فقط، نتجاهل القديم) ──
       const statsRef = ref(db_main, `users/${user.uid}/stats`);
       onValue(statsRef, (snap) => {
         const stats = snap.val() || {};
         let totalW = 0, totalL = 0;
-        // AI
         totalW += stats.ai?.wins    || 0;
         totalL += stats.ai?.losses  || 0;
-        // محلي
         totalW += stats.local?.wins   || 0;
         totalL += stats.local?.losses || 0;
-        // أونلاين
         if (stats.online) {
           Object.values(stats.online).forEach(s => {
             totalW += s.wins   || 0;
@@ -279,8 +280,6 @@ document.addEventListener("DOMContentLoaded", () => {
         userWinsEl.textContent   = `🏆 ${totalW}`;
         userLossesEl.textContent = `❌ ${totalL}`;
       });
-
-      // _refreshStats غير ضروري الحين لأن onValue بيحدّث تلقائياً
       window._refreshStats = () => {};
     } else {
       // غير مسجّل

@@ -90,38 +90,40 @@ export async function getUserProfile(uid) {
 }
 
 // ─── تحديث إحصائيات AI ───────────────────────────────────────
-export async function updateAIStats(won) {
+export async function updateAIStats(result) {
+  // result: 'win' | 'loss' | 'draw'
   if (!currentUser) return;
   const statsRef = ref(db, `users/${currentUser.uid}/stats/ai`);
   const snap     = await get(statsRef);
-  const data     = snap.exists() ? snap.val() : { wins: 0, losses: 0 };
+  const data     = snap.exists() ? snap.val() : { wins: 0, losses: 0, draws: 0 };
   await update(statsRef, {
-    wins:   (data.wins   || 0) + (won ? 1 : 0),
-    losses: (data.losses || 0) + (won ? 0 : 1),
+    wins:   (data.wins   || 0) + (result === 'win'  ? 1 : 0),
+    losses: (data.losses || 0) + (result === 'loss' ? 1 : 0),
+    draws:  (data.draws  || 0) + (result === 'draw' ? 1 : 0),
   });
 }
 
-// ─── تحديث إحصائيات محلي ─────────────────────────────────────
-export async function updateLocalStats(won) {
+export async function updateLocalStats(result) {
   if (!currentUser) return;
   const statsRef = ref(db, `users/${currentUser.uid}/stats/local`);
   const snap     = await get(statsRef);
-  const data     = snap.exists() ? snap.val() : { wins: 0, losses: 0 };
+  const data     = snap.exists() ? snap.val() : { wins: 0, losses: 0, draws: 0 };
   await update(statsRef, {
-    wins:   (data.wins   || 0) + (won ? 1 : 0),
-    losses: (data.losses || 0) + (won ? 0 : 1),
+    wins:   (data.wins   || 0) + (result === 'win'  ? 1 : 0),
+    losses: (data.losses || 0) + (result === 'loss' ? 1 : 0),
+    draws:  (data.draws  || 0) + (result === 'draw' ? 1 : 0),
   });
 }
 
-// ─── تحديث إحصائيات أونلاين (مع خصم محدد) ───────────────────
-export async function updateOnlineStats(won, opponentUid) {
+export async function updateOnlineStats(result, opponentUid) {
   if (!currentUser || !opponentUid) return;
   const statsRef = ref(db, `users/${currentUser.uid}/stats/online/${opponentUid}`);
   const snap     = await get(statsRef);
-  const data     = snap.exists() ? snap.val() : { wins: 0, losses: 0 };
+  const data     = snap.exists() ? snap.val() : { wins: 0, losses: 0, draws: 0 };
   await update(statsRef, {
-    wins:   (data.wins   || 0) + (won ? 1 : 0),
-    losses: (data.losses || 0) + (won ? 0 : 1),
+    wins:   (data.wins   || 0) + (result === 'win'  ? 1 : 0),
+    losses: (data.losses || 0) + (result === 'loss' ? 1 : 0),
+    draws:  (data.draws  || 0) + (result === 'draw' ? 1 : 0),
   });
 }
 
@@ -133,7 +135,8 @@ export async function getAllStats(uid) {
 
 // ─── للتوافق مع الكود القديم ──────────────────────────────────
 export async function updateStats(won) {
-  await updateAIStats(won);
+  const result = won === true ? 'win' : won === false ? 'loss' : won;
+  await updateAIStats(result);
 }
 
 // ─── تحديث اسم المستخدم ──────────────────────────────────────

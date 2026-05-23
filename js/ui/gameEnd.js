@@ -37,17 +37,19 @@ export async function endGame(cfg, scores) {
 
   // ── تحديث الإحصائيات ─────────────────────────────────────────
   if (currentUser) {
+    const getResult = (myNum) => {
+      if (isDraw) return 'draw';
+      return winnerNum === myNum ? 'win' : 'loss';
+    };
+
     if (cfg.aiMode === "ai") {
-      const won = !isDraw && winnerNum === 1;
-      await updateAIStats(won);
+      await updateAIStats(getResult(1));
     } else if (cfg.aiMode === "online") {
       const myNum       = cfg.onlinePlayerNum;
       const opponentUid = cfg.onlineOpponentUid;
-      const won         = !isDraw && winnerNum === myNum;
-      await updateOnlineStats(won, opponentUid);
+      await updateOnlineStats(getResult(myNum), opponentUid);
     } else {
-      const won = !isDraw && winnerNum === 1;
-      await updateLocalStats(won);
+      await updateLocalStats(getResult(1));
     }
     window._refreshStats?.();
   }
