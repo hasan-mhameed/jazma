@@ -83,6 +83,12 @@ async function saveUserProfile(user) {
   }
 }
 
+// ─── جلب ملف مستخدم ──────────────────────────────────────────
+export async function getUserProfile(uid) {
+  const snap = await get(ref(db, `users/${uid}`));
+  return snap.exists() ? snap.val() : null;
+}
+
 // ─── تحديث إحصائيات AI ───────────────────────────────────────
 export async function updateAIStats(won) {
   if (!currentUser) return;
