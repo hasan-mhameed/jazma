@@ -64,34 +64,6 @@ export function onUserChange(cb) {
 async function saveUserProfile(user) {
   const userRef = ref(db, `users/${user.uid}`);
   const snap    = await get(userRef);
-
-  if (!snap.exists()) {
-    // مستخدم جديد
-    await set(userRef, {
-      uid:      user.uid,
-      name:     user.displayName || "لاعب",
-      email:    user.email,
-      photo:    user.photoURL || "",
-      wins:     0,
-      losses:   0,
-      joinedAt: Date.now(),
-      friends:  {},
-    });
-  } else {
-    // حدّث آخر ظهور
-    await update(userRef, { lastSeen: Date.now() });
-  }
-}
-
-// ─── جلب ملف مستخدم ──────────────────────────────────────────
-export async function getUserProfile(uid) {
-  const snap = await get(ref(db, `users/${uid}`));
-  return snap.exists() ? snap.val() : null;
-}
-
-async function saveUserProfile(user) {
-  const userRef = ref(db, `users/${user.uid}`);
-  const snap    = await get(userRef);
   if (!snap.exists()) {
     await set(userRef, {
       uid:      user.uid,
