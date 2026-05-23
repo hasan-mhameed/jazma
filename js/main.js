@@ -258,16 +258,18 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
 
-      // ── تحديث شريط الإحصائيات ──
-      async function refreshStats() {
-        const profile = await getUserProfile(user.uid);
-        if (!profile) return;
-        const stats = profile.stats || {};
-        const aiW   = stats.ai?.wins    || 0;
-        const aiL   = stats.ai?.losses  || 0;
-        // مجموع كل الإحصائيات للعرض في الشريط
-        let totalW = aiW + (stats.local?.wins || 0);
-        let totalL = aiL + (stats.local?.losses || 0);
+      // ── إحصائيات real-time من Firebase ──
+      const statsRef = ref(db_main, `users/${user.uid}/stats`);
+      onValue(statsRef, (snap) => {
+        const stats = snap.val() || {};
+        let totalW = 0, totalL = 0;
+        // AI
+        totalW += stats.ai?.wins    || 0;
+        totalL += stats.ai?.losses  || 0;
+        // محلي
+        totalW += stats.local?.wins   || 0;
+        totalL += stats.local?.losses || 0;
+        // أونلاين
         if (stats.online) {
           Object.values(stats.online).forEach(s => {
             totalW += s.wins   || 0;
@@ -276,9 +278,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         userWinsEl.textContent   = `🏆 ${totalW}`;
         userLossesEl.textContent = `❌ ${totalL}`;
-      }
-      setInterval(refreshStats, 10000);
-      window._refreshStats = refreshStats;
+      });
+
+      // _refreshStats غير ضروري الحين لأن onValue بيحدّث تلقائياً
+      window._refreshStats = () => {};
     } else {
       // غير مسجّل
       authScreen.classList.remove("hidden");
