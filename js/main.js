@@ -21,6 +21,85 @@ import { playNotifSound } from "./audio/notif.js";
 
 let aiPlayer = null;
 
+// ── عرض modal الإحصائيات ────────────────────────────────────────
+async function renderStatsModal(uid) {
+  const statsContent = document.getElementById('stats-content');
+  if (!statsContent) return;
+
+  const { getAllStats, getUserProfile } = await import('./auth.js');
+  const stats = await getAllStats(uid);
+
+  let html = '';
+
+  // ── AI ──────────────────────────────────────────────────────
+  const ai = stats.ai || {};
+  const aiW = ai.wins || 0, aiL = ai.losses || 0, aiD = ai.draws || 0;
+  const aiTotal = aiW + aiL + aiD;
+  html += `
+    <div class="stats-section">
+      <div class="stats-section-title">🤖 ضد الكمبيوتر</div>
+      ${aiTotal === 0
+        ? '<p class="stats-empty">لم تلعب بعد</p>'
+        : `<div class="stats-h2h-row">
+             <span class="sh-win">🏆 ${aiW}</span>
+             <span class="sh-sep">–</span>
+             <span class="sh-loss">💔 ${aiL}</span>
+             ${aiD > 0 ? `<span class="sh-sep">·</span><span class="sh-draw">🤝 ${aiD}</span>` : ''}
+           </div>`
+      }
+    </div>`;
+
+  // ── محلي ────────────────────────────────────────────────────
+  const localEntries = Object.entries(stats.local || {})
+    .filter(([, v]) => typeof v === 'object' && v !== null)
+    .sort((a, b) => (b[1].lastPlayed || 0) - (a[1].lastPlayed || 0));
+
+  html += `<div class="stats-section"><div class="stats-section-title">👥 محلي مع صديق</div>`;
+  if (localEntries.length === 0) {
+    html += '<p class="stats-empty">لم تلعب محلياً بعد</p>';
+  } else {
+    localEntries.forEach(([, v]) => {
+      const name  = v.name || 'لاعب';
+      const w = v.wins || 0, l = v.losses || 0, d = v.draws || 0;
+      html += `
+        <div class="stats-vs-row">
+          <span class="vs-name">${name}</span>
+          <span class="sh-win">🏆 ${w}</span>
+          <span class="sh-sep">–</span>
+          <span class="sh-loss">💔 ${l}</span>
+          ${d > 0 ? `<span class="sh-sep">·</span><span class="sh-draw">🤝 ${d}</span>` : ''}
+        </div>`;
+    });
+  }
+  html += `</div>`;
+
+  // ── أونلاين ──────────────────────────────────────────────────
+  const onlineEntries = Object.entries(stats.online || {})
+    .filter(([, v]) => typeof v === 'object' && v !== null)
+    .sort((a, b) => (b[1].lastPlayed || 0) - (a[1].lastPlayed || 0));
+
+  html += `<div class="stats-section"><div class="stats-section-title">🌐 أونلاين</div>`;
+  if (onlineEntries.length === 0) {
+    html += '<p class="stats-empty">لم تلعب أونلاين بعد</p>';
+  } else {
+    onlineEntries.forEach(([oppUid, v]) => {
+      const name = v.name || oppUid.slice(0, 8);
+      const w = v.wins || 0, l = v.losses || 0, d = v.draws || 0;
+      html += `
+        <div class="stats-vs-row">
+          <span class="vs-name">${name}</span>
+          <span class="sh-win">🏆 ${w}</span>
+          <span class="sh-sep">–</span>
+          <span class="sh-loss">💔 ${l}</span>
+          ${d > 0 ? `<span class="sh-sep">·</span><span class="sh-draw">🤝 ${d}</span>` : ''}
+        </div>`;
+    });
+  }
+  html += `</div>`;
+
+  statsContent.innerHTML = html;
+}
+
 function asText(value, fallback = "") {
   const text = value === undefined || value === null ? fallback : value;
   return String(text);
@@ -70,8 +149,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const userBar           = document.getElementById("user-bar");
   const userPhoto         = document.getElementById("user-photo");
   const userNameEl        = document.getElementById("user-name");
-  const userWinsEl        = document.getElementById("user-wins");
-  const userLossesEl      = document.getElementById("user-losses");
   const logoutBtn         = document.getElementById("logout-btn");
   const googleSigninBtn   = document.getElementById("google-signin-btn");
   const setupScreen       = document.getElementById("setup-screen");
@@ -79,6 +156,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const infoDiv           = document.getElementById("info");
   const boardSvg          = document.getElementById("board");
   const winnerScreen      = document.getElementById("winner-screen");
+
+  // إحصائيات
+  const statsBtn          = document.getElementById("stats-btn");
+  const statsModal        = document.getElementById("stats-modal");
+  const closeStatsBtn     = document.getElementById("close-stats-btn");
+  const statsContent      = document.getElementById("stats-content");
+  const localP2Input      = document.getElementById("local-p2-name");
+  const localP2Section    = document.getElementById("local-p2-section");
 
   const gridSizeSelect    = document.getElementById("grid-size");
   const playerCountSelect = document.getElementById("player-count");
@@ -219,12 +304,6 @@ document.addEventListener("DOMContentLoaded", () => {
       userPhoto.style.display = user.photoURL ? "block" : "none";
       userNameEl.textContent  = user.displayName || "لاعب";
 
-      // جلب الإحصائيات
-      const profile = await getUserProfile(user.uid);
-      if (profile) {
-        userWinsEl.textContent   = `🏆 ${profile.wins   || 0}`;
-        userLossesEl.textContent = `❌ ${profile.losses || 0}`;
-      }
       initFriendsListeners();
       initInviteListener();
       initChatNotifications();
@@ -258,29 +337,31 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
 
-      // نخفي القديم فوراً
-      userWinsEl.textContent   = `🏆 -`;
-      userLossesEl.textContent = `❌ -`;
+      // نخفي القديم فوراً — لا يوجد عداد مباشر بعد الآن
+      window._refreshStats = async () => {
+        if (!statsContent || statsModal?.classList.contains('hidden')) return;
+        await renderStatsModal(user.uid);
+      };
 
-      // ── إحصائيات real-time من Firebase (stats فقط، نتجاهل القديم) ──
-      const statsRef = ref(db_main, `users/${user.uid}/stats`);
-      onValue(statsRef, (snap) => {
-        const stats = snap.val() || {};
-        let totalW = 0, totalL = 0;
-        totalW += stats.ai?.wins    || 0;
-        totalL += stats.ai?.losses  || 0;
-        totalW += stats.local?.wins   || 0;
-        totalL += stats.local?.losses || 0;
-        if (stats.online) {
-          Object.values(stats.online).forEach(s => {
-            totalW += s.wins   || 0;
-            totalL += s.losses || 0;
-          });
+      // ── زر إحصائياتي ──
+      statsBtn?.addEventListener('click', async () => {
+        statsModal?.classList.remove('hidden');
+        if (statsContent) {
+          statsContent.innerHTML = '<p class="stats-loading">⏳ جاري التحميل...</p>';
+          await renderStatsModal(user.uid);
         }
-        userWinsEl.textContent   = `🏆 ${totalW}`;
-        userLossesEl.textContent = `❌ ${totalL}`;
       });
-      window._refreshStats = () => {};
+      closeStatsBtn?.addEventListener('click', () => statsModal?.classList.add('hidden'));
+      statsModal?.addEventListener('click', e => { if (e.target === statsModal) statsModal.classList.add('hidden'); });
+
+      // ── إخفاء/إظهار حقل اسم اللاعب 2 حسب الوضع ──
+      const syncLocalP2Visibility = () => {
+        if (!localP2Section || !aiModeSelect) return;
+        const show = aiModeSelect.value === 'human';
+        localP2Section.classList.toggle('hidden', !show);
+      };
+      syncLocalP2Visibility();
+      aiModeSelect?.addEventListener('change', syncLocalP2Visibility);
     } else {
       // غير مسجّل
       authScreen.classList.remove("hidden");
@@ -890,6 +971,13 @@ document.addEventListener("DOMContentLoaded", () => {
       config.players = playerCount;
       config.aiMode  = aiMode;
       config.online  = false;
+
+      // اسم اللاعب الثاني في الوضع المحلي
+      const p2Name = localP2Input?.value?.trim() || '';
+      config.localPlayerNames = {
+        1: state.currentPlayer === 1 ? (getCurrentUser()?.displayName || 'لاعب 1') : 'لاعب 1',
+        2: p2Name || 'لاعب 2',
+      };
 
       aiPlayer = aiMode === "ai" ? new AIPlayer(aiDifficulty) : null;
       if (aiMode === "ai") config.players = 2;

@@ -103,27 +103,35 @@ export async function updateAIStats(result) {
   });
 }
 
-export async function updateLocalStats(result) {
+// vsName: اسم اللاعب الثاني (اختياري) — يُحفظ تحت stats/local/vs_{vsName}
+export async function updateLocalStats(result, vsName) {
   if (!currentUser) return;
-  const statsRef = ref(db, `users/${currentUser.uid}/stats/local`);
+
+  // مسار مخصص لكل خصم إذا توفر اسمه
+  const key      = vsName ? `vs_${vsName.trim().toLowerCase().replace(/\s+/g, '_')}` : '__general__';
+  const statsRef = ref(db, `users/${currentUser.uid}/stats/local/${key}`);
   const snap     = await get(statsRef);
-  const data     = snap.exists() ? snap.val() : { wins: 0, losses: 0, draws: 0 };
+  const data     = snap.exists() ? snap.val() : { wins: 0, losses: 0, draws: 0, name: vsName || '' };
   await update(statsRef, {
+    name:   vsName || data.name || '',
     wins:   (data.wins   || 0) + (result === 'win'  ? 1 : 0),
     losses: (data.losses || 0) + (result === 'loss' ? 1 : 0),
     draws:  (data.draws  || 0) + (result === 'draw' ? 1 : 0),
+    lastPlayed: Date.now(),
   });
 }
 
-export async function updateOnlineStats(result, opponentUid) {
+export async function updateOnlineStats(result, opponentUid, opponentName) {
   if (!currentUser || !opponentUid) return;
   const statsRef = ref(db, `users/${currentUser.uid}/stats/online/${opponentUid}`);
   const snap     = await get(statsRef);
   const data     = snap.exists() ? snap.val() : { wins: 0, losses: 0, draws: 0 };
   await update(statsRef, {
+    name:   opponentName || data.name || opponentUid,
     wins:   (data.wins   || 0) + (result === 'win'  ? 1 : 0),
     losses: (data.losses || 0) + (result === 'loss' ? 1 : 0),
     draws:  (data.draws  || 0) + (result === 'draw' ? 1 : 0),
+    lastPlayed: Date.now(),
   });
 }
 

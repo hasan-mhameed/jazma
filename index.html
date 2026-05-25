@@ -65,8 +65,7 @@
           <span id="user-name"></span>
         </div>
         <div id="user-stats">
-          <span id="user-wins">🏆 0</span>
-          <span id="user-losses">❌ 0</span>
+          <button id="stats-btn" title="إحصائياتي">📊 إحصائياتي</button>
         </div>
         <div id="user-actions">
           <button id="notif-btn" title="تفعيل الإشعارات">🔔</button>
@@ -203,7 +202,15 @@
               <option value="nightmare">🔥 صعب</option>
             </select>
           </div>
-          
+
+          <!-- اسم اللاعب الثاني (محلي فقط) لتتبع السجل -->
+          <div class="setup-section" id="local-p2-section">
+            <label for="local-p2-name">👤 اسم اللاعب 2 <span style="font-size:0.8em;opacity:0.6">(اختياري — لتتبع السجل)</span></label>
+            <input id="local-p2-name" type="text" maxlength="16"
+              placeholder="مثال: سيمو..." autocomplete="off"
+              style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #444;background:#1a1a2e;color:#e0e0ff;font-size:0.95rem;"/>
+          </div>
+
           <button id="start-game" class="btn-primary">🚀 ابدأ اللعبة</button>
         </div>
       </div>
@@ -226,8 +233,22 @@
         <div id="winner-box">
           <h2 id="winner-message">Player 1 Wins!</h2>
           <div id="winner-details"></div>
-          <!-- 🆕 هنا بيظهر ترتيب اللاعبين -->
+          <!-- 🆕 سجل أنت vs الخصم -->
+          <div id="head-to-head" class="hidden"></div>
           <button id="play-again">Play Again</button>
+        </div>
+      </div>
+
+      <!-- 📊 modal الإحصائيات -->
+      <div id="stats-modal" class="hidden">
+        <div id="stats-box">
+          <div class="stats-header">
+            <h2>📊 إحصائياتي</h2>
+            <button id="close-stats-btn">✕</button>
+          </div>
+          <div id="stats-content">
+            <p class="stats-loading">⏳ جاري التحميل...</p>
+          </div>
         </div>
       </div>
 
