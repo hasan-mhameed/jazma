@@ -10,7 +10,8 @@ import { onlineManager }                   from "./firebase.js";
 import { applyOnlineMove }                 from "./ui/boardRenderer.js";
 import { state }                           from "./core/state.js";
 import { onUserChange, signInWithGoogle, logout, getUserProfile,
-         registerWithEmail, signInWithEmail, updateStats, currentUser, getCurrentUser } from "./auth.js";
+         registerWithEmail, signInWithEmail, updateStats, currentUser, getCurrentUser,
+         getAllStats } from "./auth.js";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend, listenFriendRequests, listenFriends } from "./friends.js";
 import { sendGameInvite, listenForInvites, clearInvite, rejectInvite, listenForInviteRejection } from "./invite.js";
@@ -26,7 +27,6 @@ async function renderStatsModal(uid) {
   const statsContent = document.getElementById('stats-content');
   if (!statsContent) return;
 
-  const { getAllStats, getUserProfile } = await import('./auth.js');
   const stats = await getAllStats(uid);
 
   let html = '';
@@ -1008,11 +1008,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // ✅ املأ الاسم تلقائياً من حساب المستخدم
     if (step === "name" || step === "lobby") {
-      import("./auth.js").then(({ currentUser }) => {
-        if (getCurrentUser()?.displayName) {
-          playerNameInput.value = getCurrentUser().displayName;
-        }
-      });
+      if (getCurrentUser()?.displayName) {
+        playerNameInput.value = getCurrentUser().displayName;
+      }
     }
 
     if (step === "name")    stepName.classList.remove("hidden");
