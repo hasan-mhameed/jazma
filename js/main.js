@@ -11,7 +11,7 @@ import { applyOnlineMove }                 from "./ui/boardRenderer.js";
 import { state }                           from "./core/state.js";
 import { onUserChange, signInWithGoogle, logout, getUserProfile,
          registerWithEmail, signInWithEmail, updateStats, currentUser, getCurrentUser,
-         getAllStats } from "./auth.js";
+         getAllStats, resetStats } from "./auth.js";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend, listenFriendRequests, listenFriends } from "./friends.js";
 import { sendGameInvite, listenForInvites, clearInvite, rejectInvite, listenForInviteRejection } from "./invite.js";
@@ -29,27 +29,40 @@ async function renderStatsModal(uid) {
 
   const stats = await getAllStats(uid);
 
+  // دالة مساعدة — تبني صف نتيجة مع زر إعادة
+  function vsRow(name, w, l, d, resetType, resetKey) {
+    const draws = d > 0
+      ? `<span class="sh-sep">·</span><span class="sh-draw">🤝 ${d}</span>`
+      : '';
+    return `
+      <div class="stats-vs-row">
+        <span class="vs-name">${name}</span>
+        <span class="sh-win">🏆 ${w}</span>
+        <span class="sh-sep">–</span>
+        <span class="sh-loss">💔 ${l}</span>
+        ${draws}
+        <button class="stats-reset-btn"
+          data-type="${resetType}"
+          data-key="${resetKey ?? ''}"
+          data-name="${name}"
+          title="إعادة تعيين السجل مع ${name}">🗑️</button>
+      </div>`;
+  }
+
   let html = '';
 
-  // ── AI ──────────────────────────────────────────────────────
+  // ── AI ───────────────────────────────────────────
   const ai = stats.ai || {};
   const aiW = ai.wins || 0, aiL = ai.losses || 0, aiD = ai.draws || 0;
-  const aiTotal = aiW + aiL + aiD;
-  html += `
-    <div class="stats-section">
-      <div class="stats-section-title">🤖 ضد الكمبيوتر</div>
-      ${aiTotal === 0
-        ? '<p class="stats-empty">لم تلعب بعد</p>'
-        : `<div class="stats-h2h-row">
-             <span class="sh-win">🏆 ${aiW}</span>
-             <span class="sh-sep">–</span>
-             <span class="sh-loss">💔 ${aiL}</span>
-             ${aiD > 0 ? `<span class="sh-sep">·</span><span class="sh-draw">🤝 ${aiD}</span>` : ''}
-           </div>`
-      }
-    </div>`;
+  html += `<div class="stats-section">
+    <div class="stats-section-title">🤖 ضد الكمبيوتر</div>
+    ${(aiW + aiL + aiD) === 0
+      ? '<p class="stats-empty">لم تلعب بعد</p>'
+      : vsRow('الكمبيوتر', aiW, aiL, aiD, 'ai', null)
+    }
+  </div>`;
 
-  // ── محلي ────────────────────────────────────────────────────
+  // ── محلي ─────────────────────────────────────────
   const localEntries = Object.entries(stats.local || {})
     .filter(([, v]) => typeof v === 'object' && v !== null)
     .sort((a, b) => (b[1].lastPlayed || 0) - (a[1].lastPlayed || 0));
@@ -58,22 +71,13 @@ async function renderStatsModal(uid) {
   if (localEntries.length === 0) {
     html += '<p class="stats-empty">لم تلعب محلياً بعد</p>';
   } else {
-    localEntries.forEach(([, v]) => {
-      const name  = v.name || 'لاعب';
-      const w = v.wins || 0, l = v.losses || 0, d = v.draws || 0;
-      html += `
-        <div class="stats-vs-row">
-          <span class="vs-name">${name}</span>
-          <span class="sh-win">🏆 ${w}</span>
-          <span class="sh-sep">–</span>
-          <span class="sh-loss">💔 ${l}</span>
-          ${d > 0 ? `<span class="sh-sep">·</span><span class="sh-draw">🤝 ${d}</span>` : ''}
-        </div>`;
+    localEntries.forEach(([key, v]) => {
+      html += vsRow(v.name || 'لاعب', v.wins||0, v.losses||0, v.draws||0, 'local', key);
     });
   }
   html += `</div>`;
 
-  // ── أونلاين ──────────────────────────────────────────────────
+  // ── أونلاين ──────────────────────────────────────
   const onlineEntries = Object.entries(stats.online || {})
     .filter(([, v]) => typeof v === 'object' && v !== null)
     .sort((a, b) => (b[1].lastPlayed || 0) - (a[1].lastPlayed || 0));
@@ -83,21 +87,26 @@ async function renderStatsModal(uid) {
     html += '<p class="stats-empty">لم تلعب أونلاين بعد</p>';
   } else {
     onlineEntries.forEach(([oppUid, v]) => {
-      const name = v.name || oppUid.slice(0, 8);
-      const w = v.wins || 0, l = v.losses || 0, d = v.draws || 0;
-      html += `
-        <div class="stats-vs-row">
-          <span class="vs-name">${name}</span>
-          <span class="sh-win">🏆 ${w}</span>
-          <span class="sh-sep">–</span>
-          <span class="sh-loss">💔 ${l}</span>
-          ${d > 0 ? `<span class="sh-sep">·</span><span class="sh-draw">🤝 ${d}</span>` : ''}
-        </div>`;
+      html += vsRow(v.name || oppUid.slice(0,8), v.wins||0, v.losses||0, v.draws||0, 'online', oppUid);
     });
   }
   html += `</div>`;
 
   statsContent.innerHTML = html;
+
+  // ── ربط أزرار الإعادة ────────────────────────────
+  statsContent.querySelectorAll('.stats-reset-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const type = btn.dataset.type;
+      const key  = btn.dataset.key || null;
+      const name = btn.dataset.name;
+      if (!confirm(`إعادة تعيين السجل مع "${name}"؟\nلا يمكن التراجع عن هذا.`)) return;
+      btn.disabled = true;
+      btn.textContent = '⏳';
+      await resetStats(type, key);
+      await renderStatsModal(uid);   // إعادة رسم
+    });
+  });
 }
 
 function asText(value, fallback = "") {

@@ -5,7 +5,7 @@ import { initializeApp, getApps }   from "https://www.gstatic.com/firebasejs/10.
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
          createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile }
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getDatabase, ref, set, get, update }
+import { getDatabase, ref, set, get, update, remove }
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const firebaseConfig = {
@@ -151,4 +151,14 @@ export async function updateStats(won) {
 export async function updateDisplayName(newName) {
   if (!currentUser) return;
   await update(ref(db, `users/${currentUser.uid}`), { name: newName });
+}
+
+// type: 'ai' | 'local' | 'online'
+// key:  null للـ AI، أو مفتاح الخصم (vs_سيمو أو uid)
+export async function resetStats(type, key) {
+  if (!currentUser) return;
+  const path = key
+    ? `users/${currentUser.uid}/stats/${type}/${key}`
+    : `users/${currentUser.uid}/stats/${type}`;
+  await remove(ref(db, path));
 }

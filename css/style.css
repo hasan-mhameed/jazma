@@ -1529,3 +1529,20 @@ h1 {
 .h2h-loss  { color: #f87171; }
 .h2h-draw  { color: #fbbf24; font-size: 1rem; }
 .h2h-sep   { color: #555; font-weight: 400; }
+
+/* ── زر إعادة تعيين الإحصائيات ── */
+.stats-reset-btn {
+  margin-right: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  opacity: 0.25;
+  padding: 2px 5px;
+  border-radius: 5px;
+  transition: opacity 0.2s, background 0.2s;
+  line-height: 1;
+}
+.stats-vs-row:hover .stats-reset-btn { opacity: 0.7; }
+.stats-reset-btn:hover                { opacity: 1 !important; background: rgba(248,113,113,0.15); }
+.stats-reset-btn:disabled             { opacity: 0.3; cursor: not-allowed; }
