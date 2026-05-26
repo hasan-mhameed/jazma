@@ -11,7 +11,7 @@ import { applyOnlineMove }                 from "./ui/boardRenderer.js";
 import { state }                           from "./core/state.js";
 import { onUserChange, signInWithGoogle, logout, getUserProfile,
          registerWithEmail, signInWithEmail, updateStats, currentUser, getCurrentUser,
-         getAllStats, resetStats } from "./auth.js";
+         getAllStats } from "./auth.js";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend, listenFriendRequests, listenFriends } from "./friends.js";
 import { sendGameInvite, listenForInvites, clearInvite, rejectInvite, listenForInviteRejection } from "./invite.js";
@@ -23,88 +23,119 @@ import { playNotifSound } from "./audio/notif.js";
 let aiPlayer = null;
 
 // ── عرض modal الإحصائيات ────────────────────────────────────────
+// ── حساب الإحصائيات من history حسب الفلتر ──────────────────────
+// filter: 'all' | 'month' | 'last10'
+function computeFromHistory(historyObj, filter) {
+  if (!historyObj || typeof historyObj !== 'object')
+    return { w: 0, l: 0, d: 0, total: 0 };
+
+  let records = Object.entries(historyObj)          // [[ts, {r}], ...]
+    .map(([ts, v]) => ({ ts: Number(ts), r: v.r }))
+    .sort((a, b) => a.ts - b.ts);                   // أقدم → أحدث
+
+  if (filter === 'month') {
+    const now   = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    records = records.filter(g => g.ts >= start);
+  } else if (filter === 'last10') {
+    records = records.slice(-10);
+  }
+
+  const w = records.filter(g => g.r === 'w').length;
+  const l = records.filter(g => g.r === 'l').length;
+  const d = records.filter(g => g.r === 'd').length;
+  return { w, l, d, total: w + l + d };
+}
+
+// الفلتر النشط (مشترك بين المودال وshowHead2Head)
+let _statsFilter = 'all';
+
 async function renderStatsModal(uid) {
   const statsContent = document.getElementById('stats-content');
   if (!statsContent) return;
 
   const stats = await getAllStats(uid);
 
-  // دالة مساعدة — تبني صف نتيجة مع زر إعادة
-  function vsRow(name, w, l, d, resetType, resetKey) {
-    const draws = d > 0
-      ? `<span class="sh-sep">·</span><span class="sh-draw">🤝 ${d}</span>`
-      : '';
+  // ── تبويبات الفلتر ──────────────────────────────────────────
+  const tabs = [
+    { id: 'all',    label: 'كل الوقت' },
+    { id: 'month',  label: 'هذا الشهر' },
+    { id: 'last10', label: 'آخر 10' },
+  ];
+  const tabsHtml = `
+    <div class="stats-filter-tabs">
+      ${tabs.map(t => `
+        <button class="sft-btn ${_statsFilter === t.id ? 'active' : ''}"
+          data-filter="${t.id}">${t.label}</button>`).join('')}
+    </div>`;
+
+  // ── دالة بناء صف ────────────────────────────────────────────
+  function vsRow(name, { w, l, d, total }) {
+    if (total === 0) return `<p class="stats-empty">لا مباريات في هذه الفترة</p>`;
     return `
       <div class="stats-vs-row">
         <span class="vs-name">${name}</span>
         <span class="sh-win">🏆 ${w}</span>
         <span class="sh-sep">–</span>
         <span class="sh-loss">💔 ${l}</span>
-        ${draws}
-        <button class="stats-reset-btn"
-          data-type="${resetType}"
-          data-key="${resetKey ?? ''}"
-          data-name="${name}"
-          title="إعادة تعيين السجل مع ${name}">🗑️</button>
+        ${d > 0 ? `<span class="sh-sep">·</span><span class="sh-draw">🤝 ${d}</span>` : ''}
       </div>`;
   }
 
-  let html = '';
+  let html = tabsHtml;
 
-  // ── AI ───────────────────────────────────────────
-  const ai = stats.ai || {};
-  const aiW = ai.wins || 0, aiL = ai.losses || 0, aiD = ai.draws || 0;
+  // ── AI ───────────────────────────────────────────────────────
+  const aiStats = computeFromHistory(stats.ai?.history, _statsFilter);
   html += `<div class="stats-section">
     <div class="stats-section-title">🤖 ضد الكمبيوتر</div>
-    ${(aiW + aiL + aiD) === 0
-      ? '<p class="stats-empty">لم تلعب بعد</p>'
-      : vsRow('الكمبيوتر', aiW, aiL, aiD, 'ai', null)
-    }
+    ${vsRow('الكمبيوتر', aiStats)}
   </div>`;
 
-  // ── محلي ─────────────────────────────────────────
+  // ── محلي ─────────────────────────────────────────────────────
   const localEntries = Object.entries(stats.local || {})
-    .filter(([, v]) => typeof v === 'object' && v !== null)
-    .sort((a, b) => (b[1].lastPlayed || 0) - (a[1].lastPlayed || 0));
+    .filter(([, v]) => v?.history)
+    .sort((a, b) => {
+      const lastA = Math.max(...Object.keys(a[1].history).map(Number));
+      const lastB = Math.max(...Object.keys(b[1].history).map(Number));
+      return lastB - lastA;
+    });
 
   html += `<div class="stats-section"><div class="stats-section-title">👥 محلي مع صديق</div>`;
   if (localEntries.length === 0) {
     html += '<p class="stats-empty">لم تلعب محلياً بعد</p>';
   } else {
-    localEntries.forEach(([key, v]) => {
-      html += vsRow(v.name || 'لاعب', v.wins||0, v.losses||0, v.draws||0, 'local', key);
+    localEntries.forEach(([, v]) => {
+      html += vsRow(v.name || 'لاعب', computeFromHistory(v.history, _statsFilter));
     });
   }
   html += `</div>`;
 
-  // ── أونلاين ──────────────────────────────────────
+  // ── أونلاين ──────────────────────────────────────────────────
   const onlineEntries = Object.entries(stats.online || {})
-    .filter(([, v]) => typeof v === 'object' && v !== null)
-    .sort((a, b) => (b[1].lastPlayed || 0) - (a[1].lastPlayed || 0));
+    .filter(([, v]) => v?.history)
+    .sort((a, b) => {
+      const lastA = Math.max(...Object.keys(a[1].history).map(Number));
+      const lastB = Math.max(...Object.keys(b[1].history).map(Number));
+      return lastB - lastA;
+    });
 
   html += `<div class="stats-section"><div class="stats-section-title">🌐 أونلاين</div>`;
   if (onlineEntries.length === 0) {
     html += '<p class="stats-empty">لم تلعب أونلاين بعد</p>';
   } else {
     onlineEntries.forEach(([oppUid, v]) => {
-      html += vsRow(v.name || oppUid.slice(0,8), v.wins||0, v.losses||0, v.draws||0, 'online', oppUid);
+      html += vsRow(v.name || oppUid.slice(0, 8), computeFromHistory(v.history, _statsFilter));
     });
   }
   html += `</div>`;
 
   statsContent.innerHTML = html;
 
-  // ── ربط أزرار الإعادة ────────────────────────────
-  statsContent.querySelectorAll('.stats-reset-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const type = btn.dataset.type;
-      const key  = btn.dataset.key || null;
-      const name = btn.dataset.name;
-      if (!confirm(`إعادة تعيين السجل مع "${name}"؟\nلا يمكن التراجع عن هذا.`)) return;
-      btn.disabled = true;
-      btn.textContent = '⏳';
-      await resetStats(type, key);
-      await renderStatsModal(uid);   // إعادة رسم
+  // ── ربط تبويبات الفلتر ───────────────────────────────────────
+  statsContent.querySelectorAll('.sft-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _statsFilter = btn.dataset.filter;
+      renderStatsModal(uid);
     });
   });
 }

@@ -90,49 +90,36 @@ export async function getUserProfile(uid) {
 }
 
 // ─── تحديث إحصائيات AI ───────────────────────────────────────
-export async function updateAIStats(result) {
-  // result: 'win' | 'loss' | 'draw'
-  if (!currentUser) return;
-  const statsRef = ref(db, `users/${currentUser.uid}/stats/ai`);
-  const snap     = await get(statsRef);
-  const data     = snap.exists() ? snap.val() : { wins: 0, losses: 0, draws: 0 };
-  await update(statsRef, {
-    wins:   (data.wins   || 0) + (result === 'win'  ? 1 : 0),
-    losses: (data.losses || 0) + (result === 'loss' ? 1 : 0),
-    draws:  (data.draws  || 0) + (result === 'draw' ? 1 : 0),
-  });
+// r: 'w' | 'l' | 'd'  (نضغط الحجم — كل record 1 حرف + timestamp)
+function _pushGame(basePath, r) {
+  const ts = Date.now();
+  return update(ref(db, `${basePath}/history/${ts}`), { r });
 }
 
-// vsName: اسم اللاعب الثاني (اختياري) — يُحفظ تحت stats/local/vs_{vsName}
+export async function updateAIStats(result) {
+  if (!currentUser) return;
+  const r = result === 'win' ? 'w' : result === 'loss' ? 'l' : 'd';
+  await _pushGame(`users/${currentUser.uid}/stats/ai`, r);
+}
+
 export async function updateLocalStats(result, vsName) {
   if (!currentUser) return;
-
-  // مسار مخصص لكل خصم إذا توفر اسمه
-  const key      = vsName ? `vs_${vsName.trim().toLowerCase().replace(/\s+/g, '_')}` : '__general__';
-  const statsRef = ref(db, `users/${currentUser.uid}/stats/local/${key}`);
-  const snap     = await get(statsRef);
-  const data     = snap.exists() ? snap.val() : { wins: 0, losses: 0, draws: 0, name: vsName || '' };
-  await update(statsRef, {
-    name:   vsName || data.name || '',
-    wins:   (data.wins   || 0) + (result === 'win'  ? 1 : 0),
-    losses: (data.losses || 0) + (result === 'loss' ? 1 : 0),
-    draws:  (data.draws  || 0) + (result === 'draw' ? 1 : 0),
-    lastPlayed: Date.now(),
-  });
+  const key  = vsName
+    ? `vs_${vsName.trim().toLowerCase().replace(/\s+/g, '_')}`
+    : '__general__';
+  const base = `users/${currentUser.uid}/stats/local/${key}`;
+  // نحفظ الاسم مرة واحدة على المسار الرئيسي
+  await update(ref(db, base), { name: vsName || '' });
+  const r = result === 'win' ? 'w' : result === 'loss' ? 'l' : 'd';
+  await _pushGame(base, r);
 }
 
 export async function updateOnlineStats(result, opponentUid, opponentName) {
   if (!currentUser || !opponentUid) return;
-  const statsRef = ref(db, `users/${currentUser.uid}/stats/online/${opponentUid}`);
-  const snap     = await get(statsRef);
-  const data     = snap.exists() ? snap.val() : { wins: 0, losses: 0, draws: 0 };
-  await update(statsRef, {
-    name:   opponentName || data.name || opponentUid,
-    wins:   (data.wins   || 0) + (result === 'win'  ? 1 : 0),
-    losses: (data.losses || 0) + (result === 'loss' ? 1 : 0),
-    draws:  (data.draws  || 0) + (result === 'draw' ? 1 : 0),
-    lastPlayed: Date.now(),
-  });
+  const base = `users/${currentUser.uid}/stats/online/${opponentUid}`;
+  await update(ref(db, base), { name: opponentName || opponentUid });
+  const r = result === 'win' ? 'w' : result === 'loss' ? 'l' : 'd';
+  await _pushGame(base, r);
 }
 
 // ─── جلب كل الإحصائيات ───────────────────────────────────────

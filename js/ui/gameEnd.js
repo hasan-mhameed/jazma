@@ -46,49 +46,41 @@ export async function endGame(cfg, scores) {
       return winnerNum === myNum ? 'win' : 'loss';
     };
 
+    // مساعد يحسب من history (كل الوقت)
+    function fromHistory(h) {
+      if (!h || typeof h !== 'object') return { w: 0, l: 0, d: 0 };
+      const vals = Object.values(h);
+      return {
+        w: vals.filter(v => v.r === 'w').length,
+        l: vals.filter(v => v.r === 'l').length,
+        d: vals.filter(v => v.r === 'd').length,
+      };
+    }
+
     if (cfg.aiMode === "ai") {
       await updateAIStats(getResult(1));
-      // جلب سجل AI بعد التحديث
-      const stats = await getAllStats(currentUser.uid);
-      const ai    = stats.ai || {};
-      headToHead  = {
-        myW:   (ai.wins   || 0),
-        myL:   (ai.losses || 0),
-        myD:   (ai.draws  || 0),
-        label: "أنت vs الكمبيوتر",
-      };
+      const stats   = await getAllStats(currentUser.uid);
+      const { w, l, d } = fromHistory(stats.ai?.history);
+      headToHead = { myW: w, myL: l, myD: d, label: "أنت vs الكمبيوتر" };
 
     } else if (cfg.aiMode === "online") {
       const myNum       = cfg.onlinePlayerNum;
       const opponentUid = cfg.onlineOpponentUid;
       const oppName     = cfg.onlinePlayerNames?.[myNum === 1 ? 2 : 1] || "الخصم";
       await updateOnlineStats(getResult(myNum), opponentUid, oppName);
-      // جلب السجل مع هذا الخصم
       const stats = await getAllStats(currentUser.uid);
-      const vs    = stats.online?.[opponentUid] || {};
-      headToHead  = {
-        myW:   (vs.wins   || 0),
-        myL:   (vs.losses || 0),
-        myD:   (vs.draws  || 0),
-        label: `أنت vs ${oppName}`,
-      };
+      const { w, l, d } = fromHistory(stats.online?.[opponentUid]?.history);
+      headToHead = { myW: w, myL: l, myD: d, label: `أنت vs ${oppName}` };
 
     } else {
-      // محلي — نستخدم اسم اللاعب 2 كمفتاح
       const p2 = cfg.localPlayerNames?.[2] || '';
       await updateLocalStats(getResult(1), p2);
-      // جلب السجل مع هذا الخصم
       const stats = await getAllStats(currentUser.uid);
       const key   = p2
         ? `vs_${p2.trim().toLowerCase().replace(/\s+/g, '_')}`
         : '__general__';
-      const vs    = stats.local?.[key] || {};
-      headToHead  = {
-        myW:   (vs.wins   || 0),
-        myL:   (vs.losses || 0),
-        myD:   (vs.draws  || 0),
-        label: p2 ? `أنت vs ${p2}` : "محلي",
-      };
+      const { w, l, d } = fromHistory(stats.local?.[key]?.history);
+      headToHead = { myW: w, myL: l, myD: d, label: p2 ? `أنت vs ${p2}` : "محلي" };
     }
 
     window._refreshStats?.();
