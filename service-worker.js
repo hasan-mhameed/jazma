@@ -1,5 +1,5 @@
-// 📄 service-worker.js — v13.0
-const CACHE_NAME = "jazma-v13.0";
+// 📄 service-worker.js — v13.2
+const CACHE_NAME = "jazma-v13.2";
 const ASSETS = [
   "/jazma/",
   "/jazma/index.html",
