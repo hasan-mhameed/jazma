@@ -185,8 +185,6 @@ async function renderStatsModal(uid) {
       <div class="smg-ranks-row">${rankChips}</div>`;
   }
   html += `</div>`;
-  }
-  html += `</div>`;
 
   // ── أونلاين ──────────────────────────────────────────────────
   const onlineEntries = Object.entries(stats.online || {})
