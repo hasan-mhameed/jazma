@@ -149,3 +149,14 @@ export async function resetStats(type, key) {
     : `users/${currentUser.uid}/stats/${type}`;
   await remove(ref(db, path));
 }
+
+// ─── إحصائيات متعدد اللاعبين (3-4) ──────────────────────────
+// rank: مركزك (1=أول)، players: عدد اللاعبين، score: نقاطك
+export async function updateMultiStats(rank, players, score) {
+  if (!currentUser) return;
+  const ts = Date.now();
+  await update(
+    ref(db, `users/${currentUser.uid}/stats/multi/history/${ts}`),
+    { rank, players, score }
+  );
+}

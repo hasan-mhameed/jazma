@@ -1,7 +1,7 @@
-// 📄 gameEnd.js — v13.0
+// 📄 gameEnd.js — v13.2
 import { audioManager } from "../audio/audioManager.js";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         currentUser, getAllStats } from "../auth.js";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js";
 
 export async function endGame(cfg, scores) {
   const totalSquares = (cfg.rows - 1) * (cfg.cols - 1);
@@ -38,7 +38,7 @@ export async function endGame(cfg, scores) {
   }
 
   // ── تحديث الإحصائيات ─────────────────────────────────────────
-  let headToHead = null;  // { myW, myL, myD, label }
+  let headToHead = null;  // { myW, myL, myD, label } أو { isMulti, rank, ... }
 
   if (currentUser) {
     const getResult = (myNum) => {
@@ -46,7 +46,7 @@ export async function endGame(cfg, scores) {
       return winnerNum === myNum ? 'win' : 'loss';
     };
 
-    // مساعد يحسب من history (كل الوقت)
+    // مساعد يحسب من history 1v1
     function fromHistory(h) {
       if (!h || typeof h !== 'object') return { w: 0, l: 0, d: 0 };
       const vals = Object.values(h);
@@ -57,7 +57,32 @@ export async function endGame(cfg, scores) {
       };
     }
 
-    if (cfg.aiMode === "ai") {
+    const isMulti = cfg.players >= 3;
+
+    if (isMulti) {
+      // ── متعدد اللاعبين: نسجل مركز اللاعب 1 ونقاطه ──────────
+      const myRank  = ranking.findIndex(p => p.player === 1) + 1;
+      const myScore = scores[1] || 0;
+      await updateMultiStats(myRank, cfg.players, myScore);
+
+      // نجلب الإحصائيات الفردية لعرضها
+      const stats   = await getAllStats(currentUser.uid);
+      const history = stats.multi?.history || {};
+      const records = Object.values(history);
+      const total   = records.length;
+      const wins    = records.filter(r => r.rank === 1).length;
+      const avgScore = total > 0
+        ? (records.reduce((s, r) => s + (r.score || 0), 0) / total).toFixed(1)
+        : 0;
+      headToHead = {
+        isMulti: true,
+        total, wins, avgScore,
+        myRank,
+        players: cfg.players,
+        label: `${cfg.players} لاعبين`,
+      };
+
+    } else if (cfg.aiMode === "ai") {
       await updateAIStats(getResult(1));
       const stats   = await getAllStats(currentUser.uid);
       const { w, l, d } = fromHistory(stats.ai?.history);
@@ -111,19 +136,33 @@ export async function endGame(cfg, scores) {
     });
   }
 
-  // سجل أنت vs الخصم
+  // سجل أنت vs الخصم / إحصائياتك الفردية
   if (headToHeadEl) {
     if (headToHead && currentUser) {
-      const { myW, myL, myD, label } = headToHead;
-      const draws = myD > 0 ? ` · 🤝 ${myD}` : '';
-      headToHeadEl.innerHTML = `
-        <div class="h2h-label">${label}</div>
-        <div class="h2h-score">
-          <span class="h2h-win">🏆 ${myW}</span>
-          <span class="h2h-sep">–</span>
-          <span class="h2h-loss">💔 ${myL}</span>
-          ${myD > 0 ? `<span class="h2h-sep">·</span><span class="h2h-draw">🤝 ${myD}</span>` : ''}
-        </div>`;
+      if (headToHead.isMulti) {
+        const { total, wins, avgScore, myRank, players } = headToHead;
+        const winPct   = total > 0 ? Math.round((wins / total) * 100) : 0;
+        const medals    = ['🥇','🥈','🥉'];
+        const rankEmoji = medals[myRank - 1] ?? `#${myRank}`;
+        headToHeadEl.innerHTML = `
+          <div class="h2h-label">إحصائياتك — ${players} لاعبين</div>
+          <div class="h2h-multi-row">
+            <span class="hm-stat"><span class="hm-val">${rankEmoji}</span><span class="hm-lbl">هذه الجولة</span></span>
+            <span class="hm-stat"><span class="hm-val hm-gold">${winPct}%</span><span class="hm-lbl">نسبة الأول</span></span>
+            <span class="hm-stat"><span class="hm-val">${avgScore}</span><span class="hm-lbl">متوسط النقاط</span></span>
+            <span class="hm-stat"><span class="hm-val">${total}</span><span class="hm-lbl">مباراة</span></span>
+          </div>`;
+      } else {
+        const { myW, myL, myD, label } = headToHead;
+        headToHeadEl.innerHTML = `
+          <div class="h2h-label">${label}</div>
+          <div class="h2h-score">
+            <span class="h2h-win">🏆 ${myW}</span>
+            <span class="h2h-sep">–</span>
+            <span class="h2h-loss">💔 ${myL}</span>
+            ${myD > 0 ? `<span class="h2h-sep">·</span><span class="h2h-draw">🤝 ${myD}</span>` : ''}
+          </div>`;
+      }
       headToHeadEl.classList.remove("hidden");
     } else {
       headToHeadEl.classList.add("hidden");

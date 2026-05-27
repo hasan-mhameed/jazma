@@ -1570,3 +1570,42 @@ h1 {
 }
 .sft-btn:hover  { color: #aaa; background: #1a1a30; }
 .sft-btn.active { background: #7c6af7; color: #fff; font-weight: 600; }
+
+/* ── إحصائيات متعدد اللاعبين — المودال ── */
+.stats-multi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 4px;
+}
+.smg-cell {
+  background: #0e0e20;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.smg-val      { font-size: 1.15rem; font-weight: 700; color: #e0e0ff; }
+.smg-lbl      { font-size: 0.75rem; color: #666; }
+.smg-gold     { color: #fbbf24; }
+.smg-silver   { color: #94a3b8; }
+
+/* ── إحصائيات متعدد اللاعبين — شاشة النتيجة ── */
+.h2h-multi-row {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.hm-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.hm-val  { font-size: 1.1rem; font-weight: 700; color: #e0e0ff; }
+.hm-lbl  { font-size: 0.7rem; color: #666; }
+.hm-gold { color: #fbbf24; }

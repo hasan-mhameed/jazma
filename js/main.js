@@ -29,9 +29,9 @@ function computeFromHistory(historyObj, filter) {
   if (!historyObj || typeof historyObj !== 'object')
     return { w: 0, l: 0, d: 0, total: 0 };
 
-  let records = Object.entries(historyObj)          // [[ts, {r}], ...]
+  let records = Object.entries(historyObj)
     .map(([ts, v]) => ({ ts: Number(ts), r: v.r }))
-    .sort((a, b) => a.ts - b.ts);                   // أقدم → أحدث
+    .sort((a, b) => a.ts - b.ts);
 
   if (filter === 'month') {
     const now   = new Date();
@@ -47,7 +47,35 @@ function computeFromHistory(historyObj, filter) {
   return { w, l, d, total: w + l + d };
 }
 
-// الفلتر النشط (مشترك بين المودال وshowHead2Head)
+// ── حساب إحصائيات متعدد اللاعبين من history ───────────────────
+function computeMultiFromHistory(historyObj, filter) {
+  if (!historyObj || typeof historyObj !== 'object')
+    return { total: 0, wins: 0, avgScore: '0', ranks: {} };
+
+  let records = Object.entries(historyObj)
+    .map(([ts, v]) => ({ ts: Number(ts), rank: v.rank, players: v.players, score: v.score || 0 }))
+    .sort((a, b) => a.ts - b.ts);
+
+  if (filter === 'month') {
+    const now   = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    records = records.filter(g => g.ts >= start);
+  } else if (filter === 'last10') {
+    records = records.slice(-10);
+  }
+
+  const total    = records.length;
+  const wins     = records.filter(r => r.rank === 1).length;
+  const avgScore = total > 0
+    ? (records.reduce((s, r) => s + r.score, 0) / total).toFixed(1)
+    : '0';
+  // توزيع المراكز
+  const ranks = {};
+  records.forEach(r => { ranks[r.rank] = (ranks[r.rank] || 0) + 1; });
+  return { total, wins, avgScore, ranks };
+}
+
+// الفلتر النشط
 let _statsFilter = 'all';
 
 async function renderStatsModal(uid) {
@@ -110,8 +138,42 @@ async function renderStatsModal(uid) {
   }
   html += `</div>`;
 
-  // ── أونلاين ──────────────────────────────────────────────────
-  const onlineEntries = Object.entries(stats.online || {})
+  // ── متعدد اللاعبين (3-4) ─────────────────────────────────────
+  const multiHistory = stats.multi?.history || {};
+  const multiRecords = Object.entries(multiHistory)
+    .map(([ts, v]) => ({ ts: Number(ts), ...v }))
+    .sort((a, b) => a.ts - b.ts);
+
+  // فلترة حسب الـ filter المختار
+  let filteredMulti = multiRecords;
+  if (_statsFilter === 'month') {
+    const start = new Date();
+    start.setDate(1); start.setHours(0,0,0,0);
+    filteredMulti = multiRecords.filter(r => r.ts >= start.getTime());
+  } else if (_statsFilter === 'last10') {
+    filteredMulti = multiRecords.slice(-10);
+  }
+
+  html += `<div class="stats-section"><div class="stats-section-title">👥 متعدد اللاعبين (3-4)</div>`;
+  if (filteredMulti.length === 0) {
+    html += `<p class="stats-empty">${multiRecords.length === 0 ? 'لم تلعب بعد' : 'لا مباريات في هذه الفترة'}</p>`;
+  } else {
+    const total    = filteredMulti.length;
+    const firsts   = filteredMulti.filter(r => r.rank === 1).length;
+    const seconds  = filteredMulti.filter(r => r.rank === 2).length;
+    const avgScore = (filteredMulti.reduce((s, r) => s + (r.score || 0), 0) / total).toFixed(1);
+    const pct1st   = Math.round((firsts  / total) * 100);
+    const pct2nd   = Math.round((seconds / total) * 100);
+
+    html += `
+      <div class="stats-multi-grid">
+        <div class="smg-cell"><span class="smg-val">${total}</span><span class="smg-lbl">مباراة</span></div>
+        <div class="smg-cell"><span class="smg-val smg-gold">🥇 ${pct1st}%</span><span class="smg-lbl">نسبة الأول</span></div>
+        <div class="smg-cell"><span class="smg-val smg-silver">🥈 ${pct2nd}%</span><span class="smg-lbl">نسبة الثاني</span></div>
+        <div class="smg-cell"><span class="smg-val">⌀ ${avgScore}</span><span class="smg-lbl">متوسط النقاط</span></div>
+      </div>`;
+  }
+  html += `</div>`;
     .filter(([, v]) => v?.history)
     .sort((a, b) => {
       const lastA = Math.max(...Object.keys(a[1].history).map(Number));
@@ -126,6 +188,32 @@ async function renderStatsModal(uid) {
     onlineEntries.forEach(([oppUid, v]) => {
       html += vsRow(v.name || oppUid.slice(0, 8), computeFromHistory(v.history, _statsFilter));
     });
+  }
+  html += `</div>`;
+
+  // ── متعدد اللاعبين (3-4) ─────────────────────────────────────
+  const multiHistory = stats.multi?.history;
+  const { total: mTotal, wins: mWins, avgScore, ranks } =
+    computeMultiFromHistory(multiHistory, _statsFilter);
+  const winPct = mTotal > 0 ? Math.round((mWins / mTotal) * 100) : 0;
+
+  html += `<div class="stats-section"><div class="stats-section-title">👥 متعدد اللاعبين (3-4)</div>`;
+  if (mTotal === 0) {
+    html += '<p class="stats-empty">لا مباريات في هذه الفترة</p>';
+  } else {
+    html += `
+      <div class="multi-stats-grid">
+        <div class="ms-card"><span class="ms-val">${mTotal}</span><span class="ms-lbl">🎮 مباراة</span></div>
+        <div class="ms-card"><span class="ms-val ms-gold">${winPct}%</span><span class="ms-lbl">🥇 نسبة الأول</span></div>
+        <div class="ms-card"><span class="ms-val">${avgScore}</span><span class="ms-lbl">⌀ متوسط النقاط</span></div>
+      </div>
+      <div class="multi-ranks-row">
+        ${[1,2,3,4].map(r => {
+          const cnt = ranks[r] || 0;
+          const emojis = ['🥇','🥈','🥉','4️⃣'];
+          return `<span class="rank-chip ${cnt === 0 ? 'rank-zero' : ''}">${emojis[r-1]} ${cnt}</span>`;
+        }).join('')}
+      </div>`;
   }
   html += `</div>`;
 
