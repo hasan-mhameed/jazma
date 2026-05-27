@@ -174,6 +174,9 @@ async function renderStatsModal(uid) {
       </div>`;
   }
   html += `</div>`;
+
+  // ── أونلاين ──────────────────────────────────────────────────
+  const onlineEntries = Object.entries(stats.online || {})
     .filter(([, v]) => v?.history)
     .sort((a, b) => {
       const lastA = Math.max(...Object.keys(a[1].history).map(Number));
@@ -188,32 +191,6 @@ async function renderStatsModal(uid) {
     onlineEntries.forEach(([oppUid, v]) => {
       html += vsRow(v.name || oppUid.slice(0, 8), computeFromHistory(v.history, _statsFilter));
     });
-  }
-  html += `</div>`;
-
-  // ── متعدد اللاعبين (3-4) ─────────────────────────────────────
-  const multiHistory = stats.multi?.history;
-  const { total: mTotal, wins: mWins, avgScore, ranks } =
-    computeMultiFromHistory(multiHistory, _statsFilter);
-  const winPct = mTotal > 0 ? Math.round((mWins / mTotal) * 100) : 0;
-
-  html += `<div class="stats-section"><div class="stats-section-title">👥 متعدد اللاعبين (3-4)</div>`;
-  if (mTotal === 0) {
-    html += '<p class="stats-empty">لا مباريات في هذه الفترة</p>';
-  } else {
-    html += `
-      <div class="multi-stats-grid">
-        <div class="ms-card"><span class="ms-val">${mTotal}</span><span class="ms-lbl">🎮 مباراة</span></div>
-        <div class="ms-card"><span class="ms-val ms-gold">${winPct}%</span><span class="ms-lbl">🥇 نسبة الأول</span></div>
-        <div class="ms-card"><span class="ms-val">${avgScore}</span><span class="ms-lbl">⌀ متوسط النقاط</span></div>
-      </div>
-      <div class="multi-ranks-row">
-        ${[1,2,3,4].map(r => {
-          const cnt = ranks[r] || 0;
-          const emojis = ['🥇','🥈','🥉','4️⃣'];
-          return `<span class="rank-chip ${cnt === 0 ? 'rank-zero' : ''}">${emojis[r-1]} ${cnt}</span>`;
-        }).join('')}
-      </div>`;
   }
   html += `</div>`;
 
