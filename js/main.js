@@ -138,13 +138,12 @@ async function renderStatsModal(uid) {
   }
   html += `</div>`;
 
-  // ── متعدد اللاعبين (3-4) ─────────────────────────────────────
+  // ── متعدد اللاعبين ───────────────────────────────────────────
   const multiHistory = stats.multi?.history || {};
   const multiRecords = Object.entries(multiHistory)
     .map(([ts, v]) => ({ ts: Number(ts), ...v }))
     .sort((a, b) => a.ts - b.ts);
 
-  // فلترة حسب الـ filter المختار
   let filteredMulti = multiRecords;
   if (_statsFilter === 'month') {
     const start = new Date();
@@ -154,24 +153,38 @@ async function renderStatsModal(uid) {
     filteredMulti = multiRecords.slice(-10);
   }
 
-  html += `<div class="stats-section"><div class="stats-section-title">👥 متعدد اللاعبين (3-4)</div>`;
+  html += `<div class="stats-section"><div class="stats-section-title">👥 متعدد اللاعبين</div>`;
   if (filteredMulti.length === 0) {
     html += `<p class="stats-empty">${multiRecords.length === 0 ? 'لم تلعب بعد' : 'لا مباريات في هذه الفترة'}</p>`;
   } else {
     const total    = filteredMulti.length;
-    const firsts   = filteredMulti.filter(r => r.rank === 1).length;
-    const seconds  = filteredMulti.filter(r => r.rank === 2).length;
     const avgScore = (filteredMulti.reduce((s, r) => s + (r.score || 0), 0) / total).toFixed(1);
-    const pct1st   = Math.round((firsts  / total) * 100);
-    const pct2nd   = Math.round((seconds / total) * 100);
+
+    // أعلى مركز موجود في البيانات (مرن لأي عدد لاعبين)
+    const maxRank  = Math.max(...filteredMulti.map(r => r.rank || 1));
+    const medals   = ['🥇','🥈','🥉'];
+
+    // صف المراكز — مرن لأي عدد
+    const rankChips = Array.from({ length: maxRank }, (_, i) => {
+      const rank  = i + 1;
+      const count = filteredMulti.filter(r => r.rank === rank).length;
+      const pct   = Math.round((count / total) * 100);
+      const label = medals[i] ?? `#${rank}`;
+      const cls   = rank <= 3 ? `smg-rank-${rank}` : 'smg-rank-other';
+      return `<div class="smg-rank-chip ${cls}">
+        <span class="smg-rank-label">${label}</span>
+        <span class="smg-rank-pct">${pct}%</span>
+      </div>`;
+    }).join('');
 
     html += `
       <div class="stats-multi-grid">
-        <div class="smg-cell"><span class="smg-val">${total}</span><span class="smg-lbl">مباراة</span></div>
-        <div class="smg-cell"><span class="smg-val smg-gold">🥇 ${pct1st}%</span><span class="smg-lbl">نسبة الأول</span></div>
-        <div class="smg-cell"><span class="smg-val smg-silver">🥈 ${pct2nd}%</span><span class="smg-lbl">نسبة الثاني</span></div>
+        <div class="smg-cell"><span class="smg-val">${total}</span><span class="smg-lbl">🎮 مباراة</span></div>
         <div class="smg-cell"><span class="smg-val">⌀ ${avgScore}</span><span class="smg-lbl">متوسط النقاط</span></div>
-      </div>`;
+      </div>
+      <div class="smg-ranks-row">${rankChips}</div>`;
+  }
+  html += `</div>`;
   }
   html += `</div>`;
 

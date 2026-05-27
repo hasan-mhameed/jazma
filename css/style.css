@@ -1574,7 +1574,7 @@ h1 {
 /* ── إحصائيات متعدد اللاعبين — المودال ── */
 .stats-multi-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-top: 4px;
 }
@@ -1609,3 +1609,27 @@ h1 {
 .hm-val  { font-size: 1.1rem; font-weight: 700; color: #e0e0ff; }
 .hm-lbl  { font-size: 0.7rem; color: #666; }
 .hm-gold { color: #fbbf24; }
+
+/* ── صف المراكز — متعدد اللاعبين ── */
+.smg-ranks-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.smg-rank-chip {
+  flex: 1;
+  min-width: 52px;
+  background: #0e0e20;
+  border-radius: 8px;
+  padding: 8px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.smg-rank-label { font-size: 1.1rem; }
+.smg-rank-pct   { font-size: 0.8rem; font-weight: 600; color: #aaa; }
+.smg-rank-1 .smg-rank-pct { color: #fbbf24; }
+.smg-rank-2 .smg-rank-pct { color: #94a3b8; }
+.smg-rank-3 .smg-rank-pct { color: #cd7c3a; }
