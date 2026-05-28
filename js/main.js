@@ -79,86 +79,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── Leaderboard ──────────────────────────────────────────────
   initLeaderboardUI();
 
-  // ── Friends ──────────────────────────────────────────────────
-  initFriendsUI({
-    onInviteFriend: async friend => {
-      const myName = userNameEl.textContent || "لاعب";
-      const gridSize = +document.getElementById("grid-size").value || 4;
-      config.rows = config.cols = gridSize;
-      config.players = 2;
-
-      await sendInviteGame(friend, config, myName, {
-        onOpponentJoined: oppName => {
-          config.onlinePlayerNames = { 1: myName, 2: oppName };
-          document.getElementById("online-my-name").textContent  = myName;
-          document.getElementById("online-opp-name").textContent = oppName;
-          document.getElementById("friends-panel").classList.add("hidden");
-          onlineUI.showStep("playing");
-          launchOnlineGame(1, onlineTurnInd, () => launchGame());
-        },
-        onRoomReady: (code, friendName) => {
-          setupScreen.classList.add("hidden");
-          onlineScreen.classList.remove("hidden");
-          document.getElementById("room-code-display").classList.add("hidden");
-          document.getElementById("copy-code-btn").classList.add("hidden");
-          document.getElementById("lobby-share-hint").classList.add("hidden");
-          onlineUI.showStep("lobby");
-          document.getElementById("lobby-status-text").textContent = `بانتظار ${friendName}...`;
-          document.getElementById("friends-panel").classList.add("hidden");
-        },
-        onRejection: name => {
-          onlineScreen.classList.add("hidden");
-          setupScreen.classList.remove("hidden");
-          showRejectionAlert(name);
-        },
-      });
-    },
-    onOpenChat: friend => openChat(friend),
-  });
-
-  // ── Invite Listener ──────────────────────────────────────────
-  initInviteListener({
-    onInviteAccepted: async invite => {
-      config.online = true;
-      config.onlinePlayerNum = 2;
-      setupScreen.classList.add("hidden");
-      onlineScreen.classList.remove("hidden");
-      onlineUI.showStep("playing");
-      try {
-        const roomData = await onlineManager.joinRoom(invite.roomCode, userNameEl.textContent || "لاعب");
-        config.rows = roomData.cfg.rows; config.cols = roomData.cfg.cols;
-        config.players = 2;
-        config.onlinePlayerNames = { 1: invite.fromName, 2: userNameEl.textContent };
-        document.getElementById("online-my-name").textContent  = userNameEl.textContent;
-        document.getElementById("online-opp-name").textContent = invite.fromName;
-        launchOnlineGame(2, onlineTurnInd, () => launchGame());
-      } catch {
-        onlineScreen.classList.add("hidden");
-        setupScreen.classList.remove("hidden");
-      }
-    },
-  });
-
-  // ── Chat UI ──────────────────────────────────────────────────
-  initChatUI({});
-  document.addEventListener("chat:invite", e => {
-    const friend = e.detail;
-    document.getElementById("friends-panel").classList.remove("hidden");
-    initFriendsUI.onInviteFriend?.(friend);
-  });
-
-  // ── إحصائيات ────────────────────────────────────────────────
-  statsBtn?.addEventListener("click", async () => {
-    const uid = getCurrentUser()?.uid; if (!uid) return;
-    statsModal?.classList.remove("hidden");
-    if (statsContent) {
-      statsContent.innerHTML = '<p class="stats-loading">⏳ جاري التحميل...</p>';
-      await renderStatsModal(uid);
-    }
-  });
-  closeStatsBtn?.addEventListener("click", () => statsModal?.classList.add("hidden"));
-  statsModal?.addEventListener("click", e => { if (e.target === statsModal) statsModal.classList.add("hidden"); });
-
   // ── onUserChange ─────────────────────────────────────────────
   onUserChange(async user => {
     if (user) {
@@ -168,6 +88,66 @@ document.addEventListener("DOMContentLoaded", () => {
       userPhoto.src = user.photoURL || "";
       userPhoto.style.display = user.photoURL ? "block" : "none";
       userNameEl.textContent  = user.displayName || "لاعب";
+
+      // ── Friends (بعد التحقق من الهوية) ──────────────────────
+      initFriendsUI({
+        onInviteFriend: async friend => {
+          const myName = userNameEl.textContent || "لاعب";
+          const gridSize = +document.getElementById("grid-size").value || 4;
+          config.rows = config.cols = gridSize;
+          config.players = 2;
+
+          await sendInviteGame(friend, config, myName, {
+            onOpponentJoined: oppName => {
+              config.onlinePlayerNames = { 1: myName, 2: oppName };
+              document.getElementById("online-my-name").textContent  = myName;
+              document.getElementById("online-opp-name").textContent = oppName;
+              document.getElementById("friends-panel").classList.add("hidden");
+              onlineUI.showStep("playing");
+              launchOnlineGame(1, onlineTurnInd, () => launchGame());
+            },
+            onRoomReady: (code, friendName) => {
+              setupScreen.classList.add("hidden");
+              onlineScreen.classList.remove("hidden");
+              document.getElementById("room-code-display").classList.add("hidden");
+              document.getElementById("copy-code-btn").classList.add("hidden");
+              document.getElementById("lobby-share-hint").classList.add("hidden");
+              onlineUI.showStep("lobby");
+              document.getElementById("lobby-status-text").textContent = `بانتظار ${friendName}...`;
+              document.getElementById("friends-panel").classList.add("hidden");
+            },
+            onRejection: name => {
+              onlineScreen.classList.add("hidden");
+              setupScreen.classList.remove("hidden");
+              showRejectionAlert(name);
+            },
+          });
+        },
+        onOpenChat: friend => openChat(friend),
+      });
+
+      // ── Invite Listener ────────────────────────────────────
+      initInviteListener({
+        onInviteAccepted: async invite => {
+          config.online = true;
+          config.onlinePlayerNum = 2;
+          setupScreen.classList.add("hidden");
+          onlineScreen.classList.remove("hidden");
+          onlineUI.showStep("playing");
+          try {
+            const roomData = await onlineManager.joinRoom(invite.roomCode, userNameEl.textContent || "لاعب");
+            config.rows = roomData.cfg.rows; config.cols = roomData.cfg.cols;
+            config.players = 2;
+            config.onlinePlayerNames = { 1: invite.fromName, 2: userNameEl.textContent };
+            document.getElementById("online-my-name").textContent  = userNameEl.textContent;
+            document.getElementById("online-opp-name").textContent = invite.fromName;
+            launchOnlineGame(2, onlineTurnInd, () => launchGame());
+          } catch {
+            onlineScreen.classList.add("hidden");
+            setupScreen.classList.remove("hidden");
+          }
+        },
+      });
 
       initChatNotifications();
       window._refreshStats = async () => {
