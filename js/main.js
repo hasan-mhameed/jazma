@@ -6,9 +6,9 @@ import { startBoard, updateScoreboard, resetState } from "./board.js";
 import { updateTurnUI }                        from "./ui/turnManager.js";
 import { audioManager }                        from "./audio/audioManager.js";
 import { onlineManager }                       from "./firebase.js";
-import { onUserChange, getCurrentUser, getAllStats } from "./auth.js";
+import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js";
 
-import { initAuthUI }          from "./ui/authUI.js";
+import { initAuthUI, initGuestUI }  from "./ui/authUI.js";
 import { initGameSetup }       from "./ui/gameSetup.js";
 import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js";
 import { initFriendsUI }       from "./ui/friendsUI.js";
@@ -48,6 +48,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ── Auth UI ──────────────────────────────────────────────────
   initAuthUI();
+  initGuestUI();
 
   // ── إطلاق اللعبة ────────────────────────────────────────────
   function launchGame() {
@@ -101,7 +102,28 @@ document.addEventListener("DOMContentLoaded", () => {
       setupScreen.classList.remove("hidden");
       userPhoto.src = user.photoURL || "";
       userPhoto.style.display = user.photoURL ? "block" : "none";
-      userNameEl.textContent  = user.displayName || "لاعب";
+      userNameEl.textContent  = user.isAnonymous ? "👤 ضيف" : (user.displayName || "لاعب");
+
+      // ── إخفاء ميزات غير متاحة للضيف ───────────────────────
+      const guestHide = ["friends-btn", "leaderboard-btn", "stats-btn"];
+      const aiModeSelect = document.getElementById("ai-mode");
+      if (user.isAnonymous) {
+        guestHide.forEach(id => document.getElementById(id)?.classList.add("hidden"));
+        // نشيل خيار الأونلاين من القائمة
+        if (aiModeSelect) {
+          Array.from(aiModeSelect.options).forEach(o => {
+            if (o.value === "online") o.disabled = true;
+          });
+        }
+        // نطلق حدث لإظهار banner الترقية
+        document.dispatchEvent(new CustomEvent("user:guest"));
+      } else {
+        guestHide.forEach(id => document.getElementById(id)?.classList.remove("hidden"));
+        if (aiModeSelect) {
+          Array.from(aiModeSelect.options).forEach(o => { o.disabled = false; });
+        }
+        document.getElementById("guest-upgrade-banner")?.classList.add("hidden");
+      }
 
       // ── Friends (بعد التحقق من الهوية) ──────────────────────
       initFriendsUI({

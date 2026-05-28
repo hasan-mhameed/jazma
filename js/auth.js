@@ -3,7 +3,8 @@
 
 import { initializeApp, getApps }   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
-         createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile }
+         createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
+         signInAnonymously, linkWithPopup, linkWithCredential, EmailAuthProvider }
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getDatabase, ref, set, get, update, remove }
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
@@ -49,6 +50,34 @@ export async function signInWithEmail(email, password) {
 // ─── تسجيل الخروج ────────────────────────────────────────────
 export async function logout() {
   await signOut(auth);
+}
+
+// ── دخول كضيف ────────────────────────────────────────────────
+export async function loginAsGuest() {
+  const result = await signInAnonymously(auth);
+  return result.user;
+}
+
+// ── ترقية الضيف لحساب Google ─────────────────────────────────
+export async function upgradeGuestWithGoogle() {
+  const provider = new GoogleAuthProvider();
+  const result   = await linkWithPopup(auth.currentUser, provider);
+  await saveUserProfile(result.user);
+  return result.user;
+}
+
+// ── ترقية الضيف بإيميل وكلمة سر ─────────────────────────────
+export async function upgradeGuestWithEmail(name, email, password) {
+  const credential = EmailAuthProvider.credential(email, password);
+  const result     = await linkWithCredential(auth.currentUser, credential);
+  await updateProfile(result.user, { displayName: name });
+  await saveUserProfile(result.user);
+  return result.user;
+}
+
+// ── هل المستخدم ضيف؟ ─────────────────────────────────────────
+export function isGuest() {
+  return auth.currentUser?.isAnonymous ?? false;
 }
 
 // ─── الاستماع لحالة الدخول ───────────────────────────────────
