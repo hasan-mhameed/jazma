@@ -109,13 +109,17 @@ document.addEventListener("DOMContentLoaded", () => {
       const aiModeSelect = document.getElementById("ai-mode");
       if (user.isAnonymous) {
         guestHide.forEach(id => document.getElementById(id)?.classList.add("hidden"));
-        // نشيل خيار الأونلاين من القائمة
+        // نشيل خيار الأونلاين فقط — عدد اللاعبين يبقى حر
         if (aiModeSelect) {
           Array.from(aiModeSelect.options).forEach(o => {
             if (o.value === "online") o.disabled = true;
           });
+          // لو كان محدداً على online نرجعه لـ human
+          if (aiModeSelect.value === "online") aiModeSelect.value = "human";
         }
-        // نطلق حدث لإظهار banner الترقية
+        // نتأكد إن عدد اللاعبين مفعّل دايماً للضيف
+        document.getElementById("player-count").disabled = false;
+        document.getElementById("player-count").closest(".setup-section")?.classList.remove("hidden");
         document.dispatchEvent(new CustomEvent("user:guest"));
       } else {
         guestHide.forEach(id => document.getElementById(id)?.classList.remove("hidden"));
