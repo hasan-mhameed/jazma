@@ -76,6 +76,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── Online Game ──────────────────────────────────────────────
   const onlineUI = initOnlineGame({ onGameStart: () => launchGame() });
 
+  // ── Chat UI (مرة واحدة — الأزرار موجودة بالـ DOM دايماً) ────
+  initChatUI({});
+
   // ── Leaderboard ──────────────────────────────────────────────
   initLeaderboardUI();
 
