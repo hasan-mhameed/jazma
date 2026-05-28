@@ -7,7 +7,6 @@ import { updateTurnUI }                        from "./ui/turnManager.js";
 import { audioManager }                        from "./audio/audioManager.js";
 import { onlineManager }                       from "./firebase.js";
 import { onUserChange, getCurrentUser, getAllStats } from "./auth.js";
-import { playNotifSound }                      from "./audio/notif.js";
 
 import { initAuthUI }          from "./ui/authUI.js";
 import { initGameSetup }       from "./ui/gameSetup.js";
@@ -81,6 +80,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ── Leaderboard ──────────────────────────────────────────────
   initLeaderboardUI();
+
+  // ── إحصائيات (مرة واحدة) ────────────────────────────────────
+  statsBtn?.addEventListener("click", async () => {
+    const uid = getCurrentUser()?.uid; if (!uid) return;
+    statsModal?.classList.remove("hidden");
+    if (statsContent) {
+      statsContent.innerHTML = '<p class="stats-loading">⏳ جاري التحميل...</p>';
+      await renderStatsModal(uid);
+    }
+  });
+  closeStatsBtn?.addEventListener("click", () => statsModal?.classList.add("hidden"));
+  statsModal?.addEventListener("click", e => { if (e.target === statsModal) statsModal.classList.add("hidden"); });
 
   // ── onUserChange ─────────────────────────────────────────────
   onUserChange(async user => {
@@ -158,19 +169,6 @@ document.addEventListener("DOMContentLoaded", () => {
         await renderStatsModal(user.uid);
       };
 
-      // إشعارات
-      const notifBtn = document.getElementById("notif-btn");
-      if (notifBtn && "Notification" in window) {
-        if (Notification.permission === "granted") { notifBtn.classList.add("hidden"); }
-        else {
-          notifBtn.classList.remove("hidden");
-          notifBtn.addEventListener("click", async () => {
-            if (await Notification.requestPermission() === "granted") {
-              notifBtn.classList.add("hidden"); playNotifSound();
-            }
-          });
-        }
-      }
 
       // تثبيت PWA
       const installBtn = document.getElementById("install-btn");
