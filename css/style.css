@@ -1712,3 +1712,27 @@ h1 {
   border-radius: 8px; padding: 10px 12px;
   color: #e0e0ff; font-size: 0.95rem;
 }
+
+/* ── Reconnect Banner ── */
+#reconnect-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  background: #92400e;
+  color: #fef3c7;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  z-index: 9999;
+  animation: slideDown 0.3s ease;
+}
+.rc-spinner { animation: spin 1s linear infinite; display: inline-block; }
+@keyframes slideDown {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

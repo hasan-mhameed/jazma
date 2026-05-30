@@ -5,7 +5,7 @@ import { config }                              from "./config/config.js";
 import { startBoard, updateScoreboard, resetState } from "./board.js";
 import { updateTurnUI }                        from "./ui/turnManager.js";
 import { audioManager }                        from "./audio/audioManager.js";
-import { onlineManager }                       from "./firebase.js";
+import { onlineManager, cleanupOldRooms } from "./firebase.js";
 import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js";
 
 import { initAuthUI, initGuestUI }  from "./ui/authUI.js";
@@ -190,6 +190,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       initChatNotifications();
+      cleanupOldRooms(); // تنظيف الغرف القديمة صامت في الخلفية
       window._refreshStats = async () => {
         if (!statsContent || statsModal?.classList.contains("hidden")) return;
         await renderStatsModal(user.uid);

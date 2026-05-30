@@ -143,6 +143,28 @@ export function launchOnlineGame(myPlayerNum, onlineTurnInd, onGameStart) {
 
     onlineManager.onOpponentLeft(() => showDisconnectAlert());
     onlineManager.onRestart(() => showRestartAlert());
+
+    // ── مراقبة الاتصال ──────────────────────────────────────
+    let reconnectBanner = null;
+    onlineManager.onConnectionChange(connected => {
+      if (connected) {
+        reconnectBanner?.remove();
+        reconnectBanner = null;
+        if (onlineTurnInd) updateOnlineTurnIndicator(onlineTurnInd);
+      } else {
+        if (reconnectBanner) return;
+        reconnectBanner = document.createElement("div");
+        reconnectBanner.id = "reconnect-banner";
+        reconnectBanner.innerHTML = `
+          <span class="rc-spinner">⏳</span>
+          <span>انقطع الاتصال — جاري إعادة الاتصال...</span>`;
+        document.body.appendChild(reconnectBanner);
+        if (onlineTurnInd) {
+          onlineTurnInd.textContent = "⚡ جاري إعادة الاتصال...";
+          onlineTurnInd.style.color = "#fbbf24";
+        }
+      }
+    });
   }, 800);
 }
 

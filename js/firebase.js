@@ -1,6 +1,6 @@
 // 📄 firebase.js — v11.8
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, get, onValue, update, onDisconnect }
+import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getCurrentUser }   from "./auth.js";
 
@@ -19,6 +19,25 @@ const db  = getDatabase(app);
 
 function genCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// ── تنظيف الغرف القديمة (أكثر من ساعة) ─────────────────────────
+export async function cleanupOldRooms() {
+  try {
+    const snap = await get(ref(db, "rooms"));
+    if (!snap.exists()) return;
+    const now     = Date.now();
+    const oneHour = 60 * 60 * 1000;
+    const tasks   = [];
+    snap.forEach(child => {
+      const room = child.val();
+      const age  = now - (room.createdAt || 0);
+      if (age > oneHour || room.status === "finished") {
+        tasks.push(remove(ref(db, `rooms/${child.key}`)));
+      }
+    });
+    await Promise.all(tasks);
+  } catch { /* صامت */ }
 }
 
 export class OnlineManager {
@@ -41,19 +60,21 @@ export class OnlineManager {
     this._gameStarted = false;
 
     await set(ref(db, `rooms/${code}`), {
-      cfg:    { rows: cfg.rows, cols: cfg.cols },
-      status: "waiting",
-      p1name: name,
-      p1uid:  getCurrentUser()?.uid || "",
-      p2name: "",
-      p2uid:  "",
-      move: { key: "", by: 0, seq: 0 },  // ✅ نستخدم seq لتمييز الحركات
+      cfg:       { rows: cfg.rows, cols: cfg.cols },
+      status:    "waiting",
+      p1name:    name,
+      p1uid:     getCurrentUser()?.uid || "",
+      p2name:    "",
+      p2uid:     "",
+      createdAt: Date.now(),
+      move:      { key: "", by: 0, seq: 0 },
     });
 
     onDisconnect(ref(db, `rooms/${code}`)).remove();
     this._listenForPlayer2(code);
     this._listenForMoves(code);
     this._listenForRestart(code);
+    this._monitorConnection();
     return code;
   }
 
@@ -78,6 +99,7 @@ export class OnlineManager {
     this._listenForMoves(code);
     this._listenForOpponentLeave(code);
     this._listenForRestart(code);
+    this._monitorConnection();
     return { cfg: room.cfg, p1name: room.p1name, p1uid: room.p1uid };
   }
 
@@ -174,6 +196,18 @@ export class OnlineManager {
   onMove(cb)          { this._cbMove    = cb; }
   onOpponentJoined(cb){ this._cbJoined  = cb; }
   onOpponentLeft(cb)  { this._cbLeft    = cb; }
+  onConnectionChange(cb) { this._cbConnection = cb; }
+  isMyTurn(cp)        { return cp === this.playerNum; }
+
+  // ══ مراقبة الاتصال بـ Firebase ══════════════════════════════
+  _monitorConnection() {
+    const connRef = ref(db, ".info/connected");
+    const unsub   = onValue(connRef, snap => {
+      const connected = snap.val();
+      this._cbConnection && this._cbConnection(connected);
+    });
+    this._unsubs.push(unsub);
+  }
   isMyTurn(cp)        { return cp === this.playerNum; }
 
   async getOpponentUid() {
