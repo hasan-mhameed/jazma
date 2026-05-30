@@ -1,7 +1,7 @@
 // 📄 gameEnd.js — v13.2
-import { audioManager } from "../audio/audioManager.js";
+import { audioManager } from "../audio/audioManager.js?v=1780142398";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1780142398";
 
 export async function endGame(cfg, scores) {
   const totalSquares = (cfg.rows - 1) * (cfg.cols - 1);

@@ -1,14 +1,23 @@
 #!/bin/bash
-# ── تشغيله قبل كل رفع على GitHub ──
-# ./bump.sh
-
 TS=$(date +%s)
 
-# استبدال __BUILDTIME__ بـ timestamp حالي
-sed -i "s/v=__BUILDTIME__/v=${TS}/" index.html
+# 1. version في index.html
+sed -i "s/main\.js?v=[0-9]*/main.js?v=${TS}/" index.html
 
-# تحديث service worker
-sed -i "s/jazma-v[0-9.]*/jazma-v${TS}/" service-worker.js
+# 2. service worker
+sed -i "s/jazma-v[0-9]*/jazma-v${TS}/" service-worker.js
+
+# 3. version في كل local imports داخل ملفات JS
+find js -name "*.js" -print0 | xargs -0 perl -pi -e "
+  s|from (\")(\.{1,2}/[^\"?]+)\.js(\?v=\d+)?(\")| 'from ' . \$1 . \$2 . '.js?v=${TS}' . \$4 |ge;
+  s|from (\')(\.{1,2}/[^\'?]+)\.js(\?v=\d+)?(\')| 'from ' . \$1 . \$2 . '.js?v=${TS}' . \$4 |ge;
+"
 
 echo "✅ Version bumped to: ${TS}"
-echo "   الآن: git add . && git commit -m 'bump' && git push"
+
+# رفع على GitHub
+git add .
+git commit -m "v${TS}"
+git push
+
+echo "🚀 تم الرفع على GitHub!"
