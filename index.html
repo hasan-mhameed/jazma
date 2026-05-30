@@ -78,6 +78,7 @@
         </div>
         <div id="user-stats">
           <button id="stats-btn" title="إحصائياتي">📊 إحصائياتي</button>
+          <button id="history-btn" title="تاريخ المباريات">📜 المباريات</button>
         </div>
         <div id="user-actions">
 
@@ -251,7 +252,25 @@
         </div>
       </div>
 
-      <!-- 📊 modal الإحصائيات -->
+      <!-- 📜 modal التاريخ -->
+      <div id="history-modal" class="hidden">
+        <div id="history-box">
+          <div class="history-header">
+            <h2>📜 تاريخ المباريات</h2>
+            <button id="close-history-btn">✕</button>
+          </div>
+          <!-- فلاتر -->
+          <div class="history-filters">
+            <button class="hf-btn active" data-filter="all">الكل</button>
+            <button class="hf-btn" data-filter="ai">🤖 AI</button>
+            <button class="hf-btn" data-filter="local">👥 محلي</button>
+            <button class="hf-btn" data-filter="online">🌐 أونلاين</button>
+            <button class="hf-btn" data-filter="multi">🎮 متعدد</button>
+          </div>
+          <div id="history-list"></div>
+          <button id="history-load-more" class="hidden">⬇️ تحميل المزيد</button>
+        </div>
+      </div>
       <div id="stats-modal" class="hidden">
         <div id="stats-box">
           <div class="stats-header">
@@ -316,6 +335,6 @@
       </div>
     </main>
 
-    <script type="module" src="js/main.js?v=1780142398" defer></script>
+    <script type="module" src="js/main.js?v=1780144860" defer></script>
   </body>
 </html>

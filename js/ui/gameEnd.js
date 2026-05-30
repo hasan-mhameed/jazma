@@ -1,7 +1,11 @@
-// 📄 gameEnd.js — v13.2
-import { audioManager } from "../audio/audioManager.js?v=1780142398";
+// 📄 gameEnd.js — v14.2
+import { audioManager } from "../audio/audioManager.js?v=1780144860";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1780142398";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1780144860";
+import { saveMatch } from "../history.js?v=1780144860";
+
+export let _matchStartTime = Date.now();
+export function resetMatchTimer() { _matchStartTime = Date.now(); }
 
 export async function endGame(cfg, scores) {
   const totalSquares = (cfg.rows - 1) * (cfg.cols - 1);
@@ -109,6 +113,43 @@ export async function endGame(cfg, scores) {
     }
 
     window._refreshStats?.();
+
+    // ── حفظ المباراة في التاريخ ─────────────────────────────────
+    const duration = Math.floor((Date.now() - _matchStartTime) / 1000);
+    const grid     = `${cfg.rows}x${cfg.cols}`;
+
+    if (isMulti) {
+      const myRank  = ranking.findIndex(p => p.player === 1) + 1;
+      await saveMatch({
+        mode:    'multi',
+        result:  myRank === 1 ? 'win' : myRank === ranking.length ? 'loss' : 'draw',
+        myScore: scores[1] || 0,
+        oppScore: 0,
+        vs:      '',
+        grid, duration,
+      });
+    } else if (cfg.aiMode === 'ai') {
+      await saveMatch({
+        mode: 'ai', result: getResult(1),
+        myScore: scores[1] || 0, oppScore: scores[2] || 0,
+        vs: 'الكمبيوتر', grid, duration,
+      });
+    } else if (cfg.aiMode === 'online') {
+      const myNum  = cfg.onlinePlayerNum;
+      const oppName = cfg.onlinePlayerNames?.[myNum === 1 ? 2 : 1] || 'الخصم';
+      await saveMatch({
+        mode: 'online', result: getResult(myNum),
+        myScore: scores[myNum] || 0, oppScore: scores[myNum === 1 ? 2 : 1] || 0,
+        vs: oppName, grid, duration,
+      });
+    } else {
+      const p2 = cfg.localPlayerNames?.[2] || '';
+      await saveMatch({
+        mode: 'local', result: getResult(1),
+        myScore: scores[1] || 0, oppScore: scores[2] || 0,
+        vs: p2, grid, duration,
+      });
+    }
   }
 
   // ── عرض شاشة النتيجة ─────────────────────────────────────────
