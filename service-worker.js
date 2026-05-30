@@ -1,39 +1,22 @@
-// 📄 service-worker.js — v13.8
+// 📄 service-worker.js — v14.2
 const CACHE_NAME = "jazma-v1780144860";
-const ASSETS = [
+
+// نكاش الـ static assets فقط — JS بيتحمل من الشبكة دايماً عشان الـ ?v= يشتغل
+const STATIC_ASSETS = [
   "/jazma/",
   "/jazma/index.html",
   "/jazma/css/style.css",
   "/jazma/css/animations.css",
-  "/jazma/js/main.js",
-  "/jazma/js/firebase.js",
-  "/jazma/js/auth.js",
-  "/jazma/js/friends.js",
-  "/jazma/js/invite.js",
-  "/jazma/js/chat.js",
-  "/jazma/js/leaderboard.js",
-  "/jazma/js/board.js",
-  "/jazma/js/utils.js",
-  "/jazma/js/config/config.js",
-  "/jazma/js/core/state.js",
-  "/jazma/js/core/logic.js",
-  "/jazma/js/ai/aiPlayer.js",
-  "/jazma/js/audio/audioManager.js",
-  "/jazma/js/audio/notif.js",
-  "/jazma/js/ui/boardRenderer.js",
-  "/jazma/js/ui/turnManager.js",
-  "/jazma/js/ui/scoreboard.js",
-  "/jazma/js/ui/gameEnd.js",
   "/jazma/sounds/notif.wav",
   "/jazma/images/icon-192.png",
   "/jazma/images/icon-512.png",
   "/jazma/images/google.svg",
 ];
 
-// تثبيت — نحفظ الملفات في الـ cache
+// تثبيت
 self.addEventListener("install", (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS))
   );
   self.skipWaiting();
 });
@@ -48,30 +31,18 @@ self.addEventListener("activate", (e) => {
   self.clients.claim();
 });
 
-// fetch — نرجع من الـ cache أولاً
+// fetch — JS و Firebase دايماً من الشبكة، باقي الـ assets من الـ cache
 self.addEventListener("fetch", (e) => {
+  const url = e.request.url;
+
+  // JS files و Firebase → دايماً من الشبكة
+  if (url.includes(".js") || url.includes("firebase") || url.includes("googleapis")) {
+    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    return;
+  }
+
+  // باقي الـ assets → cache first
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request))
-  );
-});
-
-// إشعارات Push
-self.addEventListener("push", (e) => {
-  const data = e.data?.json() || {};
-  e.waitUntil(
-    self.registration.showNotification(data.title || "💬 رسالة جديدة", {
-      body:  data.body  || "",
-      icon:  "/jazma/images/icon-192.png",
-      badge: "/jazma/images/icon-192.png",
-      vibrate: [200, 100, 200],
-    })
-  );
-});
-
-// نقرة على الإشعار → فتح التطبيق
-self.addEventListener("notificationclick", (e) => {
-  e.notification.close();
-  e.waitUntil(
-    clients.openWindow("/jazma/")
   );
 });
