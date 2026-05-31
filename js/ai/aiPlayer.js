@@ -2,9 +2,9 @@
 // الذكاء الاصطناعي للعب ضد الكمبيوتر
 // AI Player with different difficulty levels
 
-import { state } from "../core/state.js?v=1780144860";
-import { makeKey } from "../utils.js?v=1780144860";
-import { checkForSquare } from "../core/logic.js?v=1780144860";
+import { state } from "../core/state.js?v=1780233700";
+import { makeKey } from "../utils.js?v=1780233700";
+import { checkForSquare } from "../core/logic.js?v=1780233700";
 
 export class AIPlayer {
   constructor(difficulty = 'medium') {

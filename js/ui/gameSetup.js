@@ -1,9 +1,9 @@
 // 📄 ui/gameSetup.js
 // شاشة إعداد اللعبة + بدء اللعبة المحلية
-import { config } from "../config/config.js?v=1780144860";
-import { AIPlayer } from "../ai/aiPlayer.js?v=1780144860";
-import { getCurrentUser } from "../auth.js?v=1780144860";
-import { state } from "../core/state.js?v=1780144860";
+import { config } from "../config/config.js?v=1780233700";
+import { AIPlayer } from "../ai/aiPlayer.js?v=1780233700";
+import { getCurrentUser } from "../auth.js?v=1780233700";
+import { state } from "../core/state.js?v=1780233700";
 
 export let aiPlayer = null;
 
@@ -79,5 +79,6 @@ export function initGameSetup({ onGameStart, onOnlineRequested }) {
       aiPlayer = null;
       syncLocalP2();
     },
+    getAiPlayer() { return aiPlayer; },
   };
 }
