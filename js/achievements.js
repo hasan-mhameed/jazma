@@ -3,7 +3,7 @@
 
 import { getDatabase, ref, get, set }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1780350393";
+import { currentUser } from "./auth.js?v=1780351957";
 
 const db = getDatabase();
 
@@ -97,20 +97,24 @@ export async function checkAchievements(matchData, allStats, historyCount) {
   return newlyUnlocked;
 }
 
-// ── حساب سلسلة الانتصارات — من matchHistory فقط ─────────────────
+// ── تحديث السلسلة في Firebase بعد كل مباراة ─────────────────────
+export async function updateStreak(result) {
+  if (!currentUser) return 0;
+  const streakRef = ref(db, `users/${currentUser.uid}/stats/currentStreak`);
+  const snap      = await get(streakRef);
+  const current   = snap.exists() ? snap.val() : 0;
+  let newStreak;
+  if (result === 'win')       newStreak = current + 1;
+  else if (result === 'loss') newStreak = 0;
+  else                        newStreak = current; // draw لا يكسر السلسلة
+  await set(streakRef, newStreak);
+  return newStreak;
+}
+
+// ── جلب السلسلة الحالية ────────────────────────────────────────
 export async function getCurrentStreak(uid) {
-  const snap = await get(ref(db, `users/${uid}/matchHistory`));
-  if (!snap.exists()) return 0;
-  const matches = Object.values(snap.val())
-    .filter(m => m.result && m.ts)   // نتجاهل أي entries بدون result
-    .sort((a, b) => b.ts - a.ts);    // الأحدث أولاً
-  let streak = 0;
-  for (const m of matches) {
-    if (m.result === 'win')        streak++;
-    else if (m.result === 'loss')  break;
-    // draw لا يكسر السلسلة ولا يزيدها
-  }
-  return streak;
+  const snap = await get(ref(db, `users/${uid}/stats/currentStreak`));
+  return snap.exists() ? snap.val() : 0;
 }
 
 // ── إجمالي المباريات ──────────────────────────────────────────────

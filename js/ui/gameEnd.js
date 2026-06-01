@@ -1,10 +1,10 @@
 // 📄 gameEnd.js — v14.3
-import { audioManager } from "../audio/audioManager.js?v=1780350393";
+import { audioManager } from "../audio/audioManager.js?v=1780351957";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1780350393";
-import { saveMatch } from "../history.js?v=1780350393";
-import { checkAchievements, getCurrentStreak, getTotalMatches } from "../achievements.js?v=1780350393";
-import { showNewAchievements } from "./achievementsUI.js?v=1780350393";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1780351957";
+import { saveMatch } from "../history.js?v=1780351957";
+import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1780351957";
+import { showNewAchievements } from "./achievementsUI.js?v=1780351957";
 
 export let _matchStartTime = Date.now();
 export function resetMatchTimer() { _matchStartTime = Date.now(); }
@@ -154,8 +154,12 @@ export async function endGame(cfg, scores) {
     }
 
     // ── التحقق من الإنجازات ──────────────────────────────────
+    const mainResult = isMulti
+      ? (ranking[0].player === 1 ? 'win' : 'loss')
+      : getResult(cfg.aiMode === 'online' ? cfg.onlinePlayerNum : 1);
+
     const [streak, totalMatches, allStats] = await Promise.all([
-      getCurrentStreak(currentUser.uid),
+      updateStreak(mainResult),       // يحدث السلسلة ويرجع القيمة الجديدة
       getTotalMatches(currentUser.uid),
       getAllStats(currentUser.uid),
     ]);
@@ -164,11 +168,10 @@ export async function endGame(cfg, scores) {
       mode:          cfg.aiMode === 'online' ? 'online'
                    : cfg.players >= 3        ? 'multi'
                    : cfg.aiMode === 'ai'     ? 'ai' : 'local',
-      result:        isMulti ? (ranking[0].player === 1 ? 'win' : 'loss')
-                             : getResult(cfg.aiMode === 'online' ? cfg.onlinePlayerNum : 1),
+      result:        mainResult,
       myScore:       scores[cfg.aiMode === 'online' ? cfg.onlinePlayerNum : 1] || 0,
       oppScore:      scores[cfg.aiMode === 'online' ? (cfg.onlinePlayerNum === 1 ? 2 : 1) : 2] || 0,
-      aiDifficulty:  cfg.aiDifficulty || 'medium',
+      aiDifficulty:  cfg.aiDifficulty || 'easy',
       currentStreak: streak,
     };
 
