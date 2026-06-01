@@ -3,7 +3,7 @@
 
 import { getDatabase, ref, get, set }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1780351957";
+import { currentUser } from "./auth.js?v=1780353704";
 
 const db = getDatabase();
 
@@ -104,9 +104,8 @@ export async function updateStreak(result) {
   const snap      = await get(streakRef);
   const current   = snap.exists() ? snap.val() : 0;
   let newStreak;
-  if (result === 'win')       newStreak = current + 1;
-  else if (result === 'loss') newStreak = 0;
-  else                        newStreak = current; // draw لا يكسر السلسلة
+  if (result === 'win')        newStreak = current + 1;
+  else                         newStreak = 0; // خسارة أو تعادل يكسر السلسلة
   await set(streakRef, newStreak);
   return newStreak;
 }
