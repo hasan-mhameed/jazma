@@ -3,7 +3,7 @@
 
 import { getDatabase, ref, get, set }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1780271092";
+import { currentUser } from "./auth.js?v=1780350393";
 
 const db = getDatabase();
 
@@ -52,7 +52,7 @@ export async function checkAchievements(matchData, allStats, historyCount) {
   // أول فوز
   if (result === 'win') await tryUnlock('first_win');
 
-  // AI
+  // AI — بنتحقق من الصعوبة الفعلية بس
   if (mode === 'ai' && result === 'win') {
     if (aiDifficulty === 'easy')      await tryUnlock('ai_easy');
     if (aiDifficulty === 'medium')    await tryUnlock('ai_medium');
@@ -65,7 +65,7 @@ export async function checkAchievements(matchData, allStats, historyCount) {
   // مثالي — فارق 5+
   if (result === 'win' && (myScore - oppScore) >= 5) await tryUnlock('perfect_win');
 
-  // 5 انتصارات أونلاين
+  // 5 انتصارات أونلاين — من history فقط
   if (mode === 'online' && result === 'win') {
     const onlineWins = Object.values(allStats.online || {}).reduce((sum, v) => {
       if (!v?.history) return sum;
@@ -74,31 +74,41 @@ export async function checkAchievements(matchData, allStats, historyCount) {
     if (onlineWins >= 5) await tryUnlock('online_wins_5');
   }
 
-  // اجتماعي — 3 أصدقاء مختلفين
-  const uniqueFriends = Object.keys(allStats.online || {}).length
-                      + Object.keys(allStats.local  || {}).length;
-  if (uniqueFriends >= 3) await tryUnlock('social_3');
+  // اجتماعي — نحسب من matchHistory (بيانات حقيقية بس)
+  const histSnap = await get(ref(db, `users/${currentUser.uid}/matchHistory`));
+  if (histSnap.exists()) {
+    const histMatches = Object.values(histSnap.val());
+    const uniqueOpponents = new Set(
+      histMatches
+        .filter(m => m.vs && m.mode !== 'ai')
+        .map(m => m.vs.toLowerCase().trim())
+    );
+    if (uniqueOpponents.size >= 3) await tryUnlock('social_3');
+  }
 
   // إجمالي المباريات
   if (historyCount >= 10) await tryUnlock('total_10');
   if (historyCount >= 50) await tryUnlock('total_50');
 
-  // سلسلة انتصارات
+  // سلسلة انتصارات — من streak المحسوب من history فقط
   if (currentStreak >= 3) await tryUnlock('win_streak_3');
   if (currentStreak >= 5) await tryUnlock('win_streak_5');
 
   return newlyUnlocked;
 }
 
-// ── حساب سلسلة الانتصارات الحالية ────────────────────────────────
+// ── حساب سلسلة الانتصارات — من matchHistory فقط ─────────────────
 export async function getCurrentStreak(uid) {
   const snap = await get(ref(db, `users/${uid}/matchHistory`));
   if (!snap.exists()) return 0;
-  const matches = Object.values(snap.val()).sort((a, b) => b.ts - a.ts);
+  const matches = Object.values(snap.val())
+    .filter(m => m.result && m.ts)   // نتجاهل أي entries بدون result
+    .sort((a, b) => b.ts - a.ts);    // الأحدث أولاً
   let streak = 0;
   for (const m of matches) {
-    if (m.result === 'win')  streak++;
-    else if (m.result !== 'draw') break;
+    if (m.result === 'win')        streak++;
+    else if (m.result === 'loss')  break;
+    // draw لا يكسر السلسلة ولا يزيدها
   }
   return streak;
 }
@@ -107,4 +117,38 @@ export async function getCurrentStreak(uid) {
 export async function getTotalMatches(uid) {
   const snap = await get(ref(db, `users/${uid}/matchHistory`));
   return snap.exists() ? Object.keys(snap.val()).length : 0;
+}
+
+// ── مسح الإنجازات الخاطئة (تُستدعى مرة واحدة عند الدخول) ────────
+export async function resetWrongAchievements() {
+  if (!currentUser) return;
+  const uid  = currentUser.uid;
+  const snap = await get(ref(db, `users/${uid}/achievements`));
+  if (!snap.exists()) return;
+
+  const unlocked    = snap.val();
+  const histSnap    = await get(ref(db, `users/${uid}/matchHistory`));
+  const matches     = histSnap.exists() ? Object.values(histSnap.val()) : [];
+  const totalWins   = matches.filter(m => m.result === 'win').length;
+  const streak      = await getCurrentStreak(uid);
+
+  const toDelete = [];
+
+  // سلسلة نار — لو ما عنده 3 انتصارات متتالية فعلاً
+  if (unlocked.win_streak_3 && streak < 3 && totalWins < 3)
+    toDelete.push('win_streak_3');
+  if (unlocked.win_streak_5 && streak < 5 && totalWins < 5)
+    toDelete.push('win_streak_5');
+
+  // اجتماعي — لو ما عنده 3 أصدقاء مختلفين فعلاً
+  if (unlocked.social_3) {
+    const uniqueOpponents = new Set(
+      matches.filter(m => m.vs && m.mode !== 'ai').map(m => m.vs.toLowerCase().trim())
+    );
+    if (uniqueOpponents.size < 3) toDelete.push('social_3');
+  }
+
+  for (const key of toDelete) {
+    await set(ref(db, `users/${uid}/achievements/${key}`), null);
+  }
 }

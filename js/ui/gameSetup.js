@@ -1,9 +1,9 @@
 // 📄 ui/gameSetup.js
 // شاشة إعداد اللعبة + بدء اللعبة المحلية
-import { config } from "../config/config.js?v=1780271092";
-import { AIPlayer } from "../ai/aiPlayer.js?v=1780271092";
-import { getCurrentUser } from "../auth.js?v=1780271092";
-import { state } from "../core/state.js?v=1780271092";
+import { config } from "../config/config.js?v=1780350393";
+import { AIPlayer } from "../ai/aiPlayer.js?v=1780350393";
+import { getCurrentUser } from "../auth.js?v=1780350393";
+import { state } from "../core/state.js?v=1780350393";
 
 export let aiPlayer = null;
 
@@ -56,6 +56,7 @@ export function initGameSetup({ onGameStart, onOnlineRequested }) {
     config.cols    = gridSize;
     config.players = playerCount;
     config.aiMode  = aiMode;
+    config.aiDifficulty = aiDifficulty;
     config.online  = false;
 
     const p2Name = localP2Input?.value?.trim() || "";
