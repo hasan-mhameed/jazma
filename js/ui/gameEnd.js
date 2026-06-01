@@ -1,8 +1,10 @@
-// 📄 gameEnd.js — v14.2
-import { audioManager } from "../audio/audioManager.js?v=1780233700";
+// 📄 gameEnd.js — v14.3
+import { audioManager } from "../audio/audioManager.js?v=1780271092";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1780233700";
-import { saveMatch } from "../history.js?v=1780233700";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1780271092";
+import { saveMatch } from "../history.js?v=1780271092";
+import { checkAchievements, getCurrentStreak, getTotalMatches } from "../achievements.js?v=1780271092";
+import { showNewAchievements } from "./achievementsUI.js?v=1780271092";
 
 export let _matchStartTime = Date.now();
 export function resetMatchTimer() { _matchStartTime = Date.now(); }
@@ -149,6 +151,30 @@ export async function endGame(cfg, scores) {
         myScore: scores[1] || 0, oppScore: scores[2] || 0,
         vs: p2, grid, duration,
       });
+    }
+
+    // ── التحقق من الإنجازات ──────────────────────────────────
+    const [streak, totalMatches, allStats] = await Promise.all([
+      getCurrentStreak(currentUser.uid),
+      getTotalMatches(currentUser.uid),
+      getAllStats(currentUser.uid),
+    ]);
+
+    const matchData = {
+      mode:          cfg.aiMode === 'online' ? 'online'
+                   : cfg.players >= 3        ? 'multi'
+                   : cfg.aiMode === 'ai'     ? 'ai' : 'local',
+      result:        isMulti ? (ranking[0].player === 1 ? 'win' : 'loss')
+                             : getResult(cfg.aiMode === 'online' ? cfg.onlinePlayerNum : 1),
+      myScore:       scores[cfg.aiMode === 'online' ? cfg.onlinePlayerNum : 1] || 0,
+      oppScore:      scores[cfg.aiMode === 'online' ? (cfg.onlinePlayerNum === 1 ? 2 : 1) : 2] || 0,
+      aiDifficulty:  cfg.aiDifficulty || 'medium',
+      currentStreak: streak,
+    };
+
+    const newAchievements = await checkAchievements(matchData, allStats, totalMatches);
+    if (newAchievements.length > 0) {
+      setTimeout(() => showNewAchievements(newAchievements), 1500);
     }
   }
 
