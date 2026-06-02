@@ -3,7 +3,7 @@ import { getDatabase, ref, push, onValue, update, get, query, limitToLast }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getCurrentUser } from "./auth.js?v=1780439245";
+import { getCurrentUser } from "./auth.js?v=1780439452";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",

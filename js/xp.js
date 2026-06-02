@@ -3,7 +3,7 @@
 
 import { getDatabase, ref, get, update }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1780439245";
+import { currentUser } from "./auth.js?v=1780439452";
 
 const db = getDatabase();
 
@@ -57,8 +57,6 @@ export function calcXP(matchData) {
     base += gridBonus[gridSize] || 0;
     return base;
   }
-
-  let base = 0;
 
   if (mode === 'ai') {
     if (aiDifficulty === 'easy')      base = 10;
