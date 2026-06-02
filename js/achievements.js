@@ -3,7 +3,7 @@
 
 import { getDatabase, ref, get, set }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1780436760";
+import { currentUser } from "./auth.js?v=1780438051";
 
 const db = getDatabase();
 
@@ -120,38 +120,4 @@ export async function getCurrentStreak(uid) {
 export async function getTotalMatches(uid) {
   const snap = await get(ref(db, `users/${uid}/matchHistory`));
   return snap.exists() ? Object.keys(snap.val()).length : 0;
-}
-
-// ── مسح الإنجازات الخاطئة (تُستدعى مرة واحدة عند الدخول) ────────
-export async function resetWrongAchievements() {
-  if (!currentUser) return;
-  const uid  = currentUser.uid;
-  const snap = await get(ref(db, `users/${uid}/achievements`));
-  if (!snap.exists()) return;
-
-  const unlocked    = snap.val();
-  const histSnap    = await get(ref(db, `users/${uid}/matchHistory`));
-  const matches     = histSnap.exists() ? Object.values(histSnap.val()) : [];
-  const totalWins   = matches.filter(m => m.result === 'win').length;
-  const streak      = await getCurrentStreak(uid);
-
-  const toDelete = [];
-
-  // سلسلة نار — لو ما عنده 3 انتصارات متتالية فعلاً
-  if (unlocked.win_streak_3 && streak < 3 && totalWins < 3)
-    toDelete.push('win_streak_3');
-  if (unlocked.win_streak_5 && streak < 5 && totalWins < 5)
-    toDelete.push('win_streak_5');
-
-  // اجتماعي — لو ما عنده 3 أصدقاء مختلفين فعلاً
-  if (unlocked.social_3) {
-    const uniqueOpponents = new Set(
-      matches.filter(m => m.vs && m.mode !== 'ai').map(m => m.vs.toLowerCase().trim())
-    );
-    if (uniqueOpponents.size < 3) toDelete.push('social_3');
-  }
-
-  for (const key of toDelete) {
-    await set(ref(db, `users/${uid}/achievements/${key}`), null);
-  }
 }
