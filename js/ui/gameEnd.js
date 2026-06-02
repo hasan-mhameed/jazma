@@ -1,10 +1,12 @@
 // 📄 gameEnd.js — v14.3
-import { audioManager } from "../audio/audioManager.js?v=1780353704";
+import { audioManager } from "../audio/audioManager.js?v=1780354599";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1780353704";
-import { saveMatch } from "../history.js?v=1780353704";
-import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1780353704";
-import { showNewAchievements } from "./achievementsUI.js?v=1780353704";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1780354599";
+import { saveMatch } from "../history.js?v=1780354599";
+import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1780354599";
+import { showNewAchievements } from "./achievementsUI.js?v=1780354599";
+import { calcXP, addXP } from "../xp.js?v=1780354599";
+import { showXPGain } from "./xpUI.js?v=1780354599";
 
 export let _matchStartTime = Date.now();
 export function resetMatchTimer() { _matchStartTime = Date.now(); }
@@ -178,6 +180,21 @@ export async function endGame(cfg, scores) {
     const newAchievements = await checkAchievements(matchData, allStats, totalMatches);
     if (newAchievements.length > 0) {
       setTimeout(() => showNewAchievements(newAchievements), 1500);
+    }
+
+    // ── XP ────────────────────────────────────────────────────
+    const xpData = {
+      mode:         matchData.mode,
+      result:       mainResult,
+      aiDifficulty: cfg.aiDifficulty || 'easy',
+      gridSize:     cfg.rows,
+      rank:         isMulti ? (ranking.findIndex(p => p.player === 1) + 1) : 1,
+      players:      cfg.players,
+    };
+    const xpResult = await addXP(calcXP(xpData));
+    if (xpResult) {
+      const delay = newAchievements.length > 0 ? 2500 : 800;
+      setTimeout(() => showXPGain(xpResult), delay);
     }
   }
 
