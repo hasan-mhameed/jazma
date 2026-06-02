@@ -2029,3 +2029,57 @@ h1 {
   from { opacity: 1; }
   to   { opacity: 0; }
 }
+
+/* ── زر ❓ XP ── */
+#xp-info-btn {
+  background: none; border: none;
+  color: #555; font-size: 0.8rem;
+  cursor: pointer; padding: 0 2px;
+  transition: color 0.2s;
+}
+#xp-info-btn:hover { color: #a78bfa; }
+
+/* ── modal جدول XP ── */
+#xp-guide-modal {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10000; backdrop-filter: blur(4px);
+}
+#xp-guide-modal.hidden { display: none; }
+
+#xp-guide-box {
+  background: #1a1a2e;
+  border: 1px solid #2a2a4e;
+  border-radius: 16px;
+  width: min(94%, 400px);
+  max-height: 82vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+
+#xp-guide-content {
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.xpg-section   { margin-bottom: 16px; }
+.xpg-title     { font-size: 0.82rem; font-weight: 600; color: #888;
+                  text-transform: uppercase; letter-spacing: 0.05em;
+                  margin-bottom: 8px; }
+.xpg-grid      { background: #12122a; border-radius: 10px; overflow: hidden; }
+.xpg-row       { display: flex; justify-content: space-between; align-items: center;
+                  padding: 8px 14px; border-bottom: 1px solid #1e1e3e; font-size: 0.88rem; }
+.xpg-row:last-child { border-bottom: none; }
+.xpg-val       { color: #a78bfa; font-weight: 700; }
+.xpg-zero      { color: #555; }
+
+.xpg-levels    { margin-top: 4px; }
+.xpg-level-row { display: flex; align-items: center; gap: 10px;
+                  padding: 7px 14px; background: #12122a;
+                  border-bottom: 1px solid #1e1e3e; font-size: 0.88rem; }
+.xpg-level-row:first-of-type { border-radius: 10px 10px 0 0; }
+.xpg-level-row:last-of-type  { border-radius: 0 0 10px 10px; border-bottom: none; }
+.xpg-level-icon { font-size: 1.1rem; }
+.xpg-level-name { flex: 1; color: #c8c8f0; }
+.xpg-level-xp   { color: #fbbf24; font-weight: 600; font-size: 0.82rem; }

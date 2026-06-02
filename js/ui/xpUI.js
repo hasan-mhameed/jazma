@@ -1,8 +1,8 @@
 // 📄 ui/xpUI.js
 // شريط XP في user-bar + popup ترقية المستوى
 
-import { getXP, getLevelFromXP, LEVELS } from "../xp.js?v=1780438051";
-import { getCurrentUser } from "../auth.js?v=1780438051";
+import { getXP, getLevelFromXP, LEVELS } from "../xp.js?v=1780439245";
+import { getCurrentUser } from "../auth.js?v=1780439245";
 
 // ── تحديث شريط XP ─────────────────────────────────────────────────
 export async function refreshXPBar() {
@@ -69,4 +69,71 @@ export function showXPGain(result) {
 // ── init ──────────────────────────────────────────────────────────
 export function initXPUI() {
   refreshXPBar();
+
+  const infoBtn  = document.getElementById('xp-info-btn');
+  const modal    = document.getElementById('xp-guide-modal');
+  const closeBtn = document.getElementById('close-xp-guide-btn');
+  const content  = document.getElementById('xp-guide-content');
+
+  infoBtn?.addEventListener('click', () => {
+    modal.classList.remove('hidden');
+    if (content) renderXPGuide(content);
+  });
+  closeBtn?.addEventListener('click', () => modal.classList.add('hidden'));
+  modal?.addEventListener('click', e => { if (e.target === modal) modal.classList.add('hidden'); });
+}
+
+// ── جدول XP ──────────────────────────────────────────────────────
+function renderXPGuide(container) {
+  container.innerHTML = `
+    <div class="xpg-section">
+      <div class="xpg-title">🏆 فوز</div>
+      <div class="xpg-grid">
+        <div class="xpg-row"><span>🤖 AI سهل</span><span class="xpg-val">+10 XP</span></div>
+        <div class="xpg-row"><span>🤖 AI متوسط</span><span class="xpg-val">+20 XP</span></div>
+        <div class="xpg-row"><span>🤖 AI صعب</span><span class="xpg-val">+40 XP</span></div>
+        <div class="xpg-row"><span>🌐 أونلاين</span><span class="xpg-val">+25 XP</span></div>
+        <div class="xpg-row"><span>👥 محلي</span><span class="xpg-val">+15 XP</span></div>
+        <div class="xpg-row"><span>🎮 متعدد 🥇</span><span class="xpg-val">+30 XP</span></div>
+        <div class="xpg-row"><span>🎮 متعدد 🥈</span><span class="xpg-val">+20 XP</span></div>
+        <div class="xpg-row"><span>🎮 متعدد 🥉</span><span class="xpg-val">+10 XP</span></div>
+      </div>
+    </div>
+
+    <div class="xpg-section">
+      <div class="xpg-title">🤝 تعادل (نص الفوز)</div>
+      <div class="xpg-grid">
+        <div class="xpg-row"><span>🤖 AI سهل</span><span class="xpg-val">+5 XP</span></div>
+        <div class="xpg-row"><span>🤖 AI متوسط</span><span class="xpg-val">+10 XP</span></div>
+        <div class="xpg-row"><span>🤖 AI صعب</span><span class="xpg-val">+20 XP</span></div>
+        <div class="xpg-row"><span>🌐 أونلاين</span><span class="xpg-val">+12 XP</span></div>
+        <div class="xpg-row"><span>👥 محلي</span><span class="xpg-val">+7 XP</span></div>
+      </div>
+    </div>
+
+    <div class="xpg-section">
+      <div class="xpg-title">🗺️ bonus حجم اللوحة (فوز)</div>
+      <div class="xpg-grid">
+        <div class="xpg-row"><span>5×5</span><span class="xpg-val">+5 XP</span></div>
+        <div class="xpg-row"><span>6×6</span><span class="xpg-val">+10 XP</span></div>
+        <div class="xpg-row"><span>7×7</span><span class="xpg-val">+15 XP</span></div>
+      </div>
+    </div>
+
+    <div class="xpg-section">
+      <div class="xpg-title">💔 خسارة</div>
+      <div class="xpg-grid">
+        <div class="xpg-row"><span>أي وضع</span><span class="xpg-val xpg-zero">0 XP</span></div>
+      </div>
+    </div>
+
+    <div class="xpg-levels">
+      <div class="xpg-title">🎖️ المستويات</div>
+      ${LEVELS.map(l => `
+        <div class="xpg-level-row">
+          <span class="xpg-level-icon">${l.icon}</span>
+          <span class="xpg-level-name">${l.title}</span>
+          <span class="xpg-level-xp">${l.xp.toLocaleString()} XP</span>
+        </div>`).join('')}
+    </div>`;
 }

@@ -1,12 +1,12 @@
 // 📄 gameEnd.js — v14.3
-import { audioManager } from "../audio/audioManager.js?v=1780438051";
+import { audioManager } from "../audio/audioManager.js?v=1780439245";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1780438051";
-import { saveMatch } from "../history.js?v=1780438051";
-import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1780438051";
-import { showNewAchievements } from "./achievementsUI.js?v=1780438051";
-import { calcXP, addXP } from "../xp.js?v=1780438051";
-import { showXPGain } from "./xpUI.js?v=1780438051";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1780439245";
+import { saveMatch } from "../history.js?v=1780439245";
+import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1780439245";
+import { showNewAchievements } from "./achievementsUI.js?v=1780439245";
+import { calcXP, addXP } from "../xp.js?v=1780439245";
+import { showXPGain } from "./xpUI.js?v=1780439245";
 
 export let _matchStartTime = Date.now();
 export function resetMatchTimer() { _matchStartTime = Date.now(); }
