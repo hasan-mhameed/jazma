@@ -3,7 +3,7 @@
 
 import { getDatabase, ref, get, update }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1780354599";
+import { currentUser } from "./auth.js?v=1780436760";
 
 const db = getDatabase();
 
@@ -39,7 +39,8 @@ export function getLevelFromXP(xp) {
 // ── حساب XP المكتسب من مباراة ─────────────────────────────────────
 export function calcXP(matchData) {
   const { mode, result, aiDifficulty, gridSize, rank, players } = matchData;
-  if (result === 'loss' || result === 'draw') return 0;
+  if (result === 'loss') return 0;
+  if (result === 'draw') return 5;
 
   let base = 0;
 
