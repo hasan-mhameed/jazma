@@ -1,4 +1,4 @@
-// 📄 leaderboard.js — v12.3
+// 📄 leaderboard.js
 import { getDatabase, ref, get }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
@@ -22,23 +22,24 @@ export async function getLeaderboard(limit = 10) {
 
   const users = [];
   snap.forEach(child => {
-    const u = child.val();
-    const totalGames = (u.wins || 0) + (u.losses || 0);
-    if (totalGames > 0) {
+    const u   = child.val();
+    const xp  = u.xp || 0;
+    const name = u.displayName || u.name || "لاعب";
+    if (xp > 0 || name !== "لاعب") {
       users.push({
-        uid:        u.uid,
-        name:       u.name || "لاعب",
-        photo:      u.photo || "",
-        wins:       u.wins  || 0,
-        losses:     u.losses || 0,
-        totalGames,
-        winRate:    Math.round(((u.wins || 0) / totalGames) * 100),
+        uid:   child.key,
+        name,
+        photo: u.photoURL || u.photo || "",
+        xp,
+        wins:  u.stats?.ai?.wins || 0,
+        totalGames: 0,
+        winRate: 0,
       });
     }
   });
 
-  // ترتيب: أكثر انتصارات، بعدها أعلى نسبة فوز
   return users
-    .sort((a, b) => b.wins - a.wins || b.winRate - a.winRate)
-    .slice(0, limit);
+    .sort((a, b) => b.xp - a.xp)
+    .slice(0, limit)
+    .map(u => ({ ...u, totalGames: u.xp, winRate: u.xp }));
 }

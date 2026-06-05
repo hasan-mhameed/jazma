@@ -1,6 +1,6 @@
 // 📄 ui/leaderboardUI.js
 // لوحة المتصدرين
-import { getLeaderboard } from "../leaderboard.js?v=1780700122";
+import { getLeaderboard } from "../leaderboard.js?v=1780700588";
 
 function asText(v, fallback = "") { return String(v ?? fallback); }
 function firstInitial(name) { return asText(name, "?").trim().charAt(0).toUpperCase() || "?"; }
@@ -48,9 +48,9 @@ export function initLeaderboardUI() {
       const name  = document.createElement("div"); name.className = "leaderboard-name";
       name.textContent = asText(p.name, "لاعب");
       const stats = document.createElement("div"); stats.className = "leaderboard-stats";
-      stats.textContent = `نسبة الفوز: ${Number(p.winRate) || 0}% • ${Number(p.totalGames) || 0} مباراة`;
+      stats.textContent = `⚡ ${Number(p.xp) || 0} XP`;
       const wins  = document.createElement("div"); wins.className = "leaderboard-wins";
-      wins.textContent = `🏆 ${Number(p.wins) || 0}`;
+      wins.textContent = `⚡ ${(p.xp || 0).toLocaleString()}`;
 
       info.append(name, stats);
       row.append(rank, avatar, info, wins);
