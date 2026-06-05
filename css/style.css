@@ -2083,3 +2083,96 @@ h1 {
 .xpg-level-icon { font-size: 1.1rem; }
 .xpg-level-name { flex: 1; color: #c8c8f0; }
 .xpg-level-xp   { color: #fbbf24; font-weight: 600; font-size: 0.82rem; }
+
+/* ── زر التحدي اليومي ── */
+#daily-btn {
+  background: none;
+  border: 1px solid #fb923c60;
+  color: #fb923c;
+  padding: 5px 13px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+#daily-btn:hover { background: #fb923c15; border-color: #fb923c; }
+
+/* ── modal التحدي اليومي ── */
+#daily-modal {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10000; backdrop-filter: blur(4px);
+}
+#daily-modal.hidden { display: none; }
+
+#daily-box {
+  background: #1a1a2e;
+  border: 1px solid #fb923c40;
+  border-radius: 16px;
+  width: min(94%, 420px);
+  max-height: 82vh;
+  overflow-y: auto;
+  padding-bottom: 16px;
+}
+
+#daily-info {
+  padding: 16px 20px 8px;
+  text-align: center;
+}
+.daily-date {
+  font-size: 0.9rem;
+  color: #fb923c;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.daily-details {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  font-size: 0.95rem;
+  color: #e0e0ff;
+  margin-bottom: 8px;
+}
+.daily-played {
+  color: #4ade80;
+  font-size: 0.88rem;
+  margin-top: 6px;
+}
+
+.daily-start {
+  display: block;
+  width: calc(100% - 40px);
+  margin: 8px 20px 16px;
+  padding: 11px;
+  font-size: 1rem;
+}
+.daily-start:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.daily-lb-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0 20px 8px;
+}
+
+/* ── صفوف leaderboard ── */
+.daily-lb-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 20px;
+  border-bottom: 1px solid #1e1e3e;
+  font-size: 0.9rem;
+}
+.daily-lb-row:last-child { border-bottom: none; }
+.daily-lb-me             { background: #1e1a10; }
+.daily-lb-rank           { font-size: 1.1rem; flex-shrink: 0; }
+.daily-lb-name           { flex: 1; color: #c8c8f0; }
+.daily-lb-score          { color: #4ade80; font-weight: 600; }
+.daily-lb-time           { color: #888; font-size: 0.8rem; }

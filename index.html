@@ -85,8 +85,13 @@
         </div>
         <div id="user-stats">
           <button id="stats-btn" title="إحصائياتي">📊 إحصائياتي</button>
+          <button id="daily-btn" title="التحدي اليومي">📅 تحدي اليوم</button>
           <button id="history-btn" title="تاريخ المباريات">📜 المباريات</button>
           <button id="achievements-btn" title="الإنجازات">🏆 الإنجازات</button>
+          <button id="daily-challenge-btn" title="تحدي اليوم">
+            📅 تحدي اليوم
+            <span id="daily-badge" class="daily-badge">!</span>
+          </button>
         </div>
         <div id="user-actions">
 
@@ -260,6 +265,32 @@
         </div>
       </div>
 
+      <!-- 📅 modal التحدي اليومي -->
+      <div id="daily-modal" class="hidden">
+        <div id="daily-box">
+          <div class="history-header">
+            <h2>📅 تحدي اليوم</h2>
+            <button id="close-daily-btn">✕</button>
+          </div>
+          <div id="daily-content"></div>
+          <button id="daily-start-btn" class="btn-primary">🚀 ابدأ التحدي!</button>
+        </div>
+      </div>
+
+      <!-- 📅 modal التحدي اليومي -->
+      <div id="daily-modal" class="hidden">
+        <div id="daily-box">
+          <div class="history-header">
+            <h2>📅 تحدي اليوم</h2>
+            <button id="close-daily-btn">✕</button>
+          </div>
+          <div id="daily-info"></div>
+          <button id="daily-start-btn" class="btn-primary daily-start">🚀 ابدأ التحدي</button>
+          <div class="daily-lb-title">🏆 المتصدرون اليوم</div>
+          <div id="daily-leaderboard"></div>
+        </div>
+      </div>
+
       <!-- 💡 modal جدول XP -->
       <div id="xp-guide-modal" class="hidden">
         <div id="xp-guide-box">
@@ -365,6 +396,6 @@
       </div>
     </main>
 
-    <script type="module" src="js/main.js?v=1780439452" defer></script>
+    <script type="module" src="js/main.js?v=1780524300" defer></script>
   </body>
 </html>
