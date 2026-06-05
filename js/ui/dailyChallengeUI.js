@@ -1,11 +1,11 @@
 // 📄 ui/dailyChallengeUI.js
 import { getDailyConfig, difficultyName, hasPlayedToday,
-         saveDailyResult, getDailyLeaderboard, todayStr } from "../dailyChallenge.js?v=1780700588";
-import { config }      from "../config/config.js?v=1780700588";
-import { AIPlayer }    from "../ai/aiPlayer.js?v=1780700588";
-import { addXP, calcXP } from "../xp.js?v=1780700588";
-import { showXPGain }  from "./xpUI.js?v=1780700588";
-import { getCurrentUser } from "../auth.js?v=1780700588";
+         saveDailyResult, getDailyLeaderboard, todayStr } from "../dailyChallenge.js?v=1780700976";
+import { config }      from "../config/config.js?v=1780700976";
+import { AIPlayer }    from "../ai/aiPlayer.js?v=1780700976";
+import { addXP, calcXP } from "../xp.js?v=1780700976";
+import { showXPGain }  from "./xpUI.js?v=1780700976";
+import { getCurrentUser } from "../auth.js?v=1780700976";
 
 let _dailyActive    = false;
 let _dailyStartTime = null;
@@ -72,8 +72,8 @@ export async function finishDailyChallenge(result, myScore, oppScore) {
 
 // ── رسم المودال ───────────────────────────────────────────────────
 function gridLabel(size) {
-  const labels = { 3: 'صغير (3×3)', 4: 'متوسط (4×4)', 5: 'كبير (5×5)', 6: 'ضخم (6×6)', 7: 'عملاق (7×7)' };
-  return labels[size] || `${size}×${size}`;
+  const sq = size - 1; // 4 نقاط = 3×3 مربعات
+  return `${sq}×${sq} مربعات`;
 }
 
 async function renderDailyModal() {
