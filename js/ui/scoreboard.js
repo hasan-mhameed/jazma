@@ -4,7 +4,7 @@
 
 // scoreboard.js — handles score display & updates
 // reads scores from central state
-import { state } from "../core/state.js?v=1780699111";
+import { state } from "../core/state.js?v=1780700122";
 
 export function updateScoreboard() {
   const scores = state.scores || {};
