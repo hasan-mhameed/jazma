@@ -1,27 +1,26 @@
 // 📄 main.js — v13.9
 // Bootstrap فقط — يربط كل الـ modules
 
-import { config }                              from "./config/config.js?v=1780524300";
-import { startBoard, updateScoreboard, resetState } from "./board.js?v=1780524300";
-import { updateTurnUI }                        from "./ui/turnManager.js?v=1780524300";
-import { audioManager }                        from "./audio/audioManager.js?v=1780524300";
-import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1780524300";
-import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1780524300";
+import { config }                              from "./config/config.js?v=1780698668";
+import { startBoard, updateScoreboard, resetState } from "./board.js?v=1780698668";
+import { updateTurnUI }                        from "./ui/turnManager.js?v=1780698668";
+import { audioManager }                        from "./audio/audioManager.js?v=1780698668";
+import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1780698668";
+import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1780698668";
 
-import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1780524300";
-import { initGameSetup }       from "./ui/gameSetup.js?v=1780524300";
-import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1780524300";
-import { initFriendsUI }       from "./ui/friendsUI.js?v=1780524300";
-import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1780524300";
-import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1780524300";
-import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1780524300";
-import { renderStatsModal }    from "./ui/statsModal.js?v=1780524300";
-import { initHistoryUI }       from "./ui/historyUI.js?v=1780524300";
-import { resetMatchTimer }     from "./ui/gameEnd.js?v=1780524300";
-import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1780524300";
-import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1780524300";
-import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1780524300";
-import { initDailyChallengeUI, refreshDailyBtn, getChallengeBot } from "./ui/dailyChallengeUI.js?v=1780524300";
+import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1780698668";
+import { initGameSetup }       from "./ui/gameSetup.js?v=1780698668";
+import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1780698668";
+import { initFriendsUI }       from "./ui/friendsUI.js?v=1780698668";
+import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1780698668";
+import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1780698668";
+import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1780698668";
+import { renderStatsModal }    from "./ui/statsModal.js?v=1780698668";
+import { initHistoryUI }       from "./ui/historyUI.js?v=1780698668";
+import { resetMatchTimer }     from "./ui/gameEnd.js?v=1780698668";
+import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1780698668";
+import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1780698668";
+import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1780698668";
 
 // ── PWA ─────────────────────────────────────────────────────────
 let _deferredInstallPrompt = null;
@@ -104,33 +103,6 @@ document.addEventListener("DOMContentLoaded", () => {
       setupScreen.classList.add("hidden");
       infoDiv.classList.remove("hidden");
       boardSvg.classList.remove("hidden");
-      resetMatchTimer();
-      startBoard(config, aiPlayer);
-      updateScoreboard();
-      updateTurnUI(config);
-      audioManager.startBackgroundMusic();
-    },
-  });
-
-  // ── التحدي اليومي ────────────────────────────────────────────
-  initDailyChallengeUI({
-    onStartChallenge: (challenge) => {
-      config.rows         = challenge.gridSize;
-      config.cols         = challenge.gridSize;
-      config.players      = 2;
-      config.aiMode       = 'ai';
-      config.aiDifficulty = challenge.difficulty;
-      config.online       = false;
-      config.isDailyChallenge = true;
-      config.dailyKey     = challenge.key;
-      config.localPlayerNames = {
-        1: getCurrentUser()?.displayName || 'أنت',
-        2: 'الكمبيوتر',
-      };
-      setupScreen.classList.add('hidden');
-      const aiPlayer = getChallengeBot(challenge.difficulty);
-      infoDiv.classList.remove('hidden');
-      boardSvg.classList.remove('hidden');
       resetMatchTimer();
       startBoard(config, aiPlayer);
       updateScoreboard();
