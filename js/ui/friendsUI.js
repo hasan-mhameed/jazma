@@ -2,7 +2,7 @@
 // قائمة الأصدقاء + البحث + الإجراءات
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend,
-         listenFriendRequests, listenFriends } from "../friends.js?v=1780700976";
+         listenFriendRequests, listenFriends } from "../friends.js?v=1780955054";
 
 function asText(v, fallback = "") { return String(v ?? fallback); }
 function firstInitial(name) { return asText(name, "?").trim().charAt(0).toUpperCase() || "?"; }
@@ -95,8 +95,12 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
     });
     card.querySelector(".btn-chat")?.addEventListener("click",   () => onOpenChat?.(user));
     card.querySelector(".btn-invite")?.addEventListener("click", async e => {
-      e.target.textContent = "⏳"; e.target.disabled = true;
-      await onInviteFriend?.(user);
+      const btn = e.target;
+      btn.textContent = "⏳"; btn.disabled = true;
+      await onInviteFriend?.(user, () => {
+        // callback: يُستدعى عند الرفض لإرجاع الزر
+        btn.textContent = "🎮 دعوة"; btn.disabled = false;
+      });
     });
 
     return card;

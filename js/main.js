@@ -1,26 +1,26 @@
 // 📄 main.js — v13.9
 // Bootstrap فقط — يربط كل الـ modules
 
-import { config }                              from "./config/config.js?v=1780700976";
-import { startBoard, updateScoreboard, resetState } from "./board.js?v=1780700976";
-import { updateTurnUI }                        from "./ui/turnManager.js?v=1780700976";
-import { audioManager }                        from "./audio/audioManager.js?v=1780700976";
-import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1780700976";
-import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1780700976";
+import { config }                              from "./config/config.js?v=1780955054";
+import { startBoard, updateScoreboard, resetState } from "./board.js?v=1780955054";
+import { updateTurnUI }                        from "./ui/turnManager.js?v=1780955054";
+import { audioManager }                        from "./audio/audioManager.js?v=1780955054";
+import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1780955054";
+import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1780955054";
 
-import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1780700976";
-import { initGameSetup }       from "./ui/gameSetup.js?v=1780700976";
-import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1780700976";
-import { initFriendsUI }       from "./ui/friendsUI.js?v=1780700976";
-import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1780700976";
-import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1780700976";
-import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1780700976";
-import { renderStatsModal }    from "./ui/statsModal.js?v=1780700976";
-import { initHistoryUI }       from "./ui/historyUI.js?v=1780700976";
-import { resetMatchTimer }     from "./ui/gameEnd.js?v=1780700976";
-import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1780700976";
-import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1780700976";
-import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1780700976";
+import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1780955054";
+import { initGameSetup }       from "./ui/gameSetup.js?v=1780955054";
+import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1780955054";
+import { initFriendsUI }       from "./ui/friendsUI.js?v=1780955054";
+import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1780955054";
+import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1780955054";
+import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1780955054";
+import { renderStatsModal }    from "./ui/statsModal.js?v=1780955054";
+import { initHistoryUI }       from "./ui/historyUI.js?v=1780955054";
+import { resetMatchTimer }     from "./ui/gameEnd.js?v=1780955054";
+import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1780955054";
+import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1780955054";
+import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1780955054";
 
 // ── PWA ─────────────────────────────────────────────────────────
 let _deferredInstallPrompt = null;
@@ -160,7 +160,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // ── Friends (بعد التحقق من الهوية) ──────────────────────
       initFriendsUI({
-        onInviteFriend: async friend => {
+        onInviteFriend: async (friend, resetBtn) => {
           const myName = userNameEl.textContent || "لاعب";
           const gridSize = +document.getElementById("grid-size").value || 4;
           config.rows = config.cols = gridSize;
@@ -187,7 +187,8 @@ document.addEventListener("DOMContentLoaded", () => {
             },
             onRejection: name => {
               onlineScreen.classList.add("hidden");
-              setupScreen.classList.remove("hidden");
+              setupScreen.classList.remove(  "hidden");
+              resetBtn?.();          // ← يرجع زر الدعوة لحالته
               showRejectionAlert(name);
             },
           });
