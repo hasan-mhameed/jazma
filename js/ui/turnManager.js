@@ -5,8 +5,8 @@
 // turnManager.js — manages current turn and UI
 // moved from boardRenderer.js
 
-import { state } from "../core/state.js?v=1781044324";
-import { config } from "../config/config.js?v=1781044324";
+import { state } from "../core/state.js?v=1781129510";
+import { config } from "../config/config.js?v=1781129510";
 
 export function updateTurn(cfg) {
   updateTurnUI(cfg);

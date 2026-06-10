@@ -1,9 +1,9 @@
 // 📄 ui/messagesUI.js
 // زر الرسائل في navbar + panel المحادثات
 
-import { listenMessages, markAsRead } from "../chat.js?v=1781044324";
-import { listenFriends }              from "../friends.js?v=1781044324";
-import { getCurrentUser }             from "../auth.js?v=1781044324";
+import { listenMessages, markAsRead } from "../chat.js?v=1781129510";
+import { listenFriends }              from "../friends.js?v=1781129510";
+import { getCurrentUser }             from "../auth.js?v=1781129510";
 
 let _friends     = [];
 let _unsubscribes = [];
@@ -15,9 +15,9 @@ let _onOpenChat  = null;
 export function initMessagesUI({ onOpenChat }) {
   _onOpenChat = onOpenChat;
 
-  const btn        = document.getElementById('messages-btn');
-  const panel      = document.getElementById('messages-panel');
-  const closeBtn   = document.getElementById('close-messages-btn');
+  const btn      = document.getElementById('messages-btn');
+  const panel    = document.getElementById('messages-panel');
+  const closeBtn = document.getElementById('close-messages-btn');
 
   btn?.addEventListener('click', () => {
     panel.classList.toggle('hidden');
@@ -26,6 +26,9 @@ export function initMessagesUI({ onOpenChat }) {
 
   closeBtn?.addEventListener('click', () => panel.classList.add('hidden'));
   panel?.addEventListener('click', e => { if (e.target === panel) panel.classList.add('hidden'); });
+
+  // لما تُفتح محادثة من أي مكان — امسح الـ unread
+  document.addEventListener('chat:opened', e => clearUnreadFor(e.detail));
 
   // استمع للأصدقاء وابدأ تتبع رسائلهم
   listenFriends(friends => {
