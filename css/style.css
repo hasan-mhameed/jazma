@@ -2176,3 +2176,100 @@ h1 {
 .daily-lb-name           { flex: 1; color: #c8c8f0; }
 .daily-lb-score          { color: #4ade80; font-weight: 600; }
 .daily-lb-time           { color: #888; font-size: 0.8rem; }
+
+/* ── زر الرسائل ── */
+#messages-btn {
+  position: relative;
+  background: none;
+  border: 1px solid #44444460;
+  color: #aaa;
+  padding: 5px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s;
+}
+#messages-btn:hover { border-color: #7c6af7; color: #e0e0ff; background: #7c6af710; }
+
+.msg-badge {
+  position: absolute;
+  top: -6px; right: -6px;
+  background: #f87171;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 2px solid #1a1a2e;
+}
+.msg-badge.hidden { display: none; }
+
+/* ── panel الرسائل ── */
+#messages-panel {
+  position: fixed;
+  top: 54px; right: 12px;
+  width: min(90vw, 320px);
+  background: #1a1a2e;
+  border: 1px solid #2a2a4e;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px #0008;
+  z-index: 9000;
+  overflow: hidden;
+  animation: fadeInDown 0.2s ease;
+}
+#messages-panel.hidden { display: none; }
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+#messages-list { max-height: 360px; overflow-y: auto; }
+
+/* ── صف محادثة ── */
+.msg-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #1e1e3e;
+  transition: background 0.15s;
+}
+.msg-row:last-child  { border-bottom: none; }
+.msg-row:hover       { background: #12122a; }
+.msg-row-unread      { background: #1a1535; }
+.msg-row-unread:hover{ background: #201840; }
+
+.msg-avatar {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: #7c6af7;
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 1rem;
+  flex-shrink: 0;
+}
+.msg-info    { flex: 1; min-width: 0; }
+.msg-name    { font-size: 0.9rem; font-weight: 600; color: #e0e0ff; }
+.msg-preview { font-size: 0.78rem; color: #666; white-space: nowrap;
+               overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.msg-row-unread .msg-preview { color: #a0a0cc; }
+
+.msg-unread-badge {
+  background: #7c6af7;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 5px;
+  flex-shrink: 0;
+}

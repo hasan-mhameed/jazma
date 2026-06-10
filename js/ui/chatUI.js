@@ -1,9 +1,9 @@
 // 📄 ui/chatUI.js
 // المحادثة بين الأصدقاء + الإشعارات
-import { sendMessage, listenMessages, listenUnread, markAsRead, markDelivered, markRead } from "../chat.js?v=1780955054";
-import { getCurrentUser } from "../auth.js?v=1780955054";
-import { audioManager } from "../audio/audioManager.js?v=1780955054";
-import { playNotifSound } from "../audio/notif.js?v=1780955054";
+import { sendMessage, listenMessages, listenUnread, markAsRead, markDelivered, markRead } from "../chat.js?v=1781044324";
+import { getCurrentUser } from "../auth.js?v=1781044324";
+import { audioManager } from "../audio/audioManager.js?v=1781044324";
+import { playNotifSound } from "../audio/notif.js?v=1781044324";
 import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const EMOJIS = ["😊","😂","❤️","👍","🔥","🎮","😍","🤣","😭","💯",
@@ -64,6 +64,10 @@ export function initChatUI({ onInviteFromChat }) {
 export function openChat(friend) {
   currentChatFriend = friend;
   const myUid = getCurrentUser()?.uid;
+  // مسح الـ badge من messages panel
+  try {
+    import('./messagesUI.js').then(m => m.clearUnreadFor?.(friend.uid)).catch(() => {});
+  } catch {}
   document.getElementById("chat-with-name").textContent   = friend.name;
   document.getElementById("chat-with-avatar").textContent = friend.name?.[0]?.toUpperCase() || "?";
   document.getElementById("chat-messages").innerHTML      = "";

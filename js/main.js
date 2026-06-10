@@ -1,26 +1,27 @@
 // 📄 main.js — v13.9
 // Bootstrap فقط — يربط كل الـ modules
 
-import { config }                              from "./config/config.js?v=1780955054";
-import { startBoard, updateScoreboard, resetState } from "./board.js?v=1780955054";
-import { updateTurnUI }                        from "./ui/turnManager.js?v=1780955054";
-import { audioManager }                        from "./audio/audioManager.js?v=1780955054";
-import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1780955054";
-import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1780955054";
+import { config }                              from "./config/config.js?v=1781044324";
+import { startBoard, updateScoreboard, resetState } from "./board.js?v=1781044324";
+import { updateTurnUI }                        from "./ui/turnManager.js?v=1781044324";
+import { audioManager }                        from "./audio/audioManager.js?v=1781044324";
+import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1781044324";
+import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1781044324";
 
-import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1780955054";
-import { initGameSetup }       from "./ui/gameSetup.js?v=1780955054";
-import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1780955054";
-import { initFriendsUI }       from "./ui/friendsUI.js?v=1780955054";
-import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1780955054";
-import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1780955054";
-import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1780955054";
-import { renderStatsModal }    from "./ui/statsModal.js?v=1780955054";
-import { initHistoryUI }       from "./ui/historyUI.js?v=1780955054";
-import { resetMatchTimer }     from "./ui/gameEnd.js?v=1780955054";
-import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1780955054";
-import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1780955054";
-import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1780955054";
+import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1781044324";
+import { initGameSetup }       from "./ui/gameSetup.js?v=1781044324";
+import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1781044324";
+import { initFriendsUI }       from "./ui/friendsUI.js?v=1781044324";
+import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1781044324";
+import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1781044324";
+import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1781044324";
+import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1781044324";
+import { renderStatsModal }    from "./ui/statsModal.js?v=1781044324";
+import { initHistoryUI }       from "./ui/historyUI.js?v=1781044324";
+import { resetMatchTimer }     from "./ui/gameEnd.js?v=1781044324";
+import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1781044324";
+import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1781044324";
+import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1781044324";
 
 // ── PWA ─────────────────────────────────────────────────────────
 let _deferredInstallPrompt = null;
@@ -85,6 +86,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── Chat UI (مرة واحدة — الأزرار موجودة بالـ DOM دايماً) ────
   initChatUI({});
 
+  // ── Messages UI ──────────────────────────────────────────────
+  initMessagesUI({
+    onOpenChat: friend => openChat(friend),
+  });
+
   // ── Leaderboard ──────────────────────────────────────────────
   initLeaderboardUI();
 
@@ -134,7 +140,7 @@ document.addEventListener("DOMContentLoaded", () => {
       userNameEl.textContent  = user.isAnonymous ? "👤 ضيف" : (user.displayName || "لاعب");
 
       // ── إخفاء ميزات غير متاحة للضيف ───────────────────────
-      const guestHide = ["friends-btn", "leaderboard-btn", "stats-btn", "history-btn", "achievements-btn", "daily-btn"];
+      const guestHide = ["friends-btn", "leaderboard-btn", "stats-btn", "history-btn", "achievements-btn", "daily-btn", "messages-btn"];
       const aiModeSelect = document.getElementById("ai-mode");
       if (user.isAnonymous) {
         guestHide.forEach(id => document.getElementById(id)?.classList.add("hidden"));

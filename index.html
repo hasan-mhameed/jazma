@@ -94,6 +94,7 @@
           <button id="install-btn" class="hidden" title="تثبيت التطبيق">📲</button>
           <button id="leaderboard-btn">🏆 المتصدرين</button>
           <button id="friends-btn">👥 أصدقاء <span id="friend-requests-badge" class="badge hidden"></span></button>
+          <button id="messages-btn">💬 <span id="messages-badge" class="msg-badge hidden">0</span></button>
           <button id="logout-btn">خروج</button>
         </div>
       </div>
@@ -112,6 +113,17 @@
       </div>
 
       <!-- 👥 لوحة الأصدقاء -->
+      <!-- 💬 panel الرسائل -->
+      <div id="messages-panel" class="hidden">
+        <div class="friends-header">
+          <h3>💬 الرسائل</h3>
+          <button id="close-messages-btn">✕</button>
+        </div>
+        <div id="messages-list">
+          <p class="friends-empty">لا رسائل بعد</p>
+        </div>
+      </div>
+
       <div id="friends-panel" class="hidden">
         <div id="friends-box">
           <div class="friends-header">
@@ -380,6 +392,6 @@
       </div>
     </main>
 
-    <script type="module" src="js/main.js?v=1780955054" defer></script>
+    <script type="module" src="js/main.js?v=1781044324" defer></script>
   </body>
 </html>

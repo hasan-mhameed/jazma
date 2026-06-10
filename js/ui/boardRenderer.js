@@ -1,15 +1,15 @@
 // 📄 boardRenderer.js — v11.8
 // مسؤول عن رسم اللوحة — currentPlayer موحّد في state دائماً
 
-import { state }                           from "../core/state.js?v=1780955054";
-import { makeKey }                         from "../utils.js?v=1780955054";
-import { config }                          from "../config/config.js?v=1780955054";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1780955054";
-import { updateTurn, updateTurnUI }        from "./turnManager.js?v=1780955054";
-import { endGame }                         from "./gameEnd.js?v=1780955054";
-import { audioManager }                    from "../audio/audioManager.js?v=1780955054";
-import { checkSquaresAround }              from "../core/logic.js?v=1780955054";
-import { onlineManager }                   from "../firebase.js?v=1780955054";
+import { state }                           from "../core/state.js?v=1781044324";
+import { makeKey }                         from "../utils.js?v=1781044324";
+import { config }                          from "../config/config.js?v=1781044324";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781044324";
+import { updateTurn, updateTurnUI }        from "./turnManager.js?v=1781044324";
+import { endGame }                         from "./gameEnd.js?v=1781044324";
+import { audioManager }                    from "../audio/audioManager.js?v=1781044324";
+import { checkSquaresAround }              from "../core/logic.js?v=1781044324";
+import { onlineManager }                   from "../firebase.js?v=1781044324";
 
 // ─── AI ──────────────────────────────────────────────────────────
 let aiPlayer    = null;
