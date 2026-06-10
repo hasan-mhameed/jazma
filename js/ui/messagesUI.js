@@ -1,9 +1,9 @@
 // 📄 ui/messagesUI.js
 // زر الرسائل في navbar + panel المحادثات
 
-import { listenMessages, markAsRead } from "../chat.js?v=1781129510";
-import { listenFriends }              from "../friends.js?v=1781129510";
-import { getCurrentUser }             from "../auth.js?v=1781129510";
+import { listenMessages, markAsRead } from "../chat.js?v=1781130350";
+import { listenFriends }              from "../friends.js?v=1781130350";
+import { getCurrentUser }             from "../auth.js?v=1781130350";
 
 let _friends     = [];
 let _unsubscribes = [];
@@ -46,12 +46,13 @@ function startListening(friends) {
   if (!myUid) return;
 
   friends.forEach(friend => {
-    const chatKey   = [myUid, friend.uid].sort().join('_');
-    const lastRead  = parseInt(localStorage.getItem(`lastRead_${chatKey}`) || '0');
+    const chatKey = [myUid, friend.uid].sort().join('_');
 
     const unsub = listenMessages(friend.uid, msgs => {
-      const unread = msgs.filter(m => m.fromUid === friend.uid && (m.ts || 0) > lastRead).length;
-      const last   = msgs[msgs.length - 1];
+      // نقرأ lastRead في كل مرة عشان يعكس آخر قراءة
+      const lastRead = parseInt(localStorage.getItem(`lastRead_${chatKey}`) || '0');
+      const unread   = msgs.filter(m => m.fromUid === friend.uid && (m.ts || 0) > lastRead).length;
+      const last     = msgs[msgs.length - 1];
 
       _unreadMap[friend.uid]  = unread;
       _lastMsgMap[friend.uid] = last ? { text: last.text, ts: last.ts } : null;
