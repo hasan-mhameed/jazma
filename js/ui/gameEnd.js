@@ -1,13 +1,13 @@
 // 📄 gameEnd.js — v14.3
-import { audioManager } from "../audio/audioManager.js?v=1781558676";
+import { audioManager } from "../audio/audioManager.js?v=1781559423";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1781558676";
-import { saveMatch } from "../history.js?v=1781558676";
-import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1781558676";
-import { showNewAchievements } from "./achievementsUI.js?v=1781558676";
-import { calcXP, addXP } from "../xp.js?v=1781558676";
-import { showXPGain } from "./xpUI.js?v=1781558676";
-import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1781558676";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1781559423";
+import { saveMatch } from "../history.js?v=1781559423";
+import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1781559423";
+import { showNewAchievements } from "./achievementsUI.js?v=1781559423";
+import { calcXP, addXP } from "../xp.js?v=1781559423";
+import { showXPGain } from "./xpUI.js?v=1781559423";
+import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1781559423";
 
 export let _matchStartTime = Date.now();
 export function resetMatchTimer() { _matchStartTime = Date.now(); }
