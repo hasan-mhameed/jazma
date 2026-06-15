@@ -326,3 +326,144 @@ body {
 .nav-menu-card:hover.nmc-gold { border-color: var(--nat-gold); box-shadow: 0 0 20px var(--nat-gold)35; }
 .nav-menu-card:hover.nmc-lime { border-color: var(--nat-lime); box-shadow: 0 0 20px var(--nat-lime)35; }
 .nav-menu-card:hover .nmc-label { color: var(--c); }
+
+/* ═══════════════════════════════════════
+   🎮 شاشة اللعب — Nature
+═══════════════════════════════════════ */
+
+/* ── شريط اللاعبين ── */
+#info {
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  margin-bottom: 10px;
+}
+#scores {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+}
+#scores.players-count-3, #scores.players-count-4 { flex-wrap: wrap; }
+
+.nat-player-card {
+  flex: 1;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  background: linear-gradient(180deg, var(--nat-bg-panel), var(--nat-bg-panel2));
+  border: 1px solid var(--nat-border);
+  border-radius: 14px;
+  position: relative; overflow: hidden;
+  transition: all 0.3s;
+  min-width: 140px;
+}
+.nat-player-card.p1 { --accent: var(--nat-p1); --accent-bright: var(--nat-p1-bright); --accent-glow: var(--nat-p1-glow); }
+.nat-player-card.p2 { --accent: var(--nat-p2); --accent-bright: var(--nat-p2-bright); --accent-glow: var(--nat-p2); }
+.nat-player-card.p3 { --accent: #8b5cf6; --accent-bright: #a78bfa; --accent-glow: #8b5cf6; }
+.nat-player-card.p4 { --accent: var(--nat-gold); --accent-bright: #fcd34d; --accent-glow: var(--nat-gold); }
+
+.nat-player-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 24px var(--accent-glow)35, inset 0 0 24px var(--accent-glow)08;
+}
+.nat-player-card.active::before {
+  content: ''; position: absolute; top: 0; right: 0; left: 0; height: 3px;
+  background: linear-gradient(90deg, transparent, var(--accent-bright), transparent);
+}
+.npc-avatar {
+  width: 46px; height: 46px; border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-bright));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; border: 2px solid var(--accent-bright);
+  box-shadow: 0 0 16px var(--accent-glow)50; flex-shrink: 0;
+}
+.npc-info { flex: 1; min-width: 0; }
+.npc-name {
+  font-size: 15px; font-weight: 700; color: var(--accent-bright);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.npc-turn-tag {
+  font-size: 10px; color: var(--accent-bright);
+  opacity: 0; height: 0; transition: opacity 0.3s;
+}
+.nat-player-card.active .npc-turn-tag { opacity: 0.7; height: auto; margin-top: 2px; }
+.npc-score {
+  font-size: 30px; font-weight: 800; line-height: 1;
+  color: var(--accent-bright); text-shadow: 0 0 16px var(--accent-glow)60;
+  flex-shrink: 0;
+}
+
+/* ── أزرار التحكم ── */
+#game-controls { display: flex; gap: 6px; flex-shrink: 0; }
+#game-controls button {
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  background: #ffffff08;
+  border: 1px solid var(--nat-border);
+  border-radius: 10px;
+  color: var(--nat-text-dim);
+  font-size: 17px; cursor: pointer; transition: all 0.2s;
+}
+#game-controls button:hover {
+  border-color: var(--nat-p1); color: var(--nat-p1-bright);
+  box-shadow: 0 0 14px var(--nat-p1-glow)30;
+}
+#restart:hover { border-color: var(--nat-p2) !important; color: var(--nat-p2-bright) !important; }
+
+/* ── مؤشر الدور ── */
+#nat-turn-indicator {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 9px; margin-bottom: 10px;
+  background: linear-gradient(90deg, transparent, var(--nat-p1)12, transparent);
+  border: 1px solid var(--nat-p1); border-radius: 12px;
+  font-size: 14px; font-weight: 700; color: var(--nat-p1-bright);
+}
+#nat-turn-indicator.hidden { display: none; }
+.nat-turn-pulse {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--nat-p1-bright); box-shadow: 0 0 10px var(--nat-p1-glow);
+  animation: natTpulse 1.2s ease-in-out infinite;
+}
+@keyframes natTpulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.7); } }
+
+/* ── شريط المخزون ── */
+#inventory-bar {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 12px; margin-top: 10px;
+  background: linear-gradient(180deg, var(--nat-bg-panel), var(--nat-bg-panel2));
+  border: 1px solid var(--nat-border); border-radius: 14px;
+}
+#inventory-bar.hidden { display: none; }
+#inventory-bar .inv-label {
+  font-size: 10px; letter-spacing: 2px; color: var(--nat-text-mute);
+  text-transform: uppercase; margin-left: 4px;
+}
+#inventory-bar .inv-slot {
+  position: relative;
+  width: 50px; height: 50px; border-radius: 12px;
+  background: #ffffff06; border: 1px solid var(--nat-border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; cursor: pointer; transition: all 0.2s;
+}
+#inventory-bar .inv-slot:not(.empty):hover {
+  border-color: var(--nat-gold);
+  box-shadow: 0 0 16px var(--nat-gold)30;
+  transform: translateY(-2px);
+}
+#inventory-bar .inv-slot.empty { opacity: 0.25; cursor: default; font-size: 18px; color: var(--nat-text-mute); }
+
+/* ── responsive شاشة اللعب ── */
+@media (max-width: 760px) {
+  #info { gap: 8px; }
+  #scores { gap: 8px; }
+  .nat-player-card { padding: 9px 12px; gap: 8px; min-width: 0; }
+  .npc-avatar { width: 38px; height: 38px; font-size: 19px; }
+  .npc-name { font-size: 13px; }
+  .npc-score { font-size: 24px; }
+  #game-controls button { width: 36px; height: 36px; font-size: 15px; }
+  #inventory-bar { gap: 7px; padding: 9px; }
+  #inventory-bar .inv-label { display: none; }
+  #inventory-bar .inv-slot { width: 44px; height: 44px; font-size: 22px; }
+}

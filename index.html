@@ -13,7 +13,7 @@
     <title>جزمة — Dots & Boxes v11.7</title>
     <link rel="stylesheet" href="css/style.css" />
     <link rel="stylesheet" href="./css/animations.css" />
-    <link rel="stylesheet" href="./css/nature-theme.css?v=21" />
+    <link rel="stylesheet" href="./css/nature-theme.css?v=22" />
 
     <!-- 🆕 حل مشكلة favicon.ico -->
     <link rel="icon" href="data:," />
@@ -253,15 +253,29 @@
       <!-- 📊 معلومات اللعبة -->
       <div id="info" class="hidden">
         <div id="scores"></div>
-        <button id="restart">Restart Game</button>
-        <button id="sound-toggle" class="sound-btn" title="تشغيل/إيقاف المؤثرات الصوتية">
-          🔊
-        </button>
-        <button id="music-toggle" class="music-btn" title="تشغيل/إيقاف الموسيقى">
-          🎵
-        </button>
+        <div id="game-controls">
+          <button id="restart" title="إنهاء وخروج">🚪</button>
+          <button id="sound-toggle" class="sound-btn" title="المؤثرات الصوتية">🔊</button>
+          <button id="music-toggle" class="music-btn" title="الموسيقى">🎵</button>
+        </div>
       </div>
+
+      <!-- مؤشر الدور -->
+      <div id="nat-turn-indicator" class="hidden">
+        <span class="nat-turn-pulse"></span>
+        <span id="nat-turn-text">دورك — ارسم خطاً</span>
+      </div>
+
       <canvas id="board" class="hidden"></canvas>
+
+      <!-- شريط المخزون (للقدرات لاحقاً) -->
+      <div id="inventory-bar" class="hidden">
+        <span class="inv-label">قدراتك</span>
+        <div class="inv-slot empty">＋</div>
+        <div class="inv-slot empty">＋</div>
+        <div class="inv-slot empty">＋</div>
+        <div class="inv-slot empty">＋</div>
+      </div>
 
       <!-- 🏆 شاشة النتيجة -->
       <div id="winner-screen" class="hidden">
@@ -394,6 +408,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.1.0/dist/pixi.min.js"></script>
-    <script type="module" src="js/main.js?v=1781559815" defer></script>
+    <script type="module" src="js/main.js?v=1781562231" defer></script>
   </body>
 </html>

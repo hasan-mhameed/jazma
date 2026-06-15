@@ -1,43 +1,39 @@
-// 📄 turnManager.js
-// يدير دور اللاعبين وتحديث الواجهة
-// Manages current player turn and updates UI
+// 📄 turnManager.js — v15.8
+import { state }  from "../core/state.js?v=1781562231";
+import { config } from "../config/config.js?v=1781562231";
 
-// turnManager.js — manages current turn and UI
-// moved from boardRenderer.js
-
-import { state } from "../core/state.js?v=1781559815";
-import { config } from "../config/config.js?v=1781559815";
-
-export function updateTurn(cfg) {
-  updateTurnUI(cfg);
-}
+export function updateTurn(cfg) { updateTurnUI(cfg); }
 
 export function updateTurnUI(cfg) {
   const board = document.getElementById("board");
-
-  // 🚫 أضف/شيل class الـ hover حسب الدور
   if (board) {
     const isMyTurn =
-      cfg.aiMode === "online"  ? state.currentPlayer === cfg.onlinePlayerNum :
+      cfg.aiMode === "online" ? state.currentPlayer === cfg.onlinePlayerNum :
       cfg.aiMode === "ai"      ? state.currentPlayer === 1 :
       true;
     board.classList.toggle("not-my-turn", !isMyTurn);
   }
+
+  // تفعيل بطاقة اللاعب صاحب الدور
   for (let i = 1; i <= cfg.players; i++) {
-    const span = document.getElementById(`p${i}`);
-    if (!span) continue;
+    const card = document.getElementById(`pcard${i}`);
+    if (card) card.classList.toggle("active", i === state.currentPlayer);
+  }
 
-    const color = cfg.colors[i - 1];
-    span.classList.remove("active-turn");
-    span.style.backgroundColor = "transparent";
-    span.style.color = "#333";
-    span.style.boxShadow = "none";
-
-    if (i === state.currentPlayer) {
-      span.classList.add("active-turn");
-      span.style.backgroundColor = color;
-      span.style.color = "#fff";
-      span.style.boxShadow = `0 0 10px ${color}`;
+  // مؤشر الدور النصي
+  const turnInd = document.getElementById("nat-turn-text");
+  if (turnInd) {
+    const isMyTurn =
+      cfg.aiMode === "online" ? state.currentPlayer === cfg.onlinePlayerNum :
+      cfg.aiMode === "ai"      ? state.currentPlayer === 1 :
+      true;
+    if (cfg.aiMode === 'ai' && state.currentPlayer === 2) {
+      turnInd.textContent = "🤖 دور الكمبيوتر...";
+    } else if (cfg.aiMode === 'online') {
+      turnInd.textContent = isMyTurn ? "دورك — ارسم خطاً" : "دور خصمك...";
+    } else {
+      const names = cfg.localPlayerNames || {};
+      turnInd.textContent = `دور ${names[state.currentPlayer] || 'لاعب ' + state.currentPlayer}`;
     }
   }
 }
