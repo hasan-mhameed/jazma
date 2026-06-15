@@ -1,16 +1,16 @@
-// 📄 ui/navMenu.js — زر القائمة يفتح modal للموبايل
+// 📄 ui/navMenu.js — زر القائمة يفتح modal بطاقات
 export function initNavMenu() {
   const userInfo = document.getElementById('user-info');
-  if (!userInfo || document.getElementById('nav-menu-toggle')) return;
+  if (!userInfo) return;
+  if (document.getElementById('nav-menu-toggle')) return;
 
-  // ── زر القائمة ☰ ──
   const toggle = document.createElement('button');
   toggle.id = 'nav-menu-toggle';
+  toggle.type = 'button';
   toggle.textContent = '☰';
   toggle.setAttribute('aria-label', 'القائمة');
   userInfo.after(toggle);
 
-  // ── modal القائمة ──
   const modal = document.createElement('div');
   modal.id = 'nav-menu-modal';
   modal.className = 'hidden';
@@ -18,35 +18,36 @@ export function initNavMenu() {
     <div id="nav-menu-box">
       <div class="nav-menu-header">
         <h3>القائمة</h3>
-        <button id="nav-menu-close">✕</button>
+        <button id="nav-menu-close" type="button">✕</button>
       </div>
-      <div id="nav-menu-items"></div>
+      <div id="nav-menu-grid"></div>
     </div>`;
   document.body.appendChild(modal);
 
-  const itemsBox = modal.querySelector('#nav-menu-items');
+  const grid = modal.querySelector('#nav-menu-grid');
 
-  // ── الأزرار اللي تنتقل للقائمة (كلها ما عدا أصدقاء/رسائل) ──
-  const menuButtons = [
-    { id: 'stats-btn',        label: '📊 إحصائياتي' },
-    { id: 'daily-btn',        label: '📅 تحدي اليوم' },
-    { id: 'history-btn',      label: '📜 المباريات' },
-    { id: 'achievements-btn', label: '🏆 الإنجازات' },
-    { id: 'leaderboard-btn',  label: '🥇 المتصدرين' },
-    { id: 'logout-btn',       label: '🚪 خروج' },
+  // كل بطاقة: أيقونة + اسم + لون
+  const menuItems = [
+    { id: 'stats-btn',        icon: '📊', label: 'إحصائياتي', color: 'p1' },
+    { id: 'daily-btn',        icon: '📅', label: 'تحدي اليوم', color: 'p2' },
+    { id: 'history-btn',      icon: '📜', label: 'المباريات', color: 'p1' },
+    { id: 'achievements-btn', icon: '🏆', label: 'الإنجازات', color: 'gold' },
+    { id: 'leaderboard-btn',  icon: '🥇', label: 'المتصدرين', color: 'lime' },
+    { id: 'logout-btn',       icon: '🚪', label: 'خروج', color: 'p2' },
   ];
 
-  menuButtons.forEach(({ id, label }) => {
+  menuItems.forEach(({ id, icon, label, color }) => {
     const original = document.getElementById(id);
     if (!original) return;
-    const item = document.createElement('button');
-    item.className = 'nav-menu-item';
-    item.textContent = label;
-    item.addEventListener('click', () => {
+    const card = document.createElement('button');
+    card.className = `nav-menu-card nmc-${color}`;
+    card.type = 'button';
+    card.innerHTML = `<span class="nmc-icon">${icon}</span><span class="nmc-label">${label}</span>`;
+    card.addEventListener('click', () => {
       closeMenu();
-      original.click();
+      setTimeout(() => original.click(), 50);
     });
-    itemsBox.appendChild(item);
+    grid.appendChild(card);
   });
 
   function openMenu()  { modal.classList.remove('hidden'); }

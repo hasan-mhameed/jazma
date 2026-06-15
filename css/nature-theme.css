@@ -211,21 +211,9 @@ body {
   font-size: 1.1rem; cursor: pointer; padding: 4px 8px; border-radius: 6px;
 }
 #nav-menu-close:hover { color: var(--nat-p2-bright); }
-#nav-menu-items { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-.nav-menu-item {
-  width: 100%; padding: 13px 16px;
-  background: #ffffff06;
-  border: 1px solid var(--nat-border);
-  border-radius: 12px;
-  color: var(--nat-text); font-size: 0.95rem; font-weight: 600;
-  cursor: pointer; text-align: right; transition: all 0.2s;
-}
-.nav-menu-item:hover {
-  border-color: var(--nat-p1);
-  background: var(--nat-p1-bright)12;
-  color: var(--nat-p1-bright);
-  transform: translateX(-3px);
-}
+
+
+
 
 /* ═══ responsive ═══ */
 @media (max-width: 920px) {
@@ -251,3 +239,79 @@ body {
   #user-actions button { padding: 7px 10px !important; font-size: 0.8rem !important; }
   #user-name { max-width: 60px; }
 }
+
+/* ═══ إصلاحات v15.4 ═══ */
+/* إلغاء focus الظاهر بعد النقر على الأزرار */
+#user-bar button:focus,
+#nav-menu-toggle:focus,
+.nav-menu-item:focus,
+#user-actions button:focus,
+#leaderboard-btn:focus,
+#achievements-btn:focus {
+  outline: none !important;
+}
+/* نبقي focus بس للكيبورد (إمكانية الوصول) */
+#user-bar button:focus-visible,
+.nav-menu-item:focus-visible {
+  outline: 2px solid var(--nat-p1-bright) !important;
+  outline-offset: 2px;
+}
+
+/* صورة المستخدم — حجم ثابت ما ينقطع */
+#user-photo {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 920px) {
+  /* نتأكد إن user-info ما ياخذ كل العرض ويزحم الأزرار */
+  #user-info { gap: 6px !important; }
+  #xp-bar-wrap { gap: 5px !important; }
+  #user-photo { width: 30px !important; height: 30px !important; min-width: 30px; }
+}
+
+/* ═══ grid بطاقات القائمة ═══ */
+#nav-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  padding: 16px;
+}
+.nav-menu-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 12px;
+  background: #ffffff06;
+  border: 1px solid var(--nat-border);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.nav-menu-card .nmc-icon {
+  font-size: 30px;
+  filter: drop-shadow(0 0 8px currentColor);
+}
+.nav-menu-card .nmc-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--nat-text);
+}
+.nav-menu-card:hover {
+  transform: translateY(-3px);
+  background: #ffffff0c;
+}
+/* ألوان البطاقات */
+.nmc-p1   { --c: var(--nat-p1-bright); }
+.nmc-p2   { --c: var(--nat-p2-bright); }
+.nmc-gold { --c: var(--nat-gold); }
+.nmc-lime { --c: var(--nat-lime); }
+.nav-menu-card:hover.nmc-p1   { border-color: var(--nat-p1);   box-shadow: 0 0 20px var(--nat-p1-glow)35; }
+.nav-menu-card:hover.nmc-p2   { border-color: var(--nat-p2);   box-shadow: 0 0 20px var(--nat-p2)35; }
+.nav-menu-card:hover.nmc-gold { border-color: var(--nat-gold); box-shadow: 0 0 20px var(--nat-gold)35; }
+.nav-menu-card:hover.nmc-lime { border-color: var(--nat-lime); box-shadow: 0 0 20px var(--nat-lime)35; }
+.nav-menu-card:hover .nmc-label { color: var(--c); }
