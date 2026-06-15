@@ -1,44 +1,58 @@
-// 📄 ui/navMenu.js — زر القائمة ☰ للموبايل
+// 📄 ui/navMenu.js — زر القائمة يفتح modal للموبايل
 export function initNavMenu() {
-  const userBar   = document.getElementById('user-bar');
-  const userStats = document.getElementById('user-stats');
-  const userInfo  = document.getElementById('user-info');
-  if (!userBar || !userStats || document.getElementById('nav-menu-toggle')) return;
+  const userInfo = document.getElementById('user-info');
+  if (!userInfo || document.getElementById('nav-menu-toggle')) return;
 
-  // زر ☰
+  // ── زر القائمة ☰ ──
   const toggle = document.createElement('button');
   toggle.id = 'nav-menu-toggle';
   toggle.textContent = '☰';
   toggle.setAttribute('aria-label', 'القائمة');
   userInfo.after(toggle);
 
-  // ننقل المتصدرين والخروج لقائمة user-stats المنسدلة (نسخة)
-  const leaderboardBtn = document.getElementById('leaderboard-btn');
-  const logoutBtn      = document.getElementById('logout-btn');
+  // ── modal القائمة ──
+  const modal = document.createElement('div');
+  modal.id = 'nav-menu-modal';
+  modal.className = 'hidden';
+  modal.innerHTML = `
+    <div id="nav-menu-box">
+      <div class="nav-menu-header">
+        <h3>القائمة</h3>
+        <button id="nav-menu-close">✕</button>
+      </div>
+      <div id="nav-menu-items"></div>
+    </div>`;
+  document.body.appendChild(modal);
 
-  // أزرار بديلة داخل القائمة تنقر الأصلية
-  function addMirror(originalBtn, label) {
-    if (!originalBtn) return;
-    const m = document.createElement('button');
-    m.className = 'menu-extra';
-    m.textContent = label;
-    m.addEventListener('click', () => { originalBtn.click(); userStats.classList.remove('menu-open'); });
-    userStats.appendChild(m);
-  }
-  addMirror(leaderboardBtn, '🏆 المتصدرين');
-  addMirror(logoutBtn, '🚪 خروج');
+  const itemsBox = modal.querySelector('#nav-menu-items');
 
-  // فتح/إغلاق
-  toggle.addEventListener('click', () => {
-    userStats.classList.toggle('menu-open');
-    toggle.textContent = userStats.classList.contains('menu-open') ? '✕' : '☰';
-  });
+  // ── الأزرار اللي تنتقل للقائمة (كلها ما عدا أصدقاء/رسائل) ──
+  const menuButtons = [
+    { id: 'stats-btn',        label: '📊 إحصائياتي' },
+    { id: 'daily-btn',        label: '📅 تحدي اليوم' },
+    { id: 'history-btn',      label: '📜 المباريات' },
+    { id: 'achievements-btn', label: '🏆 الإنجازات' },
+    { id: 'leaderboard-btn',  label: '🥇 المتصدرين' },
+    { id: 'logout-btn',       label: '🚪 خروج' },
+  ];
 
-  // إغلاق عند الضغط على زر داخل القائمة
-  userStats.querySelectorAll('button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      userStats.classList.remove('menu-open');
-      toggle.textContent = '☰';
+  menuButtons.forEach(({ id, label }) => {
+    const original = document.getElementById(id);
+    if (!original) return;
+    const item = document.createElement('button');
+    item.className = 'nav-menu-item';
+    item.textContent = label;
+    item.addEventListener('click', () => {
+      closeMenu();
+      original.click();
     });
+    itemsBox.appendChild(item);
   });
+
+  function openMenu()  { modal.classList.remove('hidden'); }
+  function closeMenu() { modal.classList.add('hidden'); }
+
+  toggle.addEventListener('click', openMenu);
+  modal.querySelector('#nav-menu-close').addEventListener('click', closeMenu);
+  modal.addEventListener('click', e => { if (e.target === modal) closeMenu(); });
 }

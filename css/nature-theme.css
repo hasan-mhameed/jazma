@@ -109,8 +109,8 @@ body {
 #daily-btn:hover  { border-color: var(--nat-p2) !important; background: var(--nat-p2-bright)12 !important; box-shadow: 0 0 16px var(--nat-p2)30; }
 #achievements-btn { border-color: var(--nat-gold)50 !important; color: var(--nat-gold) !important; }
 #achievements-btn:hover { border-color: var(--nat-gold) !important; background: var(--nat-gold)12 !important; box-shadow: 0 0 16px var(--nat-gold)30; }
-#leaderboard-btn  { border-color: var(--nat-gold)50 !important; color: var(--nat-gold) !important; }
-#leaderboard-btn:hover { border-color: var(--nat-gold) !important; background: var(--nat-gold)12 !important; box-shadow: 0 0 16px var(--nat-gold)30; }
+#leaderboard-btn  { border-color: var(--nat-lime)50 !important; color: var(--nat-lime) !important; }
+#leaderboard-btn:hover { border-color: var(--nat-lime) !important; background: var(--nat-lime)12 !important; box-shadow: 0 0 16px var(--nat-lime)30; }
 
 #logout-btn {
   background: none !important;
@@ -164,16 +164,13 @@ body {
               inset 0 0 60px var(--nat-p1-glow)08 !important;
 }
 
-/* ═══ navbar — سطر واحد على الديسктоب ═══ */
-#user-bar {
-  flex-wrap: nowrap !important;
-}
-#user-info { flex-shrink: 0; }
-#user-stats, #user-actions {
-  flex-wrap: nowrap !important;
-}
 
-/* زر القائمة ☰ — مخفي على الديسктоب */
+/* ═══ navbar — سطر واحد على الديسктوب ═══ */
+#user-bar { flex-wrap: nowrap !important; }
+#user-info { flex-shrink: 0; }
+#user-stats, #user-actions { flex-wrap: nowrap !important; }
+
+/* زر القائمة ☰ — مخفي على الديسктوب */
 #nav-menu-toggle {
   display: none;
   width: 38px; height: 38px;
@@ -183,69 +180,74 @@ body {
   border-radius: 10px;
   color: var(--nat-p1-bright);
   font-size: 18px; cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s; flex-shrink: 0;
 }
 #nav-menu-toggle:hover { border-color: var(--nat-p1); box-shadow: 0 0 16px var(--nat-p1-glow)30; }
+
+/* ═══ modal القائمة ═══ */
+#nav-menu-modal {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10000; backdrop-filter: blur(4px);
+}
+#nav-menu-modal.hidden { display: none; }
+#nav-menu-box {
+  background: linear-gradient(180deg, var(--nat-bg-panel), var(--nat-bg-panel2));
+  border: 1px solid var(--nat-border);
+  border-radius: 18px;
+  width: min(90%, 320px); overflow: hidden;
+  box-shadow: 0 12px 50px #0009;
+  animation: navMenuIn 0.25s ease;
+}
+@keyframes navMenuIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+.nav-menu-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--nat-border);
+}
+.nav-menu-header h3 { font-size: 1.1rem; color: var(--nat-p1-bright); margin: 0; }
+#nav-menu-close {
+  background: none; border: none; color: var(--nat-text-mute);
+  font-size: 1.1rem; cursor: pointer; padding: 4px 8px; border-radius: 6px;
+}
+#nav-menu-close:hover { color: var(--nat-p2-bright); }
+#nav-menu-items { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.nav-menu-item {
+  width: 100%; padding: 13px 16px;
+  background: #ffffff06;
+  border: 1px solid var(--nat-border);
+  border-radius: 12px;
+  color: var(--nat-text); font-size: 0.95rem; font-weight: 600;
+  cursor: pointer; text-align: right; transition: all 0.2s;
+}
+.nav-menu-item:hover {
+  border-color: var(--nat-p1);
+  background: var(--nat-p1-bright)12;
+  color: var(--nat-p1-bright);
+  transform: translateX(-3px);
+}
 
 /* ═══ responsive ═══ */
 @media (max-width: 920px) {
   #user-bar {
-    flex-wrap: wrap !important;
+    flex-wrap: nowrap !important;
     padding: 8px 12px !important;
-    gap: 8px;
-    position: relative;
+    gap: 8px; justify-content: space-between;
   }
-  #user-info { width: 100%; justify-content: space-between; order: 1; }
-
-  /* زر القائمة يظهر */
-  #nav-menu-toggle { display: flex; order: 2; margin-right: auto; }
-
-  /* أصدقاء + رسائل يبقوا ظاهرين دايماً */
-  #user-actions {
-    order: 3;
-    display: flex !important;
-    gap: 6px;
-  }
-  /* نخفي المتصدرين والتثبيت من الشريط الظاهر */
+  #user-info { flex: 1; min-width: 0; }
+  #user-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 80px; }
+  #user-stats { display: none !important; }
+  #user-actions { display: flex !important; gap: 6px; flex-shrink: 0; }
   #user-actions #leaderboard-btn,
   #user-actions #install-btn,
-  #user-actions #logout-btn { display: none; }
-
-  /* user-stats يصير قائمة منسدلة */
-  #user-stats {
-    order: 4;
-    width: 100%;
-    flex-direction: column;
-    gap: 6px;
-    overflow: hidden;
-    max-height: 0;
-    opacity: 0;
-    transition: max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
-    margin: 0;
-  }
-  #user-stats.menu-open {
-    max-height: 320px;
-    opacity: 1;
-    margin-top: 4px;
-  }
-  /* نضيف الأزرار المخفية للقائمة المنسدلة */
-  #user-stats button { width: 100%; padding: 10px !important; font-size: 0.85rem !important; }
-
-  /* الأزرار المنقولة للقائمة */
-  #user-stats .menu-extra {
-    width: 100%; padding: 10px !important;
-    background: #ffffff08 !important;
-    border: 1px solid var(--nat-border) !important;
-    color: var(--nat-text-dim) !important;
-    border-radius: 10px !important;
-    font-size: 0.85rem !important; font-weight: 600;
-    cursor: pointer;
-  }
-
-  #xp-bar-track { width: 70px; }
+  #user-actions #logout-btn { display: none !important; }
+  #nav-menu-toggle { display: flex; }
+  #xp-bar-track { width: 60px; }
+  #xp-text { display: none; }
 }
 
 @media (max-width: 480px) {
-  #xp-text { display: none; }
-  #user-actions button { padding: 7px 11px !important; font-size: 0.8rem !important; }
+  #xp-level-label { font-size: 0.7rem; }
+  #user-actions button { padding: 7px 10px !important; font-size: 0.8rem !important; }
+  #user-name { max-width: 60px; }
 }
