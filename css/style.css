@@ -160,10 +160,11 @@ h1 {
   max-width: 90vmin;
   max-height: 90vmin;
   aspect-ratio: 1 / 1;
-  border: 3px solid #ccc;
-  background-color: white;
-  border-radius: 12px;
-  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.1);
+  border: 1px solid #2a2a4e;
+  background: #0a0a18;
+  border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(124, 106, 247, 0.15),
+              inset 0 0 60px rgba(124, 106, 247, 0.05);
 }
 
 
