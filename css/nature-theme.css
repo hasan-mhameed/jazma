@@ -106,11 +106,8 @@ body {
 
 /* أزرار مميزة بألوانها */
 #daily-btn        { border-color: var(--nat-border) !important; color: var(--nat-text-dim) !important; }
-#daily-btn:hover  { border-color: var(--nat-p2) !important; color: var(--nat-p2-bright) !important; background: var(--nat-p2-bright)12 !important; box-shadow: 0 0 16px var(--nat-p2)30; }
 #achievements-btn { border-color: var(--nat-border) !important; color: var(--nat-text-dim) !important; }
-#achievements-btn:hover { border-color: var(--nat-gold) !important; color: var(--nat-gold) !important; background: var(--nat-gold)12 !important; box-shadow: 0 0 16px var(--nat-gold)30; }
 #leaderboard-btn  { border-color: var(--nat-border) !important; color: var(--nat-text-dim) !important; }
-#leaderboard-btn:hover { border-color: var(--nat-lime) !important; color: var(--nat-lime) !important; background: var(--nat-lime)12 !important; box-shadow: 0 0 16px var(--nat-lime)30; }
 
 #logout-btn {
   background: none !important;
