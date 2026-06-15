@@ -1,27 +1,28 @@
 // 📄 main.js — v13.9
 // Bootstrap فقط — يربط كل الـ modules
 
-import { config }                              from "./config/config.js?v=1781554385";
-import { startBoard, updateScoreboard, resetState } from "./board.js?v=1781554385";
-import { updateTurnUI }                        from "./ui/turnManager.js?v=1781554385";
-import { audioManager }                        from "./audio/audioManager.js?v=1781554385";
-import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1781554385";
-import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1781554385";
+import { config }                              from "./config/config.js?v=1781555179";
+import { startBoard, updateScoreboard, resetState } from "./board.js?v=1781555179";
+import { updateTurnUI }                        from "./ui/turnManager.js?v=1781555179";
+import { audioManager }                        from "./audio/audioManager.js?v=1781555179";
+import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1781555179";
+import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1781555179";
 
-import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1781554385";
-import { initGameSetup }       from "./ui/gameSetup.js?v=1781554385";
-import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1781554385";
-import { initFriendsUI }       from "./ui/friendsUI.js?v=1781554385";
-import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1781554385";
-import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1781554385";
-import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1781554385";
-import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1781554385";
-import { renderStatsModal }    from "./ui/statsModal.js?v=1781554385";
-import { initHistoryUI }       from "./ui/historyUI.js?v=1781554385";
-import { resetMatchTimer }     from "./ui/gameEnd.js?v=1781554385";
-import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1781554385";
-import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1781554385";
-import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1781554385";
+import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1781555179";
+import { initGameSetup }       from "./ui/gameSetup.js?v=1781555179";
+import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1781555179";
+import { initFriendsUI }       from "./ui/friendsUI.js?v=1781555179";
+import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1781555179";
+import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1781555179";
+import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1781555179";
+import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1781555179";
+import { renderStatsModal }    from "./ui/statsModal.js?v=1781555179";
+import { initHistoryUI }       from "./ui/historyUI.js?v=1781555179";
+import { resetMatchTimer }     from "./ui/gameEnd.js?v=1781555179";
+import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1781555179";
+import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1781555179";
+import { initNavMenu }            from "./ui/navMenu.js?v=1781555179";
+import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1781555179";
 
 // ── PWA ─────────────────────────────────────────────────────────
 let _deferredInstallPrompt = null;
@@ -223,7 +224,8 @@ document.addEventListener("DOMContentLoaded", () => {
       initChatNotifications();
       cleanupOldRooms();
       initMessagesUI({ onOpenChat: friend => openChat(friend) });
-      refreshXPBar(); // مسح الإنجازات الخاطئة صامت
+      refreshXPBar();
+      initNavMenu();
       window._refreshStats = async () => {
         if (!statsContent || statsModal?.classList.contains("hidden")) return;
         await renderStatsModal(user.uid);

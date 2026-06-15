@@ -164,35 +164,88 @@ body {
               inset 0 0 60px var(--nat-p1-glow)08 !important;
 }
 
-/* ═══ responsive navbar ═══ */
-@media (max-width: 860px) {
+/* ═══ navbar — سطر واحد على الديسктоب ═══ */
+#user-bar {
+  flex-wrap: nowrap !important;
+}
+#user-info { flex-shrink: 0; }
+#user-stats, #user-actions {
+  flex-wrap: nowrap !important;
+}
+
+/* زر القائمة ☰ — مخفي على الديسктоب */
+#nav-menu-toggle {
+  display: none;
+  width: 38px; height: 38px;
+  align-items: center; justify-content: center;
+  background: #ffffff08;
+  border: 1px solid var(--nat-border);
+  border-radius: 10px;
+  color: var(--nat-p1-bright);
+  font-size: 18px; cursor: pointer;
+  transition: all 0.2s;
+}
+#nav-menu-toggle:hover { border-color: var(--nat-p1); box-shadow: 0 0 16px var(--nat-p1-glow)30; }
+
+/* ═══ responsive ═══ */
+@media (max-width: 920px) {
   #user-bar {
+    flex-wrap: wrap !important;
     padding: 8px 12px !important;
     gap: 8px;
-    justify-content: center;
+    position: relative;
   }
-  #user-info { width: 100%; justify-content: space-between; }
-  #user-stats, #user-actions {
-    flex-wrap: wrap;
-    justify-content: center;
+  #user-info { width: 100%; justify-content: space-between; order: 1; }
+
+  /* زر القائمة يظهر */
+  #nav-menu-toggle { display: flex; order: 2; margin-right: auto; }
+
+  /* أصدقاء + رسائل يبقوا ظاهرين دايماً */
+  #user-actions {
+    order: 3;
+    display: flex !important;
     gap: 6px;
   }
-  #user-stats button,
-  #leaderboard-btn, #friends-btn, #messages-btn,
-  #stats-btn, #daily-btn, #history-btn, #achievements-btn,
-  #logout-btn {
-    padding: 6px 10px !important;
-    font-size: 0.78rem !important;
+  /* نخفي المتصدرين والتثبيت من الشريط الظاهر */
+  #user-actions #leaderboard-btn,
+  #user-actions #install-btn,
+  #user-actions #logout-btn { display: none; }
+
+  /* user-stats يصير قائمة منسدلة */
+  #user-stats {
+    order: 4;
+    width: 100%;
+    flex-direction: column;
+    gap: 6px;
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+    margin: 0;
   }
+  #user-stats.menu-open {
+    max-height: 320px;
+    opacity: 1;
+    margin-top: 4px;
+  }
+  /* نضيف الأزرار المخفية للقائمة المنسدلة */
+  #user-stats button { width: 100%; padding: 10px !important; font-size: 0.85rem !important; }
+
+  /* الأزرار المنقولة للقائمة */
+  #user-stats .menu-extra {
+    width: 100%; padding: 10px !important;
+    background: #ffffff08 !important;
+    border: 1px solid var(--nat-border) !important;
+    color: var(--nat-text-dim) !important;
+    border-radius: 10px !important;
+    font-size: 0.85rem !important; font-weight: 600;
+    cursor: pointer;
+  }
+
   #xp-bar-track { width: 70px; }
 }
 
 @media (max-width: 480px) {
   #xp-text { display: none; }
-  #user-stats button,
-  #leaderboard-btn, #friends-btn, #messages-btn,
-  #stats-btn, #daily-btn, #history-btn, #achievements-btn {
-    padding: 6px 9px !important;
-    font-size: 0.72rem !important;
-  }
+  #user-actions button { padding: 7px 11px !important; font-size: 0.8rem !important; }
 }
