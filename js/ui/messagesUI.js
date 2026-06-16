@@ -1,9 +1,9 @@
 // 📄 ui/messagesUI.js
 // زر الرسائل في navbar + panel المحادثات
 
-import { listenMessages, markAsRead } from "../chat.js?v=1781562231";
-import { listenFriends }              from "../friends.js?v=1781562231";
-import { getCurrentUser }             from "../auth.js?v=1781562231";
+import { listenMessages, markAsRead } from "../chat.js?v=1781564659";
+import { listenFriends }              from "../friends.js?v=1781564659";
+import { getCurrentUser }             from "../auth.js?v=1781564659";
 
 let _friends     = [];
 let _unsubscribes = [];
@@ -71,6 +71,9 @@ function startListening(friends) {
 function updateBadge() {
   const total  = Object.values(_unreadMap).reduce((a, b) => a + b, 0);
   const badge  = document.getElementById('messages-badge');
+  // نزامن نقطة اللعب
+  const gameDot = document.getElementById('game-msg-dot');
+  if (gameDot) gameDot.classList.toggle('hidden', total === 0);
   if (!badge) return;
   if (total > 0) {
     badge.textContent = total > 99 ? '99+' : total;

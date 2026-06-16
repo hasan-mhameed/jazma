@@ -331,20 +331,56 @@ body {
    🎮 شاشة اللعب — Nature
 ═══════════════════════════════════════ */
 
-/* ── شريط اللاعبين ── */
+/* ── شاشة اللعب ── */
 #info {
   display: flex !important;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
   background: transparent !important;
   border: none !important;
   padding: 0 !important;
   margin-bottom: 10px;
 }
+
+/* شريط علوي خاص باللعبة */
+#game-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+#restart {
+  background: #ffffff08 !important;
+  border: 1px solid var(--nat-border) !important;
+  color: var(--nat-text-dim) !important;
+  padding: 8px 16px !important;
+  border-radius: 10px !important;
+  font-size: 0.88rem !important;
+  font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
+}
+#restart:hover {
+  border-color: var(--nat-p2) !important;
+  color: var(--nat-p2-bright) !important;
+  box-shadow: 0 0 14px var(--nat-p2)30;
+}
+#game-controls { display: flex; gap: 6px; }
+#game-controls button {
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  background: #ffffff08;
+  border: 1px solid var(--nat-border);
+  border-radius: 10px;
+  color: var(--nat-text-dim);
+  font-size: 17px; cursor: pointer; transition: all 0.2s;
+}
+#game-controls button:hover {
+  border-color: var(--nat-p1); color: var(--nat-p1-bright);
+  box-shadow: 0 0 14px var(--nat-p1-glow)30;
+}
+
 #scores {
   display: flex;
   gap: 12px;
-  flex: 1;
 }
 #scores.players-count-3, #scores.players-count-4 { flex-wrap: wrap; }
 
@@ -396,21 +432,6 @@ body {
 }
 
 /* ── أزرار التحكم ── */
-#game-controls { display: flex; gap: 6px; flex-shrink: 0; }
-#game-controls button {
-  width: 40px; height: 40px;
-  display: flex; align-items: center; justify-content: center;
-  background: #ffffff08;
-  border: 1px solid var(--nat-border);
-  border-radius: 10px;
-  color: var(--nat-text-dim);
-  font-size: 17px; cursor: pointer; transition: all 0.2s;
-}
-#game-controls button:hover {
-  border-color: var(--nat-p1); color: var(--nat-p1-bright);
-  box-shadow: 0 0 14px var(--nat-p1-glow)30;
-}
-#restart:hover { border-color: var(--nat-p2) !important; color: var(--nat-p2-bright) !important; }
 
 /* ── مؤشر الدور ── */
 #nat-turn-indicator {
@@ -456,14 +477,75 @@ body {
 
 /* ── responsive شاشة اللعب ── */
 @media (max-width: 760px) {
-  #info { gap: 8px; }
   #scores { gap: 8px; }
   .nat-player-card { padding: 9px 12px; gap: 8px; min-width: 0; }
   .npc-avatar { width: 38px; height: 38px; font-size: 19px; }
   .npc-name { font-size: 13px; }
   .npc-score { font-size: 24px; }
+  #restart { padding: 7px 13px !important; font-size: 0.82rem !important; }
   #game-controls button { width: 36px; height: 36px; font-size: 15px; }
   #inventory-bar { gap: 7px; padding: 9px; }
   #inventory-bar .inv-label { display: none; }
   #inventory-bar .inv-slot { width: 44px; height: 44px; font-size: 22px; }
+}
+
+/* ═══ شارة المستوى في بطاقة اللاعب ═══ */
+.npc-name-row { display: flex; align-items: center; gap: 8px; }
+.npc-level {
+  font-size: 11px; font-weight: 700;
+  color: var(--accent-bright);
+  background: var(--accent)18;
+  border: 1px solid var(--accent)40;
+  padding: 1px 7px; border-radius: 8px;
+  white-space: nowrap;
+}
+.nat-player-card { cursor: pointer; }
+.nat-player-card:hover { background: linear-gradient(180deg, #ffffff0a, var(--nat-bg-panel2)); }
+
+/* ═══ نقطة الرسائل في اللعب ═══ */
+#game-messages-btn { position: relative; }
+.game-msg-dot {
+  position: absolute; top: 6px; right: 6px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--nat-p2);
+  border: 2px solid var(--nat-bg-panel);
+  box-shadow: 0 0 8px var(--nat-p2);
+}
+.game-msg-dot.hidden { display: none; }
+
+/* ═══ modal معلومات اللاعب ═══ */
+#player-info-modal {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10000; backdrop-filter: blur(4px);
+}
+#player-info-box {
+  background: linear-gradient(180deg, var(--nat-bg-panel), var(--nat-bg-panel2));
+  border: 1px solid var(--nat-border);
+  border-radius: 18px;
+  padding: 28px; text-align: center;
+  width: min(88%, 300px);
+  box-shadow: 0 12px 50px #0009;
+  animation: navMenuIn 0.25s ease;
+}
+.pinfo-avatar {
+  width: 72px; height: 72px; margin: 0 auto 14px;
+  border-radius: 18px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 38px;
+}
+.pinfo-avatar.p1 { background: linear-gradient(135deg, var(--nat-p1), var(--nat-p1-bright)); box-shadow: 0 0 24px var(--nat-p1-glow)50; }
+.pinfo-avatar.p2 { background: linear-gradient(135deg, var(--nat-p2), var(--nat-p2-bright)); box-shadow: 0 0 24px var(--nat-p2)50; }
+.pinfo-avatar.p3 { background: linear-gradient(135deg, #8b5cf6, #a78bfa); }
+.pinfo-avatar.p4 { background: linear-gradient(135deg, var(--nat-gold), #fcd34d); }
+#player-info-box h3 { font-size: 1.3rem; color: var(--nat-text); margin: 0 0 10px; }
+.pinfo-level { font-size: 1rem; color: var(--nat-p1-bright); font-weight: 600; margin-bottom: 4px; }
+.pinfo-xp { font-size: 0.85rem; color: var(--nat-gold); margin-bottom: 10px; }
+.pinfo-score { font-size: 0.9rem; color: var(--nat-text-dim); margin-bottom: 18px; }
+#pinfo-close {
+  background: linear-gradient(135deg, var(--nat-p1), var(--nat-p1-bright));
+  color: #04130d; border: none;
+  padding: 10px 28px; border-radius: 10px;
+  font-size: 0.95rem; font-weight: 700; cursor: pointer;
 }

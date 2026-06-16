@@ -1,13 +1,13 @@
 // 📄 boardRenderer.js — v15.0 (PixiJS v8 Enhanced)
-import { state }                              from "../core/state.js?v=1781562231";
-import { makeKey }                            from "../utils.js?v=1781562231";
-import { config }                             from "../config/config.js?v=1781562231";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781562231";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781562231";
-import { endGame }                            from "./gameEnd.js?v=1781562231";
-import { audioManager }                       from "../audio/audioManager.js?v=1781562231";
-import { checkSquaresAround }                 from "../core/logic.js?v=1781562231";
-import { onlineManager }                      from "../firebase.js?v=1781562231";
+import { state }                              from "../core/state.js?v=1781564659";
+import { makeKey }                            from "../utils.js?v=1781564659";
+import { config }                             from "../config/config.js?v=1781564659";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781564659";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781564659";
+import { endGame }                            from "./gameEnd.js?v=1781564659";
+import { audioManager }                       from "../audio/audioManager.js?v=1781564659";
+import { checkSquaresAround }                 from "../core/logic.js?v=1781564659";
+import { onlineManager }                      from "../firebase.js?v=1781564659";
 
 let app=null, edgeObjects=[], squareLayer=null, edgeLayer=null,
     dotLayer=null, fxLayer=null, glowLayer=null, aiPlayer=null,

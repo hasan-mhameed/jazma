@@ -13,7 +13,7 @@
     <title>جزمة — Dots & Boxes v11.7</title>
     <link rel="stylesheet" href="css/style.css" />
     <link rel="stylesheet" href="./css/animations.css" />
-    <link rel="stylesheet" href="./css/nature-theme.css?v=22" />
+    <link rel="stylesheet" href="./css/nature-theme.css?v=24" />
 
     <!-- 🆕 حل مشكلة favicon.ico -->
     <link rel="icon" href="data:," />
@@ -252,12 +252,17 @@
 
       <!-- 📊 معلومات اللعبة -->
       <div id="info" class="hidden">
-        <div id="scores"></div>
-        <div id="game-controls">
-          <button id="restart" title="إنهاء وخروج">🚪</button>
-          <button id="sound-toggle" class="sound-btn" title="المؤثرات الصوتية">🔊</button>
-          <button id="music-toggle" class="music-btn" title="الموسيقى">🎵</button>
+        <!-- شريط علوي خاص باللعبة -->
+        <div id="game-topbar">
+          <button id="restart" title="إنهاء وخروج">‹ خروج</button>
+          <div id="game-controls">
+            <button id="game-messages-btn" title="الرسائل">💬<span id="game-msg-dot" class="game-msg-dot hidden"></span></button>
+            <button id="sound-toggle" class="sound-btn" title="المؤثرات الصوتية">🔊</button>
+            <button id="music-toggle" class="music-btn" title="الموسيقى">🎵</button>
+          </div>
         </div>
+        <!-- بطاقات اللاعبين -->
+        <div id="scores"></div>
       </div>
 
       <!-- مؤشر الدور -->
@@ -408,6 +413,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.1.0/dist/pixi.min.js"></script>
-    <script type="module" src="js/main.js?v=1781562231" defer></script>
+    <script type="module" src="js/main.js?v=1781564659" defer></script>
   </body>
 </html>
