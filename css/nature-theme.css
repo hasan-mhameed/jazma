@@ -416,9 +416,13 @@ body {
   box-shadow: 0 0 16px var(--accent-glow)50; flex-shrink: 0;
 }
 .npc-info { flex: 1; min-width: 0; }
-.npc-name {
+#scores .npc-name {
   font-size: 15px; font-weight: 700; color: #ffffff;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0; padding: 0; text-align: right;
+}
+#scores .npc-level {
+  min-width: 0; padding: 1px 7px;
 }
 .npc-turn-tag {
   font-size: 10px; color: var(--accent-bright);
@@ -431,9 +435,15 @@ body {
   flex-shrink: 0;
 }
 /* البطاقة غير النشطة — نبقي العناصر واضحة (بس بدون توهج الإطار) */
-.nat-player-card:not(.active) { opacity: 0.92; }
-.nat-player-card:not(.active) .npc-name { color: #ffffff; }
+.nat-player-card:not(.active) { opacity: 0.95; }
+#scores .nat-player-card:not(.active) .npc-name { color: #ffffff; }
 .nat-player-card:not(.active) .npc-avatar { box-shadow: 0 0 8px var(--accent-glow)30; }
+/* النقطة — نتغلب على #scores span */
+#scores .npc-score {
+  min-width: 0; padding: 0;
+  color: var(--accent-bright);
+  text-shadow: 0 0 16px var(--accent-glow)60;
+}
 
 /* ── أزرار التحكم ── */
 
