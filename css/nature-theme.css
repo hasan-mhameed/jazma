@@ -394,6 +394,7 @@ body {
   position: relative; overflow: hidden;
   transition: all 0.3s;
   min-width: 140px;
+  min-height: 72px;
 }
 .nat-player-card.p1 { --accent: var(--nat-p1); --accent-bright: var(--nat-p1-bright); --accent-glow: var(--nat-p1-glow); }
 .nat-player-card.p2 { --accent: var(--nat-p2); --accent-bright: var(--nat-p2-bright); --accent-glow: var(--nat-p2); }
