@@ -1,13 +1,13 @@
 // 📄 boardRenderer.js — v15.0 (PixiJS v8 Enhanced)
-import { state }                              from "../core/state.js?v=1781645925";
-import { makeKey }                            from "../utils.js?v=1781645925";
-import { config }                             from "../config/config.js?v=1781645925";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781645925";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781645925";
-import { endGame }                            from "./gameEnd.js?v=1781645925";
-import { audioManager }                       from "../audio/audioManager.js?v=1781645925";
-import { checkSquaresAround }                 from "../core/logic.js?v=1781645925";
-import { onlineManager }                      from "../firebase.js?v=1781645925";
+import { state }                              from "../core/state.js?v=1781646243";
+import { makeKey }                            from "../utils.js?v=1781646243";
+import { config }                             from "../config/config.js?v=1781646243";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781646243";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781646243";
+import { endGame }                            from "./gameEnd.js?v=1781646243";
+import { audioManager }                       from "../audio/audioManager.js?v=1781646243";
+import { checkSquaresAround }                 from "../core/logic.js?v=1781646243";
+import { onlineManager }                      from "../firebase.js?v=1781646243";
 
 let app=null, edgeObjects=[], squareLayer=null, edgeLayer=null,
     dotLayer=null, fxLayer=null, glowLayer=null, aiPlayer=null,
@@ -32,20 +32,20 @@ export async function initBoard(cfg, ai=null) {
   const H=padding*2+(cfg.rows-1)*spacing;
   cfg._pixi={spacing,padding,W,H};
 
-  if (app){app.destroy({ removeView: false }, { children: true, texture: true });app=null;}
+  if (app){ try { app.destroy({ removeView: false }, { children: true, texture: true }); } catch(e){} app=null; }
 
-  // إعادة ضبط الـ canvas (يحل مشكلة عدم الظهور بعد لعبة جديدة)
-  const canvasEl = document.getElementById('board');
+  // نستبدل الـ canvas بنسخة نظيفة — يتجنب بقايا الـ WebGL context القديم
+  let canvasEl = document.getElementById('board');
   if (canvasEl) {
-    canvasEl.style.width = '';
-    canvasEl.style.height = '';
-    canvasEl.removeAttribute('width');
-    canvasEl.removeAttribute('height');
+    const fresh = canvasEl.cloneNode(false);
+    fresh.className = canvasEl.className;
+    canvasEl.parentNode.replaceChild(fresh, canvasEl);
+    canvasEl = fresh;
   }
 
   app=new PIXI.Application();
   await app.init({
-    canvas:document.getElementById('board'),
+    canvas: canvasEl,
     width:W, height:H, backgroundColor:THEME.bg,
     antialias:true, resolution:Math.min(window.devicePixelRatio||1,2),
     autoDensity:true,
@@ -283,5 +283,5 @@ export function resetState() {
   state.currentPlayer=1; state.lines=new Set();
   if (state.scores) for (const k in state.scores) state.scores[k]=0;
   _dots=[];
-  if (app){app.destroy({ removeView: false }, { children: true, texture: true });app=null;}
+  if (app){ try { app.destroy({ removeView: false }, { children: true, texture: true }); } catch(e){} app=null; }
 }
