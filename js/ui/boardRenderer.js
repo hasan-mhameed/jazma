@@ -1,13 +1,13 @@
 // 📄 boardRenderer.js — v15.0 (PixiJS v8 Enhanced)
-import { state }                              from "../core/state.js?v=1781564659";
-import { makeKey }                            from "../utils.js?v=1781564659";
-import { config }                             from "../config/config.js?v=1781564659";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781564659";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781564659";
-import { endGame }                            from "./gameEnd.js?v=1781564659";
-import { audioManager }                       from "../audio/audioManager.js?v=1781564659";
-import { checkSquaresAround }                 from "../core/logic.js?v=1781564659";
-import { onlineManager }                      from "../firebase.js?v=1781564659";
+import { state }                              from "../core/state.js?v=1781645925";
+import { makeKey }                            from "../utils.js?v=1781645925";
+import { config }                             from "../config/config.js?v=1781645925";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781645925";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781645925";
+import { endGame }                            from "./gameEnd.js?v=1781645925";
+import { audioManager }                       from "../audio/audioManager.js?v=1781645925";
+import { checkSquaresAround }                 from "../core/logic.js?v=1781645925";
+import { onlineManager }                      from "../firebase.js?v=1781645925";
 
 let app=null, edgeObjects=[], squareLayer=null, edgeLayer=null,
     dotLayer=null, fxLayer=null, glowLayer=null, aiPlayer=null,
@@ -32,7 +32,16 @@ export async function initBoard(cfg, ai=null) {
   const H=padding*2+(cfg.rows-1)*spacing;
   cfg._pixi={spacing,padding,W,H};
 
-  if (app){app.destroy(true);app=null;}
+  if (app){app.destroy({ removeView: false }, { children: true, texture: true });app=null;}
+
+  // إعادة ضبط الـ canvas (يحل مشكلة عدم الظهور بعد لعبة جديدة)
+  const canvasEl = document.getElementById('board');
+  if (canvasEl) {
+    canvasEl.style.width = '';
+    canvasEl.style.height = '';
+    canvasEl.removeAttribute('width');
+    canvasEl.removeAttribute('height');
+  }
 
   app=new PIXI.Application();
   await app.init({
@@ -274,5 +283,5 @@ export function resetState() {
   state.currentPlayer=1; state.lines=new Set();
   if (state.scores) for (const k in state.scores) state.scores[k]=0;
   _dots=[];
-  if (app){app.destroy(true);app=null;}
+  if (app){app.destroy({ removeView: false }, { children: true, texture: true });app=null;}
 }
