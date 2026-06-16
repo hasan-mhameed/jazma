@@ -418,9 +418,9 @@ body {
 .npc-info { flex: 1; min-width: 0; }
 #scores .npc-name {
   font-size: 15px; font-weight: 700; color: #ffffff;
-  white-space: normal; overflow: visible; text-overflow: clip;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   min-width: 0; padding: 0; text-align: right;
-  word-break: break-word; line-height: 1.2;
+  max-width: 130px; line-height: 1.2;
 }
 #scores .npc-level {
   min-width: 0; padding: 1px 7px;
@@ -505,7 +505,7 @@ body {
 }
 
 /* ═══ شارة المستوى في بطاقة اللاعب ═══ */
-.npc-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.npc-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
 #scores .npc-level {
   font-size: 11px; font-weight: 700;
   color: var(--accent-bright) !important;
