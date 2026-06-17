@@ -571,3 +571,11 @@ body {
   padding: 10px 28px; border-radius: 10px;
   font-size: 0.95rem; font-weight: 700; cursor: pointer;
 }
+
+/* ═══ إصلاح: .hidden يغلب على display:flex !important ═══ */
+#info.hidden,
+#nat-turn-indicator.hidden,
+#inventory-bar.hidden,
+#board.hidden {
+  display: none !important;
+}
