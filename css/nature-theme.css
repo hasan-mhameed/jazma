@@ -421,7 +421,7 @@ body {
   font-size: 15px; font-weight: 700; color: #ffffff;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   min-width: 0; padding: 0; text-align: right;
-  max-width: 130px; line-height: 1.2;
+  line-height: 1.2;
 }
 #scores .npc-level {
   min-width: 0; padding: 1px 7px;
@@ -494,15 +494,21 @@ body {
 /* ── responsive شاشة اللعب ── */
 @media (max-width: 760px) {
   #scores { gap: 8px; }
-  .nat-player-card { padding: 9px 12px; gap: 8px; min-width: 0; }
-  .npc-avatar { width: 38px; height: 38px; font-size: 19px; }
-  .npc-name { font-size: 13px; }
-  .npc-score { font-size: 24px; }
+  .nat-player-card { padding: 9px 10px; gap: 8px; min-width: 0; min-height: 60px; }
+  .npc-avatar { width: 34px; height: 34px; font-size: 17px; border-radius: 9px; }
+  #scores .npc-name { font-size: 12px; }
+  #scores .npc-level { font-size: 9px; padding: 1px 5px; }
+  .npc-score { font-size: 22px; }
+  #game-topbar { flex-wrap: wrap; gap: 8px; }
   #restart { padding: 7px 13px !important; font-size: 0.82rem !important; }
   #game-controls button { width: 36px; height: 36px; font-size: 15px; }
-  #inventory-bar { gap: 7px; padding: 9px; }
-  #inventory-bar .inv-label { display: none; }
-  #inventory-bar .inv-slot { width: 44px; height: 44px; font-size: 22px; }
+  #nat-turn-indicator { font-size: 12px; padding: 7px; }
+}
+@media (max-width: 400px) {
+  .nat-player-card { flex-direction: column; align-items: flex-start; gap: 4px; padding: 8px; }
+  .nat-player-card .npc-score { align-self: flex-end; margin-top: -20px; }
+  .npc-name-row { gap: 5px; }
+  #scores .npc-name { font-size: 11px; }
 }
 
 /* ═══ شارة المستوى في بطاقة اللاعب ═══ */
