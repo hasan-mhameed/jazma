@@ -3,7 +3,7 @@ import { getDatabase, ref, push, onValue, update, get, query, limitToLast }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getCurrentUser } from "./auth.js?v=1781737884";
+import { getCurrentUser } from "./auth.js?v=1781738647";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -57,7 +57,8 @@ export function markRead(toUid) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid) return;
   const key = chatKey(myUid, toUid);
-  localStorage.setItem(`lastRead_${key}`, Date.now().toString());
+  // نخزّن آخر قراءة في Firebase (يتبع الحساب على أي جهاز)
+  update(ref(db), { [`users/${myUid}/lastRead/${key}`]: Date.now() });
   const q = query(ref(db, `chats/${key}`), limitToLast(50));
   get(q).then(snap => {
     const updates = {};
@@ -91,6 +92,7 @@ export function listenMessages(toUid, cb) {
 }
 
 // ─── الاستماع لعدد الرسائل غير المقروءة ─────────────────────
+// ─── (قديمة — لم تعد مستخدمة، messagesUI يستخدم Firebase الآن) ─
 export function listenUnread(friends, cb) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid) return () => {};
@@ -98,7 +100,7 @@ export function listenUnread(friends, cb) {
   const unreadMap = {};
   friends.forEach(friend => {
     const key      = chatKey(myUid, friend.uid);
-    const lastRead = parseInt(localStorage.getItem(`lastRead_${key}`) || "0");
+    const lastRead = 0;
     const q        = query(ref(db, `chats/${key}`), limitToLast(50));
     const unsubscribe = onValue(q, (snap) => {
       let count = 0;
@@ -118,5 +120,24 @@ export function markAsRead(toUid) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid) return;
   const key = chatKey(myUid, toUid);
-  localStorage.setItem(`lastRead_${key}`, Date.now().toString());
+  update(ref(db), { [`users/${myUid}/lastRead/${key}`]: Date.now() });
 }
+
+// ─── جلب خريطة آخر قراءة من Firebase ─────────────────────────
+export async function getLastReadMap() {
+  const myUid = getCurrentUser()?.uid;
+  if (!myUid) return {};
+  const snap = await get(ref(db, `users/${myUid}/lastRead`));
+  return snap.exists() ? snap.val() : {};
+}
+
+// ─── الاستماع لآخر قراءة (live) ──────────────────────────────
+export function listenLastRead(cb) {
+  const myUid = getCurrentUser()?.uid;
+  if (!myUid) return () => {};
+  return onValue(ref(db, `users/${myUid}/lastRead`), snap => {
+    cb(snap.exists() ? snap.val() : {});
+  });
+}
+
+export { chatKey };

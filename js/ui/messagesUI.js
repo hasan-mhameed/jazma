@@ -1,14 +1,16 @@
 // 📄 ui/messagesUI.js
 // زر الرسائل في navbar + panel المحادثات
 
-import { listenMessages, markAsRead } from "../chat.js?v=1781737884";
-import { listenFriends }              from "../friends.js?v=1781737884";
-import { getCurrentUser }             from "../auth.js?v=1781737884";
+import { listenMessages, markAsRead, getLastReadMap, listenLastRead, chatKey } from "../chat.js?v=1781738647";
+import { listenFriends }              from "../friends.js?v=1781738647";
+import { getCurrentUser }             from "../auth.js?v=1781738647";
 
 let _friends     = [];
 let _unsubscribes = [];
 let _unreadMap   = {};   // { uid: count }
 let _lastMsgMap  = {};   // { uid: { text, ts } }
+let _lastReadMap = {};   // { chatKey: ts } من Firebase
+let _allMsgs     = {};   // { uid: [msgs] }
 let _onOpenChat  = null;
 
 // ── init ──────────────────────────────────────────────────────────
@@ -30,11 +32,32 @@ export function initMessagesUI({ onOpenChat }) {
   // لما تُفتح محادثة من أي مكان — امسح الـ unread
   document.addEventListener('chat:opened', e => clearUnreadFor(e.detail));
 
+  // استمع لآخر قراءة من Firebase (يتبع الحساب على أي جهاز)
+  listenLastRead(map => {
+    _lastReadMap = map || {};
+    recomputeUnread();
+  });
+
   // استمع للأصدقاء وابدأ تتبع رسائلهم
   listenFriends(friends => {
     _friends = friends;
     startListening(friends);
   });
+}
+
+// ── إعادة حساب غير المقروء بعد تحديث lastRead ──
+function recomputeUnread() {
+  const myUid = getCurrentUser()?.uid;
+  if (!myUid) return;
+  _friends.forEach(friend => {
+    const k = [myUid, friend.uid].sort().join('_');
+    const lastRead = _lastReadMap[k] || 0;
+    const msgs = _allMsgs[friend.uid] || [];
+    _unreadMap[friend.uid] = msgs.filter(m => m.fromUid === friend.uid && (m.ts || 0) > lastRead).length;
+  });
+  updateBadge();
+  const panel = document.getElementById('messages-panel');
+  if (!panel?.classList.contains('hidden')) renderMessagesList();
 }
 
 // ── بدء الاستماع لرسائل كل صديق ─────────────────────────────────
@@ -46,11 +69,11 @@ function startListening(friends) {
   if (!myUid) return;
 
   friends.forEach(friend => {
-    const chatKey = [myUid, friend.uid].sort().join('_');
+    const k = [myUid, friend.uid].sort().join('_');
 
     const unsub = listenMessages(friend.uid, msgs => {
-      // نقرأ lastRead في كل مرة عشان يعكس آخر قراءة
-      const lastRead = parseInt(localStorage.getItem(`lastRead_${chatKey}`) || '0');
+      _allMsgs[friend.uid] = msgs;
+      const lastRead = _lastReadMap[k] || 0;
       const unread   = msgs.filter(m => m.fromUid === friend.uid && (m.ts || 0) > lastRead).length;
       const last     = msgs[msgs.length - 1];
 
@@ -58,7 +81,6 @@ function startListening(friends) {
       _lastMsgMap[friend.uid] = last ? { text: last.text, ts: last.ts } : null;
 
       updateBadge();
-      // لو الـ panel مفتوح نحدثه
       const panel = document.getElementById('messages-panel');
       if (!panel?.classList.contains('hidden')) renderMessagesList();
     });
@@ -121,10 +143,7 @@ function renderMessagesList() {
       ${unread > 0 ? `<div class="msg-unread-badge">${unread}</div>` : ''}`;
 
     row.addEventListener('click', () => {
-      // مسح الـ unread
-      const myUid   = getCurrentUser()?.uid;
-      const chatKey = [myUid, friend.uid].sort().join('_');
-      localStorage.setItem(`lastRead_${chatKey}`, Date.now().toString());
+      // مسح الـ unread — markAsRead يكتب في Firebase
       markAsRead(friend.uid);
       _unreadMap[friend.uid] = 0;
       updateBadge();
