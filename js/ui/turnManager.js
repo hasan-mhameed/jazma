@@ -1,6 +1,6 @@
 // 📄 turnManager.js — v15.8
-import { state }  from "../core/state.js?v=1781823579";
-import { config } from "../config/config.js?v=1781823579";
+import { state }  from "../core/state.js?v=1781824257";
+import { config } from "../config/config.js?v=1781824257";
 
 export function updateTurn(cfg) { updateTurnUI(cfg); }
 

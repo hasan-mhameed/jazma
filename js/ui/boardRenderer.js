@@ -1,40 +1,71 @@
-// 📄 boardRenderer.js — v15.0 (PixiJS v8 Enhanced)
-import { state }                              from "../core/state.js?v=1781823579";
-import { makeKey }                            from "../utils.js?v=1781823579";
-import { config }                             from "../config/config.js?v=1781823579";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781823579";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781823579";
-import { endGame }                            from "./gameEnd.js?v=1781823579";
-import { audioManager }                       from "../audio/audioManager.js?v=1781823579";
-import { checkSquaresAround }                 from "../core/logic.js?v=1781823579";
-import { onlineManager }                      from "../firebase.js?v=1781823579";
+// 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
+// طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-let app=null, edgeObjects=[], squareLayer=null, edgeLayer=null,
-    dotLayer=null, fxLayer=null, glowLayer=null, aiPlayer=null,
-    isAIThinking=false, _dots=[];
+import { state }                              from "../core/state.js?v=1781824257";
+import { makeKey }                            from "../utils.js?v=1781824257";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781824257";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781824257";
+import { endGame }                            from "./gameEnd.js?v=1781824257";
+import { audioManager }                       from "../audio/audioManager.js?v=1781824257";
+import { checkSquaresAround }                 from "../core/logic.js?v=1781824257";
+import { onlineManager }                      from "../firebase.js?v=1781824257";
 
+// ═══════════════════════════════════════════════════════
+//  الحالة العامة
+// ═══════════════════════════════════════════════════════
+let app = null;
+let layers = {};            // الطبقات
+let edgeObjects = [];       // الخطوط التفاعلية
+let aiPlayer = null;
+let isAIThinking = false;
+let animItems = [];         // عناصر حية تتحرك كل إطار
+let ambientParticles = [];  // جسيمات الخلفية
+let _cfg = null;
+
+// ═══════════════════════════════════════════════════════
+//  الثيم
+// ═══════════════════════════════════════════════════════
 const THEME = {
-  bg:0x0a0a18, dot:0xc8b8ff, dotGlow:0x9d8df7, dotCorner:0xfbbf24,
-  edgeIdle:0x1e1e38, edgeHover:0x7c6af7, squareAlpha:0.28,
-  playerColors:[0x7c6af7,0xf87171,0x4ade80,0xfbbf24],
-  playerGlows:[0x9d8df7,0xfca5a5,0x86efac,0xfcd34d],
+  bg:          0x081310,
+  dot:         0xc8b8ff,
+  dotGlow:     0x9d8df7,
+  dotCorner:   0xfbbf24,
+  edgeIdle:    0x1e4035,
+  edgeHover:   0x2dd4bf,
+  squareAlpha: 0.26,
+  // ألوان اللاعبين (الخطوط والمربعات تتبعها)
+  playerColors: [0x2dd4bf, 0xfb923c, 0xa78bfa, 0xfcd34d],
+  playerGlows:  [0x06d6a0, 0xf97316, 0x8b5cf6, 0xfbbf24],
+  ambient:     [0x2dd4bf, 0x10b981, 0xa3e635],
 };
 
-export async function initBoard(cfg, ai=null) {
-  aiPlayer=ai; isAIThinking=false; edgeObjects=[]; _dots=[];
+function pColor(p) { return THEME.playerColors[(p-1) % 4] || 0x888888; }
+function pGlow(p)  { return THEME.playerGlows[(p-1) % 4]  || 0x888888; }
+
+// ═══════════════════════════════════════════════════════
+//  init
+// ═══════════════════════════════════════════════════════
+export async function initBoard(cfg, ai = null) {
+  _cfg = cfg;
+  aiPlayer = ai;
+  isAIThinking = false;
+  edgeObjects = [];
+  animItems = [];
+  ambientParticles = [];
+
   while (cfg.colors.length < cfg.players)
     cfg.colors.push(`hsl(${Math.floor(Math.random()*360)},70%,50%)`);
 
-  const SIZE=Math.min(window.innerWidth*0.88, window.innerHeight*0.54, 500);
-  const padding=SIZE*0.13;
-  const spacing=(SIZE-padding*2)/(Math.max(cfg.cols,cfg.rows)-1);
-  const W=padding*2+(cfg.cols-1)*spacing;
-  const H=padding*2+(cfg.rows-1)*spacing;
-  cfg._pixi={spacing,padding,W,H};
+  // أبعاد
+  const SIZE    = Math.min(window.innerWidth * 0.9, window.innerHeight * 0.5, 480);
+  const padding = SIZE * 0.12;
+  const spacing = (SIZE - padding*2) / (Math.max(cfg.cols, cfg.rows) - 1);
+  const W = padding*2 + (cfg.cols-1)*spacing;
+  const H = padding*2 + (cfg.rows-1)*spacing;
+  cfg._pixi = { spacing, padding, W, H };
 
-  if (app){ try { app.destroy({ removeView: false }, { children: true, texture: true }); } catch(e){} app=null; }
-
-  // نستبدل الـ canvas بنسخة نظيفة — يتجنب بقايا الـ WebGL context القديم
+  // تدمير آمن + canvas نظيف
+  if (app) { try { app.destroy({ removeView: false }, { children: true, texture: true }); } catch(e){} app = null; }
   let canvasEl = document.getElementById('board');
   if (canvasEl) {
     const fresh = canvasEl.cloneNode(false);
@@ -44,245 +75,339 @@ export async function initBoard(cfg, ai=null) {
     canvasEl = fresh;
   }
 
-  app=new PIXI.Application();
+  app = new PIXI.Application();
   await app.init({
     canvas: canvasEl,
-    width:W, height:H, backgroundColor:THEME.bg,
-    antialias:true, resolution:Math.min(window.devicePixelRatio||1,2),
-    autoDensity:true,
+    width: W, height: H,
+    backgroundColor: THEME.bg,
+    antialias: true,
+    resolution: Math.min(window.devicePixelRatio || 1, 2),
+    autoDensity: true,
   });
 
-  glowLayer=new PIXI.Container(); app.stage.addChild(glowLayer);
-  squareLayer=new PIXI.Container(); app.stage.addChild(squareLayer);
-  edgeLayer=new PIXI.Container(); app.stage.addChild(edgeLayer);
-  dotLayer=new PIXI.Container(); app.stage.addChild(dotLayer);
-  fxLayer=new PIXI.Container(); app.stage.addChild(fxLayer);
-
-  for (let r=0;r<cfg.rows;r++) for (let c=0;c<cfg.cols;c++) {
-    const x=padding+c*spacing, y=padding+r*spacing;
-    const isCorner=(r===0||r===cfg.rows-1)&&(c===0||c===cfg.cols-1);
-    const dotObj=drawDot(x,y,isCorner);
-    _dots.push({g:dotObj, t:Math.random()*Math.PI*2});
-  }
-
-  state.lines=new Set(); state.currentPlayer=1; state.scores={};
-  for (let i=1;i<=cfg.players;i++) state.scores[i]=0;
-
-  for (let r=0;r<cfg.rows;r++) for (let c=0;c<cfg.cols;c++) {
-    if (c<cfg.cols-1) addEdge(r,c,r,c+1,cfg);
-    if (r<cfg.rows-1) addEdge(r,c,r+1,c,cfg);
-  }
-
-  let t=0;
-  app.ticker.add(()=>{
-    t+=0.02;
-    _dots.forEach(d=>{ d.g.scale.set(1+Math.sin(d.t+t)*0.12); });
+  // ── الطبقات (الترتيب مهم) ──
+  layers = {};
+  ['ambient','glow','squares','elements','edges','dots','fx'].forEach(name => {
+    layers[name] = new PIXI.Container();
+    app.stage.addChild(layers[name]);
   });
 
-  renderScoreboard(cfg); updateScoreboard(); updateTurnUI(cfg); updateTurn(cfg);
+  // ── الحالة ──
+  state.lines = new Set();
+  state.currentPlayer = 1;
+  state.scores = {};
+  for (let i = 1; i <= cfg.players; i++) state.scores[i] = 0;
+
+  buildAmbient(W, H);
+  buildDots(cfg);
+  buildEdges(cfg);
+
+  // ── ticker مركزي ──
+  app.ticker.add(ticker);
+
+  renderScoreboard(cfg);
+  updateScoreboard();
+  updateTurnUI(cfg);
+  updateTurn(cfg);
 }
 
-function drawDot(x,y,isCorner) {
-  const r=isCorner?7:5;
-  const color=isCorner?THEME.dotCorner:THEME.dot;
-  const glow=isCorner?0xfcd34d:THEME.dotGlow;
-  const glowG=new PIXI.Graphics();
-  glowG.circle(0,0,r+6).fill({color:glow,alpha:0.15});
-  glowG.x=x; glowG.y=y; glowLayer.addChild(glowG);
-  const g=new PIXI.Graphics();
-  g.circle(0,0,r).fill({color,alpha:1});
-  g.circle(0,0,r*0.45).fill({color:0xffffff,alpha:0.5});
-  g.x=x; g.y=y; dotLayer.addChild(g);
-  return g;
+// ═══════════════════════════════════════════════════════
+//  الخلفية الحية — جسيمات تطفو
+// ═══════════════════════════════════════════════════════
+function buildAmbient(W, H) {
+  for (let i = 0; i < 14; i++) {
+    const g = new PIXI.Graphics();
+    const color = THEME.ambient[i % THEME.ambient.length];
+    const size = 1 + Math.random() * 2;
+    g.circle(0, 0, size).fill({ color, alpha: 0.4 });
+    g.x = Math.random() * W;
+    g.y = Math.random() * H;
+    layers.ambient.addChild(g);
+    ambientParticles.push({ g, speed: 0.15 + Math.random()*0.3, drift: Math.random()*0.5-0.25, phase: Math.random()*Math.PI*2 });
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  النقاط
+// ═══════════════════════════════════════════════════════
+function buildDots(cfg) {
+  const { spacing, padding } = cfg._pixi;
+  for (let r = 0; r < cfg.rows; r++) {
+    for (let c = 0; c < cfg.cols; c++) {
+      const x = padding + c*spacing;
+      const y = padding + r*spacing;
+      const isCorner = (r===0||r===cfg.rows-1) && (c===0||c===cfg.cols-1);
+      const radius = isCorner ? 6 : 4.5;
+      const color  = isCorner ? THEME.dotCorner : THEME.dot;
+      const glow   = isCorner ? 0xfcd34d : THEME.dotGlow;
+
+      const glowG = new PIXI.Graphics();
+      glowG.circle(0,0,radius+5).fill({ color: glow, alpha: 0.15 });
+      glowG.x = x; glowG.y = y;
+      layers.glow.addChild(glowG);
+
+      const g = new PIXI.Graphics();
+      g.circle(0,0,radius).fill({ color });
+      g.circle(0,0,radius*0.4).fill({ color: 0xffffff, alpha: 0.5 });
+      g.x = x; g.y = y;
+      layers.dots.addChild(g);
+
+      animItems.push({ type:'dot', g, glowG, baseR: radius, phase: Math.random()*Math.PI*2 });
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  الخطوط التفاعلية
+// ═══════════════════════════════════════════════════════
+function buildEdges(cfg) {
+  for (let r = 0; r < cfg.rows; r++) {
+    for (let c = 0; c < cfg.cols; c++) {
+      if (c < cfg.cols-1) addEdge(r,c,r,c+1,cfg);
+      if (r < cfg.rows-1) addEdge(r,c,r+1,c,cfg);
+    }
+  }
 }
 
 function addEdge(r1,c1,r2,c2,cfg) {
-  const {spacing,padding}=cfg._pixi;
-  const x1=padding+c1*spacing, y1=padding+r1*spacing;
-  const x2=padding+c2*spacing, y2=padding+r2*spacing;
-  const key=makeKey(r1,c1,r2,c2);
+  const { spacing, padding } = cfg._pixi;
+  const x1 = padding + c1*spacing, y1 = padding + r1*spacing;
+  const x2 = padding + c2*spacing, y2 = padding + r2*spacing;
+  const key = makeKey(r1,c1,r2,c2);
 
-  const line=new PIXI.Graphics();
-  drawIdleLine(line,x1,y1,x2,y2);
-  edgeLayer.addChild(line);
+  const line = new PIXI.Graphics();
+  drawLine(line, x1,y1,x2,y2, THEME.edgeIdle, 2.5);
+  layers.edges.addChild(line);
 
-  const lineGlow=new PIXI.Graphics();
-  lineGlow.alpha=0; glowLayer.addChild(lineGlow);
+  const glow = new PIXI.Graphics();
+  glow.alpha = 0;
+  layers.glow.addChild(glow);
 
-  const hit=new PIXI.Graphics();
-  const isH=r1===r2;
-  if (isH) hit.rect(Math.min(x1,x2)-6,y1-14,Math.abs(x2-x1)+12,28).fill({color:0xffffff,alpha:0});
-  else hit.rect(x1-14,Math.min(y1,y2)-6,28,Math.abs(y2-y1)+12).fill({color:0xffffff,alpha:0});
-  hit.eventMode='static'; hit.cursor='pointer';
-  edgeLayer.addChild(hit);
+  const hit = new PIXI.Graphics();
+  const isH = r1 === r2;
+  if (isH) hit.rect(Math.min(x1,x2)-6, y1-13, Math.abs(x2-x1)+12, 26).fill({ color:0xffffff, alpha:0 });
+  else     hit.rect(x1-13, Math.min(y1,y2)-6, 26, Math.abs(y2-y1)+12).fill({ color:0xffffff, alpha:0 });
+  hit.eventMode = 'static';
+  hit.cursor = 'pointer';
+  layers.edges.addChild(hit);
 
-  hit.on('pointerover',()=>{
-    if (state.lines.has(key)) return;
-    drawHoverLine(line,x1,y1,x2,y2);
-    drawGlowLine(lineGlow,x1,y1,x2,y2,THEME.edgeHover,0.3);
+  const obj = { key, line, glow, x1,y1,x2,y2, r1,c1,r2,c2, drawn:false };
+
+  hit.on('pointerover', () => {
+    if (obj.drawn) return;
+    drawLine(line, x1,y1,x2,y2, THEME.edgeHover, 3.5, 0.8);
+    drawLine(glow, x1,y1,x2,y2, THEME.edgeHover, 9, 0.25); glow.alpha = 1;
   });
-  hit.on('pointerout',()=>{
-    if (state.lines.has(key)) return;
-    drawIdleLine(line,x1,y1,x2,y2);
-    lineGlow.clear(); lineGlow.alpha=0;
+  hit.on('pointerout', () => {
+    if (obj.drawn) return;
+    drawLine(line, x1,y1,x2,y2, THEME.edgeIdle, 2.5);
+    glow.clear(); glow.alpha = 0;
   });
-  hit.on('pointertap',()=>handleEdgeClick({key,line,lineGlow,x1,y1,x2,y2,r1,c1,r2,c2},cfg));
+  hit.on('pointertap', () => handleEdgeClick(obj, cfg));
 
-  edgeObjects.push({key,line,lineGlow,hit,x1,y1,x2,y2,r1,c1,r2,c2});
+  edgeObjects.push(obj);
 }
 
-function drawIdleLine(g,x1,y1,x2,y2){g.clear();g.moveTo(x1,y1).lineTo(x2,y2).stroke({color:THEME.edgeIdle,width:2.5,cap:'round'});}
-function drawHoverLine(g,x1,y1,x2,y2){g.clear();g.moveTo(x1,y1).lineTo(x2,y2).stroke({color:THEME.edgeHover,width:3.5,cap:'round',alpha:0.85});}
-function drawGlowLine(g,x1,y1,x2,y2,color,alpha){g.clear();g.moveTo(x1,y1).lineTo(x2,y2).stroke({color,width:10,cap:'round',alpha});g.alpha=1;}
-
-function drawPlayerLine(g,lineGlow,x1,y1,x2,y2,player) {
-  const color=THEME.playerColors[player-1]||0x888888;
-  const glow=THEME.playerGlows[player-1]||0x888888;
-  let progress=0;
-  const animate=()=>{
-    progress+=0.12;
-    const t=Math.min(progress,1);
-    const mx=x1+(x2-x1)*t, my=y1+(y2-y1)*t;
-    g.clear();
-    g.moveTo(x1,y1).lineTo(mx,my).stroke({color,width:4.5,cap:'round'});
-    drawGlowLine(lineGlow,x1,y1,mx,my,glow,0.25);
-    if (t<1) requestAnimationFrame(animate);
-    else {
-      let ga=0.25;
-      const fadeGlow=()=>{ga-=0.02;lineGlow.alpha=Math.max(ga,0);if(ga>0)requestAnimationFrame(fadeGlow);else{lineGlow.clear();lineGlow.alpha=0;}};
-      setTimeout(()=>requestAnimationFrame(fadeGlow),300);
-    }
-  };
-  requestAnimationFrame(animate);
+function drawLine(g, x1,y1,x2,y2, color, width, alpha=1) {
+  g.clear();
+  g.moveTo(x1,y1).lineTo(x2,y2).stroke({ color, width, cap:'round', alpha });
 }
 
-export function handleEdgeClick(edgeObj,cfg,isOpponentMove=false) {
-  if (isAIThinking) return;
-  if (cfg.aiMode==='online'&&!isOpponentMove&&!onlineManager.isMyTurn(state.currentPlayer)) return;
-  const {key,line,lineGlow,x1,y1,x2,y2,r1,c1,r2,c2}=edgeObj;
-  if (state.lines.has(key)) return;
+// ═══════════════════════════════════════════════════════
+//  النقر على خط
+// ═══════════════════════════════════════════════════════
+export function handleEdgeClick(obj, cfg, isOpponentMove=false) {
+  if (isAIThinking && !isOpponentMove) return;
+  if (cfg.aiMode === 'online' && !isOpponentMove && !onlineManager.isMyTurn(state.currentPlayer)) return;
+  if (obj.drawn || state.lines.has(obj.key)) return;
 
+  const player = state.currentPlayer;
   audioManager.playLineDraw();
-  drawPlayerLine(line,lineGlow,x1,y1,x2,y2,state.currentPlayer);
-  state.lines.add(key);
 
-  let squareCompleted=false;
-  checkSquaresAround(r1,c1,r2,c2,cfg).forEach(([r,c])=>{
-    fillSquare(r,c,cfg,state.currentPlayer);
-    state.scores[state.currentPlayer]=(state.scores[state.currentPlayer]||0)+1;
-    squareCompleted=true;
+  obj.drawn = true;
+  state.lines.add(obj.key);
+  animateLineDraw(obj, player);
+
+  // فحص المربعات
+  let completed = false;
+  checkSquaresAround(obj.r1, obj.c1, obj.r2, obj.c2, cfg).forEach(([r,c]) => {
+    fillSquare(r, c, cfg, player);
+    state.scores[player] = (state.scores[player]||0) + 1;
+    completed = true;
     audioManager.playSquareComplete();
-    const cx=cfg._pixi.padding+c*cfg._pixi.spacing+cfg._pixi.spacing/2;
-    const cy=cfg._pixi.padding+r*cfg._pixi.spacing+cfg._pixi.spacing/2;
-    spawnParticles(cx,cy,THEME.playerColors[state.currentPlayer-1]||0x888888);
   });
 
   updateScoreboard();
 
-  const totalSquares=(cfg.rows-1)*(cfg.cols-1);
-  const filled=Object.values(state.scores||{}).reduce((a,b)=>(+a||0)+(+b||0),0);
-  if (filled===totalSquares) {
-    if (cfg.aiMode==='online'&&!isOpponentMove) onlineManager.pushMove(key,Date.now());
-    endGame(cfg,state.scores); return;
+  // نهاية اللعبة؟
+  const total = (cfg.rows-1)*(cfg.cols-1);
+  const filled = Object.values(state.scores||{}).reduce((a,b)=>(+a||0)+(+b||0),0);
+  if (filled === total) {
+    if (cfg.aiMode==='online' && !isOpponentMove) onlineManager.pushMove(obj.key, Date.now());
+    endGame(cfg, state.scores);
+    return;
   }
 
-  if (!squareCompleted) {
-    state.currentPlayer=(state.currentPlayer%cfg.players)+1;
+  if (!completed) {
+    state.currentPlayer = (player % cfg.players) + 1;
     updateTurn(cfg);
   }
 
-  if (cfg.aiMode==='online'&&!isOpponentMove) onlineManager.pushMove(key,Date.now());
-  setTimeout(()=>triggerAIIfNeeded(cfg),100);
+  if (cfg.aiMode==='online' && !isOpponentMove) onlineManager.pushMove(obj.key, Date.now());
+  setTimeout(() => triggerAI(cfg), 100);
 }
 
-export function fillSquare(r,c,cfg,player) {
-  const {spacing,padding}=cfg._pixi;
-  const x=padding+c*spacing+3, y=padding+r*spacing+3;
-  const w=spacing-6, h=spacing-6;
-  const color=THEME.playerColors[player-1]||0x888888;
-  const glow=THEME.playerGlows[player-1]||0x888888;
+// ═══════════════════════════════════════════════════════
+//  أنميشن رسم الخط (بلون اللاعب)
+// ═══════════════════════════════════════════════════════
+function animateLineDraw(obj, player) {
+  const { line, glow, x1,y1,x2,y2 } = obj;
+  const color = pColor(player), glowC = pGlow(player);
+  let t = 0;
+  const step = () => {
+    t = Math.min(t + 0.14, 1);
+    const mx = x1+(x2-x1)*t, my = y1+(y2-y1)*t;
+    drawLine(line, x1,y1,mx,my, color, 4.5);
+    drawLine(glow, x1,y1,mx,my, glowC, 10, 0.3); glow.alpha = 1;
+    if (t < 1) requestAnimationFrame(step);
+    else fadeGlow(glow);
+  };
+  requestAnimationFrame(step);
+}
 
-  const glowSq=new PIXI.Graphics();
-  glowSq.roundRect(x-4,y-4,w+8,h+8,8).fill({color:glow,alpha:0});
-  squareLayer.addChild(glowSq);
+function fadeGlow(glow) {
+  let a = 0.3;
+  const step = () => {
+    a -= 0.015;
+    glow.alpha = Math.max(a, 0);
+    if (a > 0) requestAnimationFrame(step);
+    else { glow.clear(); glow.alpha = 0; }
+  };
+  setTimeout(() => requestAnimationFrame(step), 250);
+}
 
-  const sq=new PIXI.Graphics();
-  sq.roundRect(x,y,w,h,6).fill({color,alpha:0});
-  squareLayer.addChild(sq);
+// ═══════════════════════════════════════════════════════
+//  تعبئة مربع (بلون اللاعب) + جسيمات
+// ═══════════════════════════════════════════════════════
+export function fillSquare(r, c, cfg, player) {
+  const { spacing, padding } = cfg._pixi;
+  const x = padding + c*spacing + 3;
+  const y = padding + r*spacing + 3;
+  const w = spacing - 6, h = spacing - 6;
+  const color = pColor(player), glowC = pGlow(player);
+  const cx = x + w/2, cy = y + h/2;
 
-  const label=new PIXI.Text({text:String(player),style:{
-    fill:color, fontSize:Math.floor(spacing*0.32),
-    fontWeight:'bold', fontFamily:'sans-serif',
+  const sq = new PIXI.Graphics();
+  layers.squares.addChild(sq);
+  const label = new PIXI.Text({ text:String(player), style:{
+    fill: color, fontSize: Math.floor(spacing*0.3), fontWeight:'bold', fontFamily:'sans-serif'
   }});
-  label.anchor.set(0.5);
-  label.x=x+w/2; label.y=y+h/2; label.alpha=0;
-  squareLayer.addChild(label);
+  label.anchor.set(0.5); label.x = cx; label.y = cy; label.alpha = 0;
+  layers.squares.addChild(label);
 
-  let alpha=0;
-  const animate=()=>{
-    alpha+=0.06;
-    const a=Math.min(alpha,1);
-    sq.clear(); sq.roundRect(x,y,w,h,6).fill({color,alpha:a*THEME.squareAlpha});
-    glowSq.clear(); glowSq.roundRect(x-4,y-4,w+8,h+8,8).fill({color:glow,alpha:a*0.08});
-    label.alpha=a*0.4;
-    if (alpha<1) requestAnimationFrame(animate);
+  let t = 0;
+  const step = () => {
+    t = Math.min(t + 0.06, 1);
+    sq.clear();
+    sq.roundRect(x,y,w,h,6).fill({ color, alpha: t*THEME.squareAlpha });
+    label.alpha = t*0.4;
+    if (t < 1) requestAnimationFrame(step);
   };
-  requestAnimationFrame(animate);
+  requestAnimationFrame(step);
+
+  spawnBurst(cx, cy, color);
 }
 
-function spawnParticles(cx,cy,color) {
-  const COUNT=14;
-  for (let i=0;i<COUNT;i++) {
-    const p=new PIXI.Graphics();
-    const size=2+Math.random()*3;
-    p.circle(0,0,size).fill({color,alpha:1});
-    p.x=cx; p.y=cy; fxLayer.addChild(p);
-    const angle=(i/COUNT)*Math.PI*2+Math.random()*0.3;
-    const speed=2.5+Math.random()*3;
-    const vx=Math.cos(angle)*speed, vy=Math.sin(angle)*speed;
-    let life=1.0;
-    const tick=()=>{
-      life-=0.04; p.x+=vx; p.y+=vy*0.9;
-      p.alpha=Math.max(life,0); p.scale.set(Math.max(life,0));
-      if (life>0) requestAnimationFrame(tick); else fxLayer.removeChild(p);
-    };
-    requestAnimationFrame(tick);
+// ═══════════════════════════════════════════════════════
+//  جسيمات الإكمال
+// ═══════════════════════════════════════════════════════
+function spawnBurst(cx, cy, color) {
+  for (let i = 0; i < 14; i++) {
+    const p = new PIXI.Graphics();
+    p.circle(0,0, 2+Math.random()*2.5).fill({ color });
+    p.x = cx; p.y = cy;
+    layers.fx.addChild(p);
+    const ang = (i/14)*Math.PI*2 + Math.random()*0.3;
+    const spd = 2.5 + Math.random()*2.5;
+    animItems.push({
+      type:'particle', g:p,
+      vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd, life:1
+    });
   }
-  const ring=new PIXI.Graphics();
-  fxLayer.addChild(ring);
-  let rLife=1, rSize=0;
-  const ringTick=()=>{
-    rLife-=0.05; rSize+=4;
-    ring.clear(); ring.circle(cx,cy,rSize).stroke({color,width:2,alpha:rLife*0.6});
-    if (rLife>0) requestAnimationFrame(ringTick); else fxLayer.removeChild(ring);
-  };
-  requestAnimationFrame(ringTick);
+  // حلقة
+  const ring = new PIXI.Graphics();
+  layers.fx.addChild(ring);
+  animItems.push({ type:'ring', g:ring, cx, cy, color, size:0, life:1 });
 }
 
-function triggerAIIfNeeded(cfg) {
-  if (!aiPlayer||state.currentPlayer!==2||isAIThinking) return;
-  isAIThinking=true;
-  setTimeout(()=>executeAIMove(cfg),500);
-}
-function executeAIMove(cfg) {
-  const move=aiPlayer.makeMove(cfg);
-  if (!move){isAIThinking=false;return;}
-  if (state.lines.has(move.key)){isAIThinking=false;setTimeout(()=>triggerAIIfNeeded(cfg),100);return;}
-  const edgeObj=edgeObjects.find(e=>e.key===move.key);
-  if (!edgeObj){isAIThinking=false;return;}
-  isAIThinking=false;
-  handleEdgeClick(edgeObj,cfg);
+// ═══════════════════════════════════════════════════════
+//  ticker مركزي — يدير كل الحركة
+// ═══════════════════════════════════════════════════════
+let _t = 0;
+function ticker() {
+  _t += 0.02;
+
+  // جسيمات الخلفية
+  for (const p of ambientParticles) {
+    p.g.y -= p.speed;
+    p.g.x += Math.sin(_t + p.phase) * p.drift;
+    p.g.alpha = 0.25 + Math.sin(_t*2 + p.phase)*0.2;
+    if (p.g.y < -5) { p.g.y = (_cfg._pixi.H||400) + 5; p.g.x = Math.random()*(_cfg._pixi.W||400); }
+  }
+
+  // عناصر حية + جسيمات + حلقات
+  for (let i = animItems.length - 1; i >= 0; i--) {
+    const it = animItems[i];
+    if (it.type === 'dot') {
+      const s = 1 + Math.sin(_t + it.phase)*0.12;
+      it.g.scale.set(s);
+    } else if (it.type === 'particle') {
+      it.life -= 0.04;
+      it.g.x += it.vx; it.g.y += it.vy*0.9; it.vy += 0.05;
+      it.g.alpha = Math.max(it.life,0);
+      it.g.scale.set(Math.max(it.life,0));
+      if (it.life <= 0) { layers.fx.removeChild(it.g); animItems.splice(i,1); }
+    } else if (it.type === 'ring') {
+      it.life -= 0.05; it.size += 4;
+      it.g.clear();
+      it.g.circle(it.cx, it.cy, it.size).stroke({ color: it.color, width:2, alpha: it.life*0.6 });
+      if (it.life <= 0) { layers.fx.removeChild(it.g); animItems.splice(i,1); }
+    }
+  }
 }
 
-export function applyOnlineMove(lineKey,cfg) {
+// ═══════════════════════════════════════════════════════
+//  AI
+// ═══════════════════════════════════════════════════════
+function triggerAI(cfg) {
+  if (!aiPlayer || state.currentPlayer !== 2 || isAIThinking) return;
+  isAIThinking = true;
+  setTimeout(() => {
+    const move = aiPlayer.makeMove(cfg);
+    isAIThinking = false;
+    if (!move) return;
+    const obj = edgeObjects.find(e => e.key === move.key);
+    if (obj && !obj.drawn) handleEdgeClick(obj, cfg);
+  }, 500);
+}
+
+// ═══════════════════════════════════════════════════════
+//  أونلاين
+// ═══════════════════════════════════════════════════════
+export function applyOnlineMove(lineKey, cfg) {
   if (state.lines.has(lineKey)) return;
-  const edgeObj=edgeObjects.find(e=>e.key===lineKey);
-  if (edgeObj) handleEdgeClick(edgeObj,cfg,true);
+  const obj = edgeObjects.find(e => e.key === lineKey);
+  if (obj && !obj.drawn) handleEdgeClick(obj, cfg, true);
 }
 
+// ═══════════════════════════════════════════════════════
+//  reset
+// ═══════════════════════════════════════════════════════
 export function resetState() {
-  state.currentPlayer=1; state.lines=new Set();
-  if (state.scores) for (const k in state.scores) state.scores[k]=0;
-  _dots=[];
-  if (app){ try { app.destroy({ removeView: false }, { children: true, texture: true }); } catch(e){} app=null; }
+  state.currentPlayer = 1;
+  state.lines = new Set();
+  if (state.scores) for (const k in state.scores) state.scores[k] = 0;
+  animItems = [];
+  ambientParticles = [];
+  if (app) { try { app.destroy({ removeView: false }, { children: true, texture: true }); } catch(e){} app = null; }
 }
