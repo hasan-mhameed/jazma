@@ -1,14 +1,15 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1781824257";
-import { makeKey }                            from "../utils.js?v=1781824257";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781824257";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781824257";
-import { endGame }                            from "./gameEnd.js?v=1781824257";
-import { audioManager }                       from "../audio/audioManager.js?v=1781824257";
-import { checkSquaresAround }                 from "../core/logic.js?v=1781824257";
-import { onlineManager }                      from "../firebase.js?v=1781824257";
+import { state }                              from "../core/state.js?v=1781825361";
+import { makeKey }                            from "../utils.js?v=1781825361";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781825361";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781825361";
+import { endGame }                            from "./gameEnd.js?v=1781825361";
+import { audioManager }                       from "../audio/audioManager.js?v=1781825361";
+import { checkSquaresAround }                 from "../core/logic.js?v=1781825361";
+import { onlineManager }                      from "../firebase.js?v=1781825361";
+import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1781825361";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -100,6 +101,7 @@ export async function initBoard(cfg, ai = null) {
 
   buildAmbient(W, H);
   buildDots(cfg);
+  buildSpecialElements(cfg);
   buildEdges(cfg);
 
   // ── ticker مركزي ──
@@ -158,9 +160,35 @@ function buildDots(cfg) {
 }
 
 // ═══════════════════════════════════════════════════════
-//  الخطوط التفاعلية
+//  العناصر الخاصة (خافتة + نابضة قبل الإكمال)
 // ═══════════════════════════════════════════════════════
-function buildEdges(cfg) {
+function buildSpecialElements(cfg) {
+  generateSpecialSquares(cfg);
+  const { spacing, padding } = cfg._pixi;
+
+  for (let r = 0; r < cfg.rows-1; r++) {
+    for (let c = 0; c < cfg.cols-1; c++) {
+      const type = getElementAt(r, c);
+      if (!type) continue;
+      const el = ELEMENTS[type];
+      const cx = padding + c*spacing + spacing/2;
+      const cy = padding + r*spacing + spacing/2;
+
+      // أيقونة خافتة نابضة
+      const icon = new PIXI.Text({ text: el.icon, style:{
+        fontSize: Math.floor(spacing*0.34), fontFamily:'sans-serif'
+      }});
+      icon.anchor.set(0.5);
+      icon.x = cx; icon.y = cy;
+      icon.alpha = 0.4;
+      layers.elements.addChild(icon);
+
+      animItems.push({ type:'element', g:icon, phase: Math.random()*Math.PI*2, baseY: cy });
+    }
+  }
+}
+
+
   for (let r = 0; r < cfg.rows; r++) {
     for (let c = 0; c < cfg.cols; c++) {
       if (c < cfg.cols-1) addEdge(r,c,r,c+1,cfg);
@@ -297,26 +325,72 @@ export function fillSquare(r, c, cfg, player) {
   const color = pColor(player), glowC = pGlow(player);
   const cx = x + w/2, cy = y + h/2;
 
+  // هل فيه عنصر خاص؟
+  const elType = getElementAt(r, c);
+
   const sq = new PIXI.Graphics();
   layers.squares.addChild(sq);
-  const label = new PIXI.Text({ text:String(player), style:{
-    fill: color, fontSize: Math.floor(spacing*0.3), fontWeight:'bold', fontFamily:'sans-serif'
-  }});
-  label.anchor.set(0.5); label.x = cx; label.y = cy; label.alpha = 0;
-  layers.squares.addChild(label);
+
+  // الرقم يظهر فقط لو ما فيه عنصر (العنصر ياخذ مكانه)
+  let label = null;
+  if (!elType) {
+    label = new PIXI.Text({ text:String(player), style:{
+      fill: color, fontSize: Math.floor(spacing*0.3), fontWeight:'bold', fontFamily:'sans-serif'
+    }});
+    label.anchor.set(0.5); label.x = cx; label.y = cy; label.alpha = 0;
+    layers.squares.addChild(label);
+  }
 
   let t = 0;
   const step = () => {
     t = Math.min(t + 0.06, 1);
     sq.clear();
     sq.roundRect(x,y,w,h,6).fill({ color, alpha: t*THEME.squareAlpha });
-    label.alpha = t*0.4;
+    if (label) label.alpha = t*0.4;
     if (t < 1) requestAnimationFrame(step);
   };
   requestAnimationFrame(step);
 
-  spawnBurst(cx, cy, color);
+  if (elType) {
+    activateElement(r, c, elType, cx, cy, spacing);
+    const el = ELEMENTS[elType];
+    spawnBurst(cx, cy, el.color);
+  } else {
+    spawnBurst(cx, cy, color);
+  }
 }
+
+// ═══════════════════════════════════════════════════════
+//  تفعيل العنصر عند إكمال مربعه — يحيا!
+// ═══════════════════════════════════════════════════════
+function activateElement(r, c, type, cx, cy, spacing) {
+  const el = ELEMENTS[type];
+  // نلاقي أيقونة العنصر الخافتة ونفعّلها
+  const item = animItems.find(it => it.type==='element' && Math.abs(it.g.x-cx)<2 && Math.abs(it.baseY-cy)<2);
+  if (item) {
+    item.consumed = true;
+    const icon = item.g;
+    // animation: تكبر وتلمع وتثبت واضحة
+    let s = 1;
+    const grow = () => {
+      s += 0.06;
+      icon.scale.set(Math.min(s, 1.35));
+      icon.alpha = Math.min(icon.alpha + 0.05, 1);
+      if (s < 1.35) requestAnimationFrame(grow);
+      else {
+        // ترتد لحجمها الطبيعي وتبقى واضحة
+        let s2 = 1.35;
+        const settle = () => { s2 -= 0.03; icon.scale.set(Math.max(s2,1)); if (s2>1) requestAnimationFrame(settle); };
+        requestAnimationFrame(settle);
+      }
+    };
+    requestAnimationFrame(grow);
+
+    // نبقيها واضحة (ما تنبض بعد التفعيل)
+    icon.alpha = 1;
+  }
+}
+
 
 // ═══════════════════════════════════════════════════════
 //  جسيمات الإكمال
@@ -361,6 +435,12 @@ function ticker() {
     if (it.type === 'dot') {
       const s = 1 + Math.sin(_t + it.phase)*0.12;
       it.g.scale.set(s);
+    } else if (it.type === 'element') {
+      // نبض + طفو خفيف
+      if (!it.consumed) {
+        it.g.alpha = 0.35 + Math.sin(_t*1.5 + it.phase)*0.15;
+        it.g.y = it.baseY + Math.sin(_t*1.2 + it.phase)*2;
+      }
     } else if (it.type === 'particle') {
       it.life -= 0.04;
       it.g.x += it.vx; it.g.y += it.vy*0.9; it.vy += 0.05;
