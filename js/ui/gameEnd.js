@@ -1,14 +1,14 @@
 // 📄 gameEnd.js — v14.3
-import { audioManager } from "../audio/audioManager.js?v=1781892598";
+import { audioManager } from "../audio/audioManager.js?v=1781893389";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1781892598";
-import { saveMatch } from "../history.js?v=1781892598";
-import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1781892598";
-import { showNewAchievements } from "./achievementsUI.js?v=1781892598";
-import { calcXP, addXP } from "../xp.js?v=1781892598";
-import { showXPGain } from "./xpUI.js?v=1781892598";
-import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1781892598";
-import { commitMatchCoins } from "../core/wallet.js?v=1781892598";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1781893389";
+import { saveMatch } from "../history.js?v=1781893389";
+import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1781893389";
+import { showNewAchievements } from "./achievementsUI.js?v=1781893389";
+import { calcXP, addXP } from "../xp.js?v=1781893389";
+import { showXPGain } from "./xpUI.js?v=1781893389";
+import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1781893389";
+import { commitMatchCoins } from "../core/wallet.js?v=1781893389";
 
 export let _matchStartTime = Date.now();
 export function resetMatchTimer() { _matchStartTime = Date.now(); }
@@ -237,8 +237,8 @@ export async function endGame(cfg, scores) {
     commitMatchCoins().then(({ earned, total }) => {
       if (earned > 0) {
         const coinRow = document.createElement("div");
-        coinRow.style.cssText = "margin-top:12px;padding:10px;border-radius:10px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;font-weight:600;font-size:1rem;text-align:center;";
-        coinRow.textContent = `💎 ربحت ${earned} عملة! رصيدك: ${total}`;
+        coinRow.style.cssText = "margin-top:12px;padding:10px;border-radius:10px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);color:#fcd34d;font-weight:700;font-size:1.05rem;text-align:center;";
+        coinRow.textContent = `💎 ربحت ${earned} عملة!`;
         winnerDetails.appendChild(coinRow);
       }
       // تحديث الشارة في navbar

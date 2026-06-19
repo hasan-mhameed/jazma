@@ -1,18 +1,18 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1781892598";
-import { makeKey }                            from "../utils.js?v=1781892598";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781892598";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781892598";
-import { endGame }                            from "./gameEnd.js?v=1781892598";
-import { audioManager }                       from "../audio/audioManager.js?v=1781892598";
-import { checkSquaresAround }                 from "../core/logic.js?v=1781892598";
-import { onlineManager }                      from "../firebase.js?v=1781892598";
-import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1781892598";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1781892598";
-import { refreshInventory } from "./powersUI.js?v=1781892598";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1781892598";
+import { state }                              from "../core/state.js?v=1781893389";
+import { makeKey }                            from "../utils.js?v=1781893389";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781893389";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781893389";
+import { endGame }                            from "./gameEnd.js?v=1781893389";
+import { audioManager }                       from "../audio/audioManager.js?v=1781893389";
+import { checkSquaresAround }                 from "../core/logic.js?v=1781893389";
+import { onlineManager }                      from "../firebase.js?v=1781893389";
+import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1781893389";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1781893389";
+import { refreshInventory } from "./powersUI.js?v=1781893389";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1781893389";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
