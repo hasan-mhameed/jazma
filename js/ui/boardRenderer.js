@@ -1,17 +1,17 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1781870198";
-import { makeKey }                            from "../utils.js?v=1781870198";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781870198";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781870198";
-import { endGame }                            from "./gameEnd.js?v=1781870198";
-import { audioManager }                       from "../audio/audioManager.js?v=1781870198";
-import { checkSquaresAround }                 from "../core/logic.js?v=1781870198";
-import { onlineManager }                      from "../firebase.js?v=1781870198";
-import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1781870198";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1781870198";
-import { refreshInventory } from "./powersUI.js?v=1781870198";
+import { state }                              from "../core/state.js?v=1781871038";
+import { makeKey }                            from "../utils.js?v=1781871038";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781871038";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781871038";
+import { endGame }                            from "./gameEnd.js?v=1781871038";
+import { audioManager }                       from "../audio/audioManager.js?v=1781871038";
+import { checkSquaresAround }                 from "../core/logic.js?v=1781871038";
+import { onlineManager }                      from "../firebase.js?v=1781871038";
+import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1781871038";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1781871038";
+import { refreshInventory } from "./powersUI.js?v=1781871038";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -99,6 +99,7 @@ export async function initBoard(cfg, ai = null) {
   state.lines = new Set();
   state.currentPlayer = 1;
   state.scores = {};
+  state.squaresFilled = 0;
   for (let i = 1; i <= cfg.players; i++) state.scores[i] = 0;
 
   buildAmbient(W, H);
@@ -274,6 +275,7 @@ export function handleEdgeClick(obj, cfg, isOpponentMove=false) {
       clearEffect(player, 'triple_points');
     }
     state.scores[player] = (state.scores[player]||0) + points;
+    state.squaresFilled = (state.squaresFilled || 0) + 1; // عدّاد المربعات الفعلي
 
     // جمع القدرة لو المربع فيه عنصر
     const elType = getElementAt(r, c);
@@ -286,10 +288,9 @@ export function handleEdgeClick(obj, cfg, isOpponentMove=false) {
   updateScoreboard();
   refreshInventory(cfg);
 
-  // نهاية اللعبة؟
+  // نهاية اللعبة؟ — نعدّ المربعات المكتملة (مش النقاط، عشان الجوهرة ما تخرّب الحساب)
   const total = (cfg.rows-1)*(cfg.cols-1);
-  const filled = Object.values(state.scores||{}).reduce((a,b)=>(+a||0)+(+b||0),0);
-  if (filled === total) {
+  if ((state.squaresFilled || 0) >= total) {
     if (cfg.aiMode==='online' && !isOpponentMove) onlineManager.pushMove(obj.key, Date.now());
     endGame(cfg, state.scores);
     return;
@@ -507,7 +508,10 @@ export function activatePower(elementType, player, cfg) {
 
   if (elementType === 'gem') {
     // الجوهرة: المربع القادم ×3 نقاط
-    if (getEffect(player, 'triple_points')) return; // مفعّل أصلاً
+    if (getEffect(player, 'triple_points')) {
+      flashMessage('💎 الجوهرة مفعّلة أصلاً!');
+      return;
+    }
     consumePower(player, 'gem');
     setEffect(player, 'triple_points', true);
     flashMessage('💎 مربعك القادم = 3 نقاط!');
