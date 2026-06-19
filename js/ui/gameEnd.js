@@ -1,14 +1,14 @@
 // 📄 gameEnd.js — v14.3
-import { audioManager } from "../audio/audioManager.js?v=1781891099";
+import { audioManager } from "../audio/audioManager.js?v=1781892598";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1781891099";
-import { saveMatch } from "../history.js?v=1781891099";
-import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1781891099";
-import { showNewAchievements } from "./achievementsUI.js?v=1781891099";
-import { calcXP, addXP } from "../xp.js?v=1781891099";
-import { showXPGain } from "./xpUI.js?v=1781891099";
-import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1781891099";
-import { commitMatchCoins } from "../core/wallet.js?v=1781891099";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1781892598";
+import { saveMatch } from "../history.js?v=1781892598";
+import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1781892598";
+import { showNewAchievements } from "./achievementsUI.js?v=1781892598";
+import { calcXP, addXP } from "../xp.js?v=1781892598";
+import { showXPGain } from "./xpUI.js?v=1781892598";
+import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1781892598";
+import { commitMatchCoins } from "../core/wallet.js?v=1781892598";
 
 export let _matchStartTime = Date.now();
 export function resetMatchTimer() { _matchStartTime = Date.now(); }
@@ -241,6 +241,9 @@ export async function endGame(cfg, scores) {
         coinRow.textContent = `💎 ربحت ${earned} عملة! رصيدك: ${total}`;
         winnerDetails.appendChild(coinRow);
       }
+      // تحديث الشارة في navbar
+      const el = document.getElementById('coins-count');
+      if (el) el.textContent = total;
     });
   }
 

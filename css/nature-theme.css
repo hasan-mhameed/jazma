@@ -618,3 +618,21 @@ body {
   display: flex; align-items: center; justify-content: center;
   border: 2px solid var(--nat-bg-panel);
 }
+
+/* ═══ شارة العملات ═══ */
+#coins-badge {
+  display: flex; align-items: center; gap: 4px;
+  background: linear-gradient(135deg, #fbbf2418, #fbbf2408);
+  border: 1px solid #fbbf2450;
+  color: var(--nat-gold);
+  padding: 5px 11px;
+  border-radius: 10px;
+  font-size: 0.85rem; font-weight: 700;
+  cursor: default;
+  white-space: nowrap;
+}
+#coins-badge #coins-count { color: #fcd34d; }
+
+@media (max-width: 920px) {
+  #coins-badge { padding: 4px 8px; font-size: 0.8rem; }
+}

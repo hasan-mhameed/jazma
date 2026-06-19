@@ -3,7 +3,7 @@
 
 import { getDatabase, ref, get, set, runTransaction }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser } from "../auth.js?v=1781891099";
+import { getCurrentUser } from "../auth.js?v=1781892598";
 
 const db = getDatabase();
 
@@ -32,4 +32,12 @@ export async function commitMatchCoins() {
   _matchCoins = 0;
   const total = await getCoins();
   return { earned, total };
+}
+
+// تحديث شارة العملات في الواجهة
+export async function refreshCoinsBadge() {
+  const el = document.getElementById('coins-count');
+  if (!el) return;
+  const total = await getCoins();
+  el.textContent = total;
 }
