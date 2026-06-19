@@ -1,17 +1,18 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1781871038";
-import { makeKey }                            from "../utils.js?v=1781871038";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781871038";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781871038";
-import { endGame }                            from "./gameEnd.js?v=1781871038";
-import { audioManager }                       from "../audio/audioManager.js?v=1781871038";
-import { checkSquaresAround }                 from "../core/logic.js?v=1781871038";
-import { onlineManager }                      from "../firebase.js?v=1781871038";
-import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1781871038";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1781871038";
-import { refreshInventory } from "./powersUI.js?v=1781871038";
+import { state }                              from "../core/state.js?v=1781891099";
+import { makeKey }                            from "../utils.js?v=1781891099";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781891099";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781891099";
+import { endGame }                            from "./gameEnd.js?v=1781891099";
+import { audioManager }                       from "../audio/audioManager.js?v=1781891099";
+import { checkSquaresAround }                 from "../core/logic.js?v=1781891099";
+import { onlineManager }                      from "../firebase.js?v=1781891099";
+import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1781891099";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1781891099";
+import { refreshInventory } from "./powersUI.js?v=1781891099";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1781891099";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -44,6 +45,13 @@ const THEME = {
 
 function pColor(p) { return THEME.playerColors[(p-1) % 4] || 0x888888; }
 function pGlow(p)  { return THEME.playerGlows[(p-1) % 4]  || 0x888888; }
+
+// هل هذا اللاعب هو المستخدم الحقيقي (يكسب عملات)؟
+function isCoinEarner(cfg, player) {
+  if (cfg.aiMode === 'ai')     return player === 1;        // ضد AI: اللاعب 1
+  if (cfg.aiMode === 'online') return player === (cfg.onlinePlayerNum || 1);
+  return true; // محلي: الكل (نفس الجهاز/الحساب)
+}
 
 // ═══════════════════════════════════════════════════════
 //  init
@@ -107,6 +115,7 @@ export async function initBoard(cfg, ai = null) {
   buildSpecialElements(cfg);
   buildEdges(cfg);
   resetPowers(cfg.players);
+  resetMatchCoins();
 
   // ── ticker مركزي ──
   app.ticker.add(ticker);
@@ -267,19 +276,21 @@ export function handleEdgeClick(obj, cfg, isOpponentMove=false) {
   let completed = false;
   checkSquaresAround(obj.r1, obj.c1, obj.r2, obj.c2, cfg).forEach(([r,c]) => {
     fillSquare(r, c, cfg, player);
+    state.scores[player] = (state.scores[player]||0) + 1;
+    state.squaresFilled = (state.squaresFilled || 0) + 1;
 
-    // نقاط — مع تأثير الجوهرة (×3)
-    let points = 1;
-    if (getEffect(player, 'triple_points')) {
-      points = 3;
-      clearEffect(player, 'triple_points');
-    }
-    state.scores[player] = (state.scores[player]||0) + points;
-    state.squaresFilled = (state.squaresFilled || 0) + 1; // عدّاد المربعات الفعلي
-
-    // جمع القدرة لو المربع فيه عنصر
+    // العنصر الخاص
     const elType = getElementAt(r, c);
-    if (elType) addPower(player, elType);
+    if (elType === 'gem') {
+      // الجوهرة → عملات للاعب الحالي (فقط لو هو المستخدم في AI/أونلاين)
+      if (isCoinEarner(cfg, player)) {
+        addMatchCoins(3);
+        flashMessage('💎 +3 عملات!');
+      }
+    } else if (elType) {
+      // عناصر أخرى (سمكة) → قدرة في المخزون
+      addPower(player, elType);
+    }
 
     completed = true;
     audioManager.playSquareComplete();
@@ -503,24 +514,13 @@ function triggerAI(cfg) {
 // ═══════════════════════════════════════════════════════
 export function activatePower(elementType, player, cfg) {
   if (!hasPower(player, elementType)) return;
-  // لا يُفعّل إلا في دور اللاعب
   if (state.currentPlayer !== player) return;
 
-  if (elementType === 'gem') {
-    // الجوهرة: المربع القادم ×3 نقاط
-    if (getEffect(player, 'triple_points')) {
-      flashMessage('💎 الجوهرة مفعّلة أصلاً!');
-      return;
-    }
-    consumePower(player, 'gem');
-    setEffect(player, 'triple_points', true);
-    flashMessage('💎 مربعك القادم = 3 نقاط!');
-  } else if (elementType === 'water') {
-    // السمكة: دور إضافي (اللاعب يلعب مرة ثانية)
+  if (elementType === 'water') {
+    // السمكة: دور إضافي (خط مجاني)
     consumePower(player, 'water');
     setEffect(player, 'free_line', true);
     flashMessage('🐟 لك خط إضافي!');
-    // نمنع تبديل الدور في النقرة القادمة
   }
   refreshInventory(cfg);
 }

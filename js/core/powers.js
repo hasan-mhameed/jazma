@@ -6,12 +6,7 @@ export const POWERS = {
   water: {
     icon: '🐟', name: 'سمكة',
     desc: 'ارسم خطاً إضافياً مجاناً',
-    type: 'free_line',     // تأثير: دور إضافي
-  },
-  gem: {
-    icon: '💎', name: 'جوهرة',
-    desc: 'مربعك القادم يساوي 3 نقاط',
-    type: 'triple_points', // تأثير: ×3 نقاط
+    type: 'free_line',
   },
 };
 
