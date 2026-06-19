@@ -1,15 +1,15 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1781825361";
-import { makeKey }                            from "../utils.js?v=1781825361";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781825361";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781825361";
-import { endGame }                            from "./gameEnd.js?v=1781825361";
-import { audioManager }                       from "../audio/audioManager.js?v=1781825361";
-import { checkSquaresAround }                 from "../core/logic.js?v=1781825361";
-import { onlineManager }                      from "../firebase.js?v=1781825361";
-import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1781825361";
+import { state }                              from "../core/state.js?v=1781825589";
+import { makeKey }                            from "../utils.js?v=1781825589";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781825589";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781825589";
+import { endGame }                            from "./gameEnd.js?v=1781825589";
+import { audioManager }                       from "../audio/audioManager.js?v=1781825589";
+import { checkSquaresAround }                 from "../core/logic.js?v=1781825589";
+import { onlineManager }                      from "../firebase.js?v=1781825589";
+import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1781825589";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -188,7 +188,10 @@ function buildSpecialElements(cfg) {
   }
 }
 
-
+// ═══════════════════════════════════════════════════════
+//  الخطوط التفاعلية
+// ═══════════════════════════════════════════════════════
+function buildEdges(cfg) {
   for (let r = 0; r < cfg.rows; r++) {
     for (let c = 0; c < cfg.cols; c++) {
       if (c < cfg.cols-1) addEdge(r,c,r,c+1,cfg);
