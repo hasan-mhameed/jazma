@@ -1,18 +1,18 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1781893389";
-import { makeKey }                            from "../utils.js?v=1781893389";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781893389";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781893389";
-import { endGame }                            from "./gameEnd.js?v=1781893389";
-import { audioManager }                       from "../audio/audioManager.js?v=1781893389";
-import { checkSquaresAround }                 from "../core/logic.js?v=1781893389";
-import { onlineManager }                      from "../firebase.js?v=1781893389";
-import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1781893389";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1781893389";
-import { refreshInventory } from "./powersUI.js?v=1781893389";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1781893389";
+import { state }                              from "../core/state.js?v=1781998311";
+import { makeKey }                            from "../utils.js?v=1781998311";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781998311";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781998311";
+import { endGame }                            from "./gameEnd.js?v=1781998311";
+import { audioManager }                       from "../audio/audioManager.js?v=1781998311";
+import { checkSquaresAround }                 from "../core/logic.js?v=1781998311";
+import { onlineManager }                      from "../firebase.js?v=1781998311";
+import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1781998311";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1781998311";
+import { refreshInventory } from "./powersUI.js?v=1781998311";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1781998311";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -513,11 +513,19 @@ function triggerAI(cfg) {
 //  تفعيل قدرة من المخزون
 // ═══════════════════════════════════════════════════════
 export function activatePower(elementType, player, cfg) {
+  // لا يُفعّل إلا في دور اللاعب نفسه
+  if (state.currentPlayer !== player) {
+    flashMessage('⏳ ليس دورك الآن');
+    return;
+  }
   if (!hasPower(player, elementType)) return;
-  if (state.currentPlayer !== player) return;
 
   if (elementType === 'water') {
-    // السمكة: دور إضافي (خط مجاني)
+    // لو عنده free_line مفعّل أصلاً، لا داعي لتفعيل ثانية
+    if (getEffect(player, 'free_line')) {
+      flashMessage('🐟 لديك خط إضافي بالفعل!');
+      return;
+    }
     consumePower(player, 'water');
     setEffect(player, 'free_line', true);
     flashMessage('🐟 لك خط إضافي!');

@@ -1,9 +1,9 @@
 // 📄 ui/gameSetup.js
 // شاشة إعداد اللعبة + بدء اللعبة المحلية
-import { config } from "../config/config.js?v=1781893389";
-import { AIPlayer } from "../ai/aiPlayer.js?v=1781893389";
-import { getCurrentUser } from "../auth.js?v=1781893389";
-import { state } from "../core/state.js?v=1781893389";
+import { config } from "../config/config.js?v=1781998311";
+import { AIPlayer } from "../ai/aiPlayer.js?v=1781998311";
+import { getCurrentUser } from "../auth.js?v=1781998311";
+import { state } from "../core/state.js?v=1781998311";
 
 export let aiPlayer = null;
 
