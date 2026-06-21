@@ -1,18 +1,18 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1781999156";
-import { makeKey }                            from "../utils.js?v=1781999156";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1781999156";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1781999156";
-import { endGame }                            from "./gameEnd.js?v=1781999156";
-import { audioManager }                       from "../audio/audioManager.js?v=1781999156";
-import { checkSquaresAround }                 from "../core/logic.js?v=1781999156";
-import { onlineManager }                      from "../firebase.js?v=1781999156";
-import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1781999156";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1781999156";
-import { refreshInventory } from "./powersUI.js?v=1781999156";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1781999156";
+import { state }                              from "../core/state.js?v=1782000181";
+import { makeKey }                            from "../utils.js?v=1782000181";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782000181";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782000181";
+import { endGame }                            from "./gameEnd.js?v=1782000181";
+import { audioManager }                       from "../audio/audioManager.js?v=1782000181";
+import { checkSquaresAround }                 from "../core/logic.js?v=1782000181";
+import { onlineManager }                      from "../firebase.js?v=1782000181";
+import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782000181";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782000181";
+import { refreshInventory } from "./powersUI.js?v=1782000181";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782000181";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -184,22 +184,60 @@ function buildSpecialElements(cfg) {
     for (let c = 0; c < cfg.cols-1; c++) {
       const type = getElementAt(r, c);
       if (!type) continue;
-      const el = ELEMENTS[type];
       const cx = padding + c*spacing + spacing/2;
       const cy = padding + r*spacing + spacing/2;
+      const size = spacing * 0.32;
 
-      // أيقونة خافتة نابضة
-      const icon = new PIXI.Text({ text: el.icon, style:{
-        fontSize: Math.floor(spacing*0.34), fontFamily:'sans-serif'
-      }});
-      icon.anchor.set(0.5);
-      icon.x = cx; icon.y = cy;
-      icon.alpha = 0.4;
-      layers.elements.addChild(icon);
-
-      animItems.push({ type:'element', g:icon, phase: Math.random()*Math.PI*2, baseY: cy });
+      if (type === 'water') {
+        buildFish(cx, cy, size);
+      } else {
+        // باقي العناصر — emoji مؤقتاً (الجوهرة لاحقاً)
+        const el = ELEMENTS[type];
+        const icon = new PIXI.Text({ text: el.icon, style:{
+          fontSize: Math.floor(spacing*0.34), fontFamily:'sans-serif'
+        }});
+        icon.anchor.set(0.5);
+        icon.x = cx; icon.y = cy;
+        icon.alpha = 0.4;
+        layers.elements.addChild(icon);
+        animItems.push({ type:'element', g:icon, phase: Math.random()*Math.PI*2, baseY: cy });
+      }
     }
   }
+}
+
+// ── رسم السمكة (SVG-style بـ PixiJS) ──
+function buildFish(cx, cy, size) {
+  const container = new PIXI.Container();
+  container.x = cx; container.y = cy;
+
+  // الجسم
+  const body = new PIXI.Graphics();
+  body.ellipse(0, 0, size*0.7, size*0.45).fill({ color: 0x3b82f6 });
+  body.ellipse(0, 0, size*0.7, size*0.45).stroke({ color: 0x60a5fa, width: 1.5 });
+
+  // الذيل (مثلث)
+  const tail = new PIXI.Graphics();
+  tail.poly([ -size*0.6, 0,  -size*1.05, -size*0.35,  -size*1.05, size*0.35 ]).fill({ color: 0x2563eb });
+
+  // الزعنفة العلوية
+  const fin = new PIXI.Graphics();
+  fin.poly([ 0, -size*0.4,  size*0.25, -size*0.7,  -size*0.2, -size*0.42 ]).fill({ color: 0x2563eb, alpha: 0.85 });
+
+  // العين
+  const eye = new PIXI.Graphics();
+  eye.circle(size*0.38, -size*0.08, size*0.1).fill({ color: 0xffffff });
+  eye.circle(size*0.41, -size*0.08, size*0.05).fill({ color: 0x0a1815 });
+
+  container.addChild(tail, fin, body, eye);
+  container.alpha = 0.5;
+  container.scale.set(0.9);
+  layers.elements.addChild(container);
+
+  animItems.push({
+    type:'fish', g:container, tail,
+    phase: Math.random()*Math.PI*2, baseX: cx, baseY: cy, consumed:false
+  });
 }
 
 // ═══════════════════════════════════════════════════════
@@ -408,31 +446,31 @@ export function fillSquare(r, c, cfg, player) {
 //  تفعيل العنصر عند إكمال مربعه — يحيا!
 // ═══════════════════════════════════════════════════════
 function activateElement(r, c, type, cx, cy, spacing) {
-  const el = ELEMENTS[type];
-  // نلاقي أيقونة العنصر الخافتة ونفعّلها
-  const item = animItems.find(it => it.type==='element' && Math.abs(it.g.x-cx)<2 && Math.abs(it.baseY-cy)<2);
-  if (item) {
-    item.consumed = true;
-    const icon = item.g;
-    // animation: تكبر وتلمع وتثبت واضحة
-    let s = 1;
-    const grow = () => {
-      s += 0.06;
-      icon.scale.set(Math.min(s, 1.35));
-      icon.alpha = Math.min(icon.alpha + 0.05, 1);
-      if (s < 1.35) requestAnimationFrame(grow);
-      else {
-        // ترتد لحجمها الطبيعي وتبقى واضحة
-        let s2 = 1.35;
-        const settle = () => { s2 -= 0.03; icon.scale.set(Math.max(s2,1)); if (s2>1) requestAnimationFrame(settle); };
-        requestAnimationFrame(settle);
-      }
-    };
-    requestAnimationFrame(grow);
+  // نلاقي العنصر (سمكة أو أيقونة) ونفعّله
+  const item = animItems.find(it =>
+    (it.type==='element' || it.type==='fish') &&
+    Math.abs((it.baseX ?? it.g.x)-cx)<2 && Math.abs(it.baseY-cy)<2
+  );
+  if (!item) return;
+  item.consumed = true;
+  const g = item.g;
 
-    // نبقيها واضحة (ما تنبض بعد التفعيل)
-    icon.alpha = 1;
-  }
+  // animation: تكبر وتلمع وتثبت واضحة (قفزة)
+  let s = item.type==='fish' ? 0.9 : 1;
+  const target = item.type==='fish' ? 1.25 : 1.35;
+  const grow = () => {
+    s += 0.06;
+    g.scale.set(Math.min(s, target));
+    g.alpha = Math.min(g.alpha + 0.06, 1);
+    if (s < target) requestAnimationFrame(grow);
+    else {
+      let s2 = target;
+      const settle = () => { s2 -= 0.025; g.scale.set(Math.max(s2, item.type==='fish'?1:1)); if (s2>1) requestAnimationFrame(settle); };
+      requestAnimationFrame(settle);
+    }
+  };
+  requestAnimationFrame(grow);
+  g.alpha = 1;
 }
 
 
@@ -485,6 +523,20 @@ function ticker() {
         it.g.alpha = 0.35 + Math.sin(_t*1.5 + it.phase)*0.15;
         it.g.y = it.baseY + Math.sin(_t*1.2 + it.phase)*2;
       }
+    } else if (it.type === 'fish') {
+      // السمكة تسبح: تطفو + تتمايل + ذيلها يتحرك
+      if (!it.consumed) {
+        it.g.alpha = 0.45 + Math.sin(_t*1.5 + it.phase)*0.18;
+        it.g.y = it.baseY + Math.sin(_t*1.3 + it.phase)*2.5;
+        it.g.x = it.baseX + Math.sin(_t*0.8 + it.phase)*1.5;
+        it.g.rotation = Math.sin(_t*1.1 + it.phase)*0.08;
+      } else {
+        it.g.alpha = 1;
+        it.g.y = it.baseY + Math.sin(_t*2 + it.phase)*1.5;
+        it.g.rotation = Math.sin(_t*1.6 + it.phase)*0.06;
+      }
+      // الذيل يتحرك دائماً
+      if (it.tail) it.tail.skew.y = Math.sin(_t*6 + it.phase)*0.3;
     } else if (it.type === 'particle') {
       it.life -= 0.04;
       it.g.x += it.vx; it.g.y += it.vy*0.9; it.vy += 0.05;
