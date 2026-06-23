@@ -1,18 +1,18 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1782000181";
-import { makeKey }                            from "../utils.js?v=1782000181";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782000181";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782000181";
-import { endGame }                            from "./gameEnd.js?v=1782000181";
-import { audioManager }                       from "../audio/audioManager.js?v=1782000181";
-import { checkSquaresAround }                 from "../core/logic.js?v=1782000181";
-import { onlineManager }                      from "../firebase.js?v=1782000181";
-import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782000181";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782000181";
-import { refreshInventory } from "./powersUI.js?v=1782000181";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782000181";
+import { state }                              from "../core/state.js?v=1782256847";
+import { makeKey }                            from "../utils.js?v=1782256847";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782256847";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782256847";
+import { endGame }                            from "./gameEnd.js?v=1782256847";
+import { audioManager }                       from "../audio/audioManager.js?v=1782256847";
+import { checkSquaresAround }                 from "../core/logic.js?v=1782256847";
+import { onlineManager }                      from "../firebase.js?v=1782256847";
+import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782256847";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782256847";
+import { refreshInventory } from "./powersUI.js?v=1782256847";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782256847";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -210,28 +210,69 @@ function buildSpecialElements(cfg) {
 function buildFish(cx, cy, size) {
   const container = new PIXI.Container();
   container.x = cx; container.y = cy;
+  const s = size * 1.15; // تكبير بسيط للوضوح
 
-  // الجسم
-  const body = new PIXI.Graphics();
-  body.ellipse(0, 0, size*0.7, size*0.45).fill({ color: 0x3b82f6 });
-  body.ellipse(0, 0, size*0.7, size*0.45).stroke({ color: 0x60a5fa, width: 1.5 });
-
-  // الذيل (مثلث)
+  // ── الذيل (مفصّل، بتدرّج ذهبي) ──
   const tail = new PIXI.Graphics();
-  tail.poly([ -size*0.6, 0,  -size*1.05, -size*0.35,  -size*1.05, size*0.35 ]).fill({ color: 0x2563eb });
+  tail.moveTo(-s*0.45, 0)
+      .bezierCurveTo(-s*0.85, -s*0.5, -s*1.0, -s*0.35, -s*0.95, -s*0.12)
+      .bezierCurveTo(-s*0.78, 0, -s*0.78, 0, -s*0.95, s*0.12)
+      .bezierCurveTo(-s*1.0, s*0.35, -s*0.85, s*0.5, -s*0.45, 0)
+      .fill({ color: 0xf59e0b });
+  // خطوط الذيل
+  tail.moveTo(-s*0.5, 0).lineTo(-s*0.88, -s*0.28).stroke({ color: 0xd97706, width: 1, alpha: 0.5 });
+  tail.moveTo(-s*0.5, 0).lineTo(-s*0.88, s*0.28).stroke({ color: 0xd97706, width: 1, alpha: 0.5 });
 
-  // الزعنفة العلوية
-  const fin = new PIXI.Graphics();
-  fin.poly([ 0, -size*0.4,  size*0.25, -size*0.7,  -size*0.2, -size*0.42 ]).fill({ color: 0x2563eb, alpha: 0.85 });
+  // ── الزعنفة العلوية ──
+  const finTop = new PIXI.Graphics();
+  finTop.moveTo(s*0.1, -s*0.32)
+        .bezierCurveTo(s*0.3, -s*0.62, s*0.5, -s*0.5, s*0.55, -s*0.32)
+        .lineTo(s*0.1, -s*0.32)
+        .fill({ color: 0xfbbf24, alpha: 0.92 });
 
-  // العين
+  // ── الزعنفة السفلية ──
+  const finBot = new PIXI.Graphics();
+  finBot.moveTo(s*0.2, s*0.3)
+        .bezierCurveTo(s*0.3, s*0.55, s*0.45, s*0.5, s*0.5, s*0.34)
+        .lineTo(s*0.2, s*0.3)
+        .fill({ color: 0xfbbf24, alpha: 0.88 });
+
+  // ── الجسم (منحني طبيعي بتدرّج ذهبي) ──
+  const body = new PIXI.Graphics();
+  const grad = new PIXI.FillGradient(-s*0.45, -s*0.5, s*0.6, s*0.5);
+  grad.addColorStop(0, 0xfef3c7);
+  grad.addColorStop(0.35, 0xfbbf24);
+  grad.addColorStop(0.75, 0xf59e0b);
+  grad.addColorStop(1, 0xd97706);
+  body.moveTo(-s*0.45, 0)
+      .bezierCurveTo(-s*0.45, -s*0.5, s*0.2, -s*0.55, s*0.62, -s*0.32)
+      .bezierCurveTo(s*0.95, -s*0.12, s*0.95, s*0.12, s*0.62, s*0.32)
+      .bezierCurveTo(s*0.2, s*0.55, -s*0.45, s*0.5, -s*0.45, 0)
+      .fill(grad);
+
+  // بطن فاتح
+  const belly = new PIXI.Graphics();
+  belly.ellipse(s*0.15, s*0.28, s*0.4, s*0.13).fill({ color: 0xfffbeb, alpha: 0.4 });
+
+  // انعكاسات ضوء (حراشف)
+  const shine = new PIXI.Graphics();
+  shine.ellipse(-s*0.1, -s*0.12, s*0.06, s*0.18).fill({ color: 0xffffff, alpha: 0.3 });
+  shine.ellipse(s*0.08, -s*0.16, s*0.05, s*0.2).fill({ color: 0xffffff, alpha: 0.22 });
+
+  // ── العين ──
   const eye = new PIXI.Graphics();
-  eye.circle(size*0.38, -size*0.08, size*0.1).fill({ color: 0xffffff });
-  eye.circle(size*0.41, -size*0.08, size*0.05).fill({ color: 0x0a1815 });
+  eye.circle(s*0.58, -s*0.1, s*0.13).fill({ color: 0xffffff });
+  eye.circle(s*0.61, -s*0.1, s*0.075).fill({ color: 0x1a1505 });
+  eye.circle(s*0.63, -s*0.13, s*0.025).fill({ color: 0xffffff });
 
-  container.addChild(tail, fin, body, eye);
+  // ابتسامة
+  const mouth = new PIXI.Graphics();
+  mouth.moveTo(s*0.78, s*0.02).bezierCurveTo(s*0.85, s*0.0, s*0.83, s*0.08, s*0.76, s*0.07)
+       .stroke({ color: 0xb45309, width: 1.5, alpha: 0.7 });
+
+  container.addChild(tail, finTop, finBot, body, belly, shine, eye, mouth);
   container.alpha = 0.5;
-  container.scale.set(0.9);
+  container.scale.set(0.85);
   layers.elements.addChild(container);
 
   animItems.push({
