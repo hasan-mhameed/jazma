@@ -1,9 +1,9 @@
 // 📄 ui/powersUI.js
 // شريط المخزون — يعرض قدرات اللاعب الحالي + التفعيل
 
-import { POWERS, getInventory } from "../core/powers.js?v=1782477081";
-import { state } from "../core/state.js?v=1782477081";
-import { getPowerIcon } from "./powerIcons.js?v=1782477081";
+import { POWERS, getInventory } from "../core/powers.js?v=1782477713";
+import { state } from "../core/state.js?v=1782477713";
+import { getPowerIcon } from "./powerIcons.js?v=1782477713";
 
 let _onActivate = null;
 
@@ -36,6 +36,7 @@ export function refreshInventory(cfg) {
       slot.textContent = '＋';
       bar.appendChild(slot);
     }
+    addGuideButton(bar);
     return;
   }
 
@@ -67,6 +68,20 @@ export function refreshInventory(cfg) {
     slot.textContent = '＋';
     bar.appendChild(slot);
   }
+  addGuideButton(bar);
+}
+
+// زر دليل الأدوات (؟) — يُضاف لنهاية الشريط دائماً
+function addGuideButton(bar) {
+  const btn = document.createElement('button');
+  btn.id = 'guide-btn';
+  btn.className = 'guide-btn';
+  btn.textContent = '؟';
+  btn.title = 'دليل الأدوات';
+  btn.addEventListener('click', () => {
+    import('./guideUI.js?v=1782477713').then(m => m.openGuide());
+  });
+  bar.appendChild(btn);
 }
 
 function canActivate(cfg, viewPlayer) {

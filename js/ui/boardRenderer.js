@@ -1,19 +1,19 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1782477081";
-import { makeKey }                            from "../utils.js?v=1782477081";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782477081";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782477081";
-import { endGame }                            from "./gameEnd.js?v=1782477081";
-import { audioManager }                       from "../audio/audioManager.js?v=1782477081";
-import { checkSquaresAround }                 from "../core/logic.js?v=1782477081";
-import { onlineManager }                      from "../firebase.js?v=1782477081";
-import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782477081";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782477081";
-import { refreshInventory } from "./powersUI.js?v=1782477081";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1782477081";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782477081";
+import { state }                              from "../core/state.js?v=1782477713";
+import { makeKey }                            from "../utils.js?v=1782477713";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782477713";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782477713";
+import { endGame }                            from "./gameEnd.js?v=1782477713";
+import { audioManager }                       from "../audio/audioManager.js?v=1782477713";
+import { checkSquaresAround }                 from "../core/logic.js?v=1782477713";
+import { onlineManager }                      from "../firebase.js?v=1782477713";
+import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782477713";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782477713";
+import { refreshInventory } from "./powersUI.js?v=1782477713";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1782477713";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782477713";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -290,28 +290,28 @@ function buildGem(cx, cy, size) {
   const s = size * 1.3; // مقياس الماسة
 
   const gem = new PIXI.Graphics();
-  // الطاولة العلوية (أوجه متعددة)
-  gem.poly([ -s*0.28, -s*0.14,  -s*0.13, -s*0.28,  s*0.13, -s*0.28,  s*0.28, -s*0.14 ]).fill({ color: 0xfde68a });
+  // الطاولة العلوية (أوجه متعددة) — أوسع
+  gem.poly([ -s*0.4, -s*0.12,  -s*0.18, -s*0.24,  s*0.18, -s*0.24,  s*0.4, -s*0.12 ]).fill({ color: 0xfde68a });
   // مثلثات علوية
-  gem.poly([ -s*0.13, -s*0.28,  s*0, -s*0.14,  s*0, -s*0.28 ]).fill({ color: 0xfef3c7 });
-  gem.poly([ s*0.13, -s*0.28,  s*0, -s*0.14,  s*0, -s*0.28 ]).fill({ color: 0xfcd34d });
-  gem.poly([ -s*0.28, -s*0.14,  s*0, -s*0.14,  -s*0.13, -s*0.28 ]).fill({ color: 0xfbbf24 });
-  gem.poly([ s*0.28, -s*0.14,  s*0, -s*0.14,  s*0.13, -s*0.28 ]).fill({ color: 0xf59e0b });
-  // الأوجه السفلية (قاعدة أقصر — تنتهي عند 0.52)
-  gem.poly([ -s*0.28, -s*0.14,  s*0, -s*0.14,  s*0, s*0.52 ]).fill({ color: 0xf59e0b });
-  gem.poly([ s*0.28, -s*0.14,  s*0, -s*0.14,  s*0, s*0.52 ]).fill({ color: 0xd97706 });
+  gem.poly([ -s*0.18, -s*0.24,  s*0, -s*0.12,  s*0, -s*0.24 ]).fill({ color: 0xfef3c7 });
+  gem.poly([ s*0.18, -s*0.24,  s*0, -s*0.12,  s*0, -s*0.24 ]).fill({ color: 0xfcd34d });
+  gem.poly([ -s*0.4, -s*0.12,  s*0, -s*0.12,  -s*0.18, -s*0.24 ]).fill({ color: 0xfbbf24 });
+  gem.poly([ s*0.4, -s*0.12,  s*0, -s*0.12,  s*0.18, -s*0.24 ]).fill({ color: 0xf59e0b });
+  // الأوجه السفلية (قاعدة أقصر — تنتهي عند 0.44)
+  gem.poly([ -s*0.4, -s*0.12,  s*0, -s*0.12,  s*0, s*0.44 ]).fill({ color: 0xf59e0b });
+  gem.poly([ s*0.4, -s*0.12,  s*0, -s*0.12,  s*0, s*0.44 ]).fill({ color: 0xd97706 });
   // حدود
-  gem.poly([ -s*0.28, -s*0.14,  s*0.28, -s*0.14,  s*0, s*0.52 ]).stroke({ color: 0xfffbeb, width: 1, alpha: 0.4 });
-  gem.moveTo(0, -s*0.14).lineTo(0, s*0.52).stroke({ color: 0xfffbeb, width: 0.8, alpha: 0.3 });
+  gem.poly([ -s*0.4, -s*0.12,  s*0.4, -s*0.12,  s*0, s*0.44 ]).stroke({ color: 0xfffbeb, width: 1, alpha: 0.4 });
+  gem.moveTo(0, -s*0.12).lineTo(0, s*0.44).stroke({ color: 0xfffbeb, width: 0.8, alpha: 0.3 });
 
   // بريق
   const shine = new PIXI.Graphics();
-  shine.poly([ -s*0.19, -s*0.19,  -s*0.09, -s*0.19,  -s*0.13, -s*0.14,  -s*0.17, -s*0.14 ])
+  shine.poly([ -s*0.26, -s*0.17,  -s*0.13, -s*0.17,  -s*0.18, -s*0.12,  -s*0.24, -s*0.12 ])
        .fill({ color: 0xffffff, alpha: 0.6 });
 
   // نجوم بريق متلألئة (sparkles)
   const sparkles = [];
-  const spkPos = [ [s*0.42, -s*0.4, 2], [-s*0.46, s*0.28, 1.5], [s*0.4, s*0.3, 1.2] ];
+  const spkPos = [ [s*0.5, -s*0.32, 2], [-s*0.54, s*0.24, 1.5], [s*0.48, s*0.26, 1.2] ];
   for (const [sx, sy, sr] of spkPos) {
     const sp = new PIXI.Graphics();
     sp.star(sx, sy, 4, sr*2, sr*0.7).fill({ color: 0xffffff });

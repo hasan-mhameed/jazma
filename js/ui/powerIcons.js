@@ -36,18 +36,16 @@ export const FISH_SVG = `
 // الجوهرة الذهبية (ماسة بأوجه لامعة)
 export const GEM_SVG = `
 <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="power-svg">
-  <!-- الطاولة العلوية -->
-  <polygon points="25,28 75,28 66,45 34,45" fill="#fde68a"/>
-  <!-- الوجه الأيسر -->
-  <polygon points="25,28 34,45 50,90" fill="#f59e0b"/>
-  <!-- الوجه الأيمن -->
-  <polygon points="75,28 66,45 50,90" fill="#d97706"/>
-  <!-- الوجه الأوسط -->
-  <polygon points="34,45 66,45 50,90" fill="#fbbf24"/>
-  <!-- حدود -->
-  <polygon points="25,28 75,28 50,90" fill="none" stroke="#fffbeb" stroke-width="1.2" opacity="0.5"/>
-  <!-- بريق -->
-  <polygon points="30,32 42,32 37,40 32,40" fill="#ffffff" opacity="0.55"/>
+  <polygon points="18,40 32,28 68,28 82,40" fill="#fde68a"/>
+  <polygon points="32,28 50,40 50,28" fill="#fef3c7"/>
+  <polygon points="68,28 50,40 50,28" fill="#fcd34d"/>
+  <polygon points="18,40 50,40 32,28" fill="#fbbf24"/>
+  <polygon points="82,40 50,40 68,28" fill="#f59e0b"/>
+  <polygon points="18,40 50,40 50,84" fill="#f59e0b"/>
+  <polygon points="82,40 50,40 50,84" fill="#d97706"/>
+  <polygon points="18,40 82,40 50,84" fill="none" stroke="#fffbeb" stroke-width="1" opacity="0.45"/>
+  <line x1="50" y1="40" x2="50" y2="84" stroke="#fffbeb" stroke-width="0.8" opacity="0.3"/>
+  <polygon points="26,35 36,35 32,40 28,40" fill="#ffffff" opacity="0.6"/>
 </svg>`;
 
 // خريطة الأيقونات حسب نوع القدرة
