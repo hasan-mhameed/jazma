@@ -636,3 +636,57 @@ body {
 @media (max-width: 920px) {
   #coins-badge { padding: 4px 8px; font-size: 0.8rem; }
 }
+
+/* ═══ بطاقة تعريف القدرة (أول مرة) ═══ */
+.power-tut-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(5, 12, 10, 0.78);
+  backdrop-filter: blur(4px);
+  opacity: 0; transition: opacity 0.28s ease;
+}
+.power-tut-overlay.show { opacity: 1; }
+.power-tut-card {
+  position: relative;
+  width: min(82vw, 320px);
+  padding: 30px 26px 24px;
+  border-radius: 22px;
+  background: linear-gradient(160deg, #14342b, #102a22);
+  border: 1px solid var(--nat-gold);
+  box-shadow: 0 0 40px rgba(251,191,36,0.25), 0 20px 50px rgba(0,0,0,0.5);
+  text-align: center;
+  transform: scale(0.82) translateY(14px);
+  transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.power-tut-overlay.show .power-tut-card { transform: scale(1) translateY(0); }
+.ptc-badge {
+  display: inline-block;
+  background: var(--nat-gold); color: #1a1505;
+  font-size: 0.72rem; font-weight: 800;
+  padding: 4px 14px; border-radius: 20px;
+  margin-bottom: 16px; letter-spacing: 0.5px;
+}
+.ptc-icon {
+  font-size: 4.2rem; line-height: 1;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 0 14px rgba(251,191,36,0.5));
+  animation: ptcFloat 2.4s ease-in-out infinite;
+}
+@keyframes ptcFloat { 0%,100%{transform:translateY(-4px);} 50%{transform:translateY(4px);} }
+.ptc-name {
+  font-size: 1.5rem; font-weight: 800;
+  color: var(--nat-gold); margin-bottom: 8px;
+}
+.ptc-desc {
+  font-size: 0.98rem; color: var(--nat-text);
+  line-height: 1.5; margin-bottom: 22px;
+}
+.ptc-btn {
+  background: linear-gradient(135deg, var(--nat-p1-bright), var(--nat-p1));
+  color: #06231a; font-weight: 800; font-size: 1rem;
+  border: none; padding: 12px 36px; border-radius: 14px;
+  cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 6px 18px rgba(16,185,129,0.3);
+}
+.ptc-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(16,185,129,0.45); }
+.ptc-btn:active { transform: translateY(0); }
