@@ -1,8 +1,9 @@
 // 📄 ui/powersUI.js
 // شريط المخزون — يعرض قدرات اللاعب الحالي + التفعيل
 
-import { POWERS, getInventory } from "../core/powers.js?v=1782257515";
-import { state } from "../core/state.js?v=1782257515";
+import { POWERS, getInventory } from "../core/powers.js?v=1782473608";
+import { state } from "../core/state.js?v=1782473608";
+import { getPowerIcon } from "./powerIcons.js?v=1782473608";
 
 let _onActivate = null;
 
@@ -43,7 +44,7 @@ export function refreshInventory(cfg) {
     const count = inv[type];
     const slot = document.createElement('div');
     slot.className = 'inv-slot filled';
-    slot.innerHTML = `${power.icon}<span class="inv-count">${count}</span>`;
+    slot.innerHTML = `<span class="inv-icon">${getPowerIcon(type, power.icon)}</span><span class="inv-count">${count}</span>`;
     slot.title = `${power.name} — ${power.desc}`;
 
     // هل يمكن التفعيل الآن؟ (دور اللاعب الحالي)

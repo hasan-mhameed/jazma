@@ -4,8 +4,9 @@
 
 import { getDatabase, ref, get, update }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "../auth.js?v=1782257515";
-import { POWERS } from "../core/powers.js?v=1782257515";
+import { currentUser } from "../auth.js?v=1782473608";
+import { POWERS } from "../core/powers.js?v=1782473608";
+import { getPowerIcon } from "./powerIcons.js?v=1782473608";
 
 const db = getDatabase();
 
@@ -44,11 +45,11 @@ export function maybeShowTutorial(type) {
   const power = POWERS[type];
   if (!power) return;
   markLearned(type);
-  showCard(power);
+  showCard(power, type);
 }
 
 // ── عرض البطاقة ──
-function showCard(power) {
+function showCard(power, type) {
   // طبقة معتمة
   const overlay = document.createElement('div');
   overlay.className = 'power-tut-overlay';
@@ -57,7 +58,7 @@ function showCard(power) {
   card.className = 'power-tut-card';
   card.innerHTML = `
     <div class="ptc-badge">قدرة جديدة!</div>
-    <div class="ptc-icon">${power.icon}</div>
+    <div class="ptc-icon">${getPowerIcon(type, power.icon)}</div>
     <div class="ptc-name">${power.name}</div>
     <div class="ptc-desc">${power.desc}</div>
     <button class="ptc-btn">فهمت 👍</button>
