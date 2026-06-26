@@ -1,6 +1,6 @@
 // 📄 ui/achievementsUI.js
-import { ACHIEVEMENTS, getUnlocked } from "../achievements.js?v=1782486836";
-import { getCurrentUser } from "../auth.js?v=1782486836";
+import { ACHIEVEMENTS, getUnlocked } from "../achievements.js?v=1782498247";
+import { getCurrentUser } from "../auth.js?v=1782498247";
 
 export function showAchievementPopup(key) {
   const def = ACHIEVEMENTS[key];

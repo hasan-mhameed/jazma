@@ -131,6 +131,19 @@ class AudioManager {
       }, index * 80);
     });
   }
+
+  // صوت تيك المؤقّت (آخر ثوان)
+  playTick() {
+    if (!this.enabled) return;
+    this.playTone(880, 0.06, 'square', (this.volume || 0.3) * 0.5);
+  }
+
+  // صوت انتهاء الوقت
+  playTimeout() {
+    if (!this.enabled) return;
+    this.playTone(300, 0.18, 'sawtooth');
+    setTimeout(() => this.playTone(220, 0.25, 'sawtooth'), 120);
+  }
   
   // صوت الفوز
   playWin() {

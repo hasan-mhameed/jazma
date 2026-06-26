@@ -1,6 +1,7 @@
 // 📄 turnManager.js — v15.8
-import { state }  from "../core/state.js?v=1782486836";
-import { config } from "../config/config.js?v=1782486836";
+import { state }  from "../core/state.js?v=1782498247";
+import { config } from "../config/config.js?v=1782498247";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1782498247";
 
 export function updateTurn(cfg) { updateTurnUI(cfg); }
 
@@ -20,20 +21,13 @@ export function updateTurnUI(cfg) {
     if (card) card.classList.toggle("active", i === state.currentPlayer);
   }
 
-  // مؤشر الدور النصي
-  const turnInd = document.getElementById("nat-turn-text");
-  if (turnInd) {
-    const isMyTurn =
+  // مؤقّت الدور — يبدأ لدور اللاعب البشري فقط
+  if (isTimerEnabled()) {
+    const humanTurn =
+      cfg.aiMode === "ai"     ? state.currentPlayer === 1 :
       cfg.aiMode === "online" ? state.currentPlayer === cfg.onlinePlayerNum :
-      cfg.aiMode === "ai"      ? state.currentPlayer === 1 :
-      true;
-    if (cfg.aiMode === 'ai' && state.currentPlayer === 2) {
-      turnInd.textContent = "🤖 دور الكمبيوتر...";
-    } else if (cfg.aiMode === 'online') {
-      turnInd.textContent = isMyTurn ? "دورك — ارسم خطاً" : "دور خصمك...";
-    } else {
-      const names = cfg.localPlayerNames || {};
-      turnInd.textContent = `دور ${names[state.currentPlayer] || 'لاعب ' + state.currentPlayer}`;
-    }
+      true; // محلي: كل الأدوار بشرية
+    if (humanTurn) startTurnTimer();
+    else stopTurnTimer();
   }
 }

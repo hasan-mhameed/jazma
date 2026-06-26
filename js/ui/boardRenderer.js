@@ -1,19 +1,20 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1782486836";
-import { makeKey }                            from "../utils.js?v=1782486836";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782486836";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782486836";
-import { endGame }                            from "./gameEnd.js?v=1782486836";
-import { audioManager }                       from "../audio/audioManager.js?v=1782486836";
-import { checkSquaresAround }                 from "../core/logic.js?v=1782486836";
-import { onlineManager }                      from "../firebase.js?v=1782486836";
-import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782486836";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782486836";
-import { refreshInventory } from "./powersUI.js?v=1782486836";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1782486836";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782486836";
+import { state }                              from "../core/state.js?v=1782498247";
+import { makeKey }                            from "../utils.js?v=1782498247";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782498247";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782498247";
+import { endGame }                            from "./gameEnd.js?v=1782498247";
+import { audioManager }                       from "../audio/audioManager.js?v=1782498247";
+import { checkSquaresAround }                 from "../core/logic.js?v=1782498247";
+import { onlineManager }                      from "../firebase.js?v=1782498247";
+import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782498247";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782498247";
+import { refreshInventory } from "./powersUI.js?v=1782498247";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1782498247";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1782498247";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782498247";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -435,6 +436,7 @@ export function handleEdgeClick(obj, cfg, isOpponentMove=false) {
   const total = (cfg.rows-1)*(cfg.cols-1);
   if ((state.squaresFilled || 0) >= total) {
     if (cfg.aiMode==='online' && !isOpponentMove) onlineManager.pushMove(obj.key, Date.now());
+    if (isTimerEnabled()) stopTurnTimer();
     endGame(cfg, state.scores);
     return;
   }
@@ -443,21 +445,36 @@ export function handleEdgeClick(obj, cfg, isOpponentMove=false) {
   const hadFreeLine = getEffect(player, 'free_line');
   if (hadFreeLine) clearEffect(player, 'free_line');
 
+  // إيقاف المؤقّت فور الحركة (نعيد تشغيله حسب الحالة)
+  if (isTimerEnabled()) stopTurnTimer();
+
   if (!completed) {
     if (hadFreeLine) {
       // الخط الإضافي: نفس اللاعب يكمل (لا نبدّل الدور)
+      restartTimerIfHuman(cfg);
     } else {
       state.currentPlayer = (player % cfg.players) + 1;
       updateTurn(cfg);
     }
     refreshInventory(cfg);
   } else {
-    // أكمل مربعاً — يلعب ثانيةً أصلاً (قاعدة اللعبة)، والخط الإضافي استُهلك
+    // أكمل مربعاً — يلعب ثانيةً أصلاً، نعيد المؤقّت لنفس اللاعب
+    restartTimerIfHuman(cfg);
     refreshInventory(cfg);
   }
 
   if (cfg.aiMode==='online' && !isOpponentMove) onlineManager.pushMove(obj.key, Date.now());
   setTimeout(() => triggerAI(cfg), 100);
+}
+
+// يعيد تشغيل المؤقّت لو الدور الحالي بشري
+function restartTimerIfHuman(cfg) {
+  if (!isTimerEnabled()) return;
+  const humanTurn =
+    cfg.aiMode === "ai"     ? state.currentPlayer === 1 :
+    cfg.aiMode === "online" ? state.currentPlayer === cfg.onlinePlayerNum :
+    true;
+  if (humanTurn) startTurnTimer();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -727,7 +744,7 @@ function ticker() {
 // ═══════════════════════════════════════════════════════
 //  AI
 // ═══════════════════════════════════════════════════════
-function triggerAI(cfg) {
+export function triggerAI(cfg) {
   if (!aiPlayer || state.currentPlayer !== 2 || isAIThinking) return;
   isAIThinking = true;
   setTimeout(() => {
