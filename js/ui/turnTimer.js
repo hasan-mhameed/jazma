@@ -1,9 +1,13 @@
 // 📄 ui/turnTimer.js
 // مؤقّت الدور — عدّاد لكل لاعب مع تنبيه بصري وصوتي قرب النهاية
 
-import { audioManager } from "../audio/audioManager.js?v=1782498247";
+import { audioManager } from "../audio/audioManager.js?v=1782510967";
+import { state } from "../core/state.js?v=1782510967";
 
-const TURN_SECONDS = 20;      // الوقت الافتراضي لكل دور
+// ألوان اللاعبين (تطابق ألوان اللوحة والبطاقات)
+const PLAYER_COLORS = ['#2dd4bf', '#fb923c', '#a78bfa', '#fcd34d'];
+
+const TURN_SECONDS = 15;      // الوقت الافتراضي لكل دور
 const WARN_AT = 5;            // متى يبدأ التنبيه (آخر 5 ثوان)
 
 let _enabled = false;
@@ -66,6 +70,18 @@ function renderTimer() {
   const warn = _remaining <= WARN_AT;
   el.classList.toggle('warn', warn);
   el.textContent = `⏱️ ${_remaining}`;
+
+  // لون المؤقّت حسب دور اللاعب (إلا في وضع التحذير = أحمر موحّد)
+  if (warn) {
+    el.style.color = '';
+    el.style.borderColor = '';
+    el.style.background = '';
+  } else {
+    const col = PLAYER_COLORS[(state.currentPlayer - 1) % PLAYER_COLORS.length] || '#2dd4bf';
+    el.style.color = col;
+    el.style.borderColor = col + '66';
+    el.style.background = col + '1a';
+  }
 
   // نبضة عند كل ثانية في وضع التحذير
   if (warn && _remaining !== _lastTick) {
