@@ -1,19 +1,19 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1782477713";
-import { makeKey }                            from "../utils.js?v=1782477713";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782477713";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782477713";
-import { endGame }                            from "./gameEnd.js?v=1782477713";
-import { audioManager }                       from "../audio/audioManager.js?v=1782477713";
-import { checkSquaresAround }                 from "../core/logic.js?v=1782477713";
-import { onlineManager }                      from "../firebase.js?v=1782477713";
-import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782477713";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782477713";
-import { refreshInventory } from "./powersUI.js?v=1782477713";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1782477713";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782477713";
+import { state }                              from "../core/state.js?v=1782486836";
+import { makeKey }                            from "../utils.js?v=1782486836";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782486836";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782486836";
+import { endGame }                            from "./gameEnd.js?v=1782486836";
+import { audioManager }                       from "../audio/audioManager.js?v=1782486836";
+import { checkSquaresAround }                 from "../core/logic.js?v=1782486836";
+import { onlineManager }                      from "../firebase.js?v=1782486836";
+import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782486836";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782486836";
+import { refreshInventory } from "./powersUI.js?v=1782486836";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1782486836";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782486836";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -530,9 +530,44 @@ export function fillSquare(r, c, cfg, player) {
     activateElement(r, c, elType, cx, cy, spacing);
     const el = ELEMENTS[elType];
     spawnBurst(cx, cy, el.color);
+    // امتلاء الماء لمربع السمكة
+    if (elType === 'water') fillWaterSquare(x, y, w, h);
   } else {
     spawnBurst(cx, cy, color);
   }
+}
+
+// ── امتلاء الماء (أنيق + سريع) لمربع السمكة ──
+function fillWaterSquare(x, y, w, h) {
+  // قناع لحصر الماء داخل المربع
+  const mask = new PIXI.Graphics();
+  mask.roundRect(x, y, w, h, 6).fill(0xffffff);
+  layers.squares.addChild(mask);
+
+  const water = new PIXI.Graphics();
+  water.mask = mask;
+  layers.squares.addChild(water);
+
+  // موجة السطح
+  const wave = new PIXI.Graphics();
+  wave.mask = mask;
+  layers.squares.addChild(wave);
+
+  let level = 0;            // 0 → 1 (نسبة الامتلاء)
+  const item = {
+    type:'water_fill', water, wave, mask, x, y, w, h,
+    level: 0, filling: true, phase: 0
+  };
+  animItems.push(item);
+
+  // أنميشن الامتلاء السريع
+  const fillStep = () => {
+    level = Math.min(level + 0.05, 1); // ~0.4 ثانية
+    item.level = level;
+    if (level < 1) requestAnimationFrame(fillStep);
+    else item.filling = false;
+  };
+  requestAnimationFrame(fillStep);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -648,6 +683,31 @@ function ticker() {
           const sc = 0.7 + Math.abs(Math.sin(_t*2.5 + k*1.7 + it.phase))*0.5;
           sp.scale.set(sc);
         });
+      }
+    } else if (it.type === 'water_fill') {
+      // ارتفاع الماء حسب level + موجة سطح
+      const wh = it.h * it.level;
+      const wy = it.y + it.h - wh;
+      it.water.clear();
+      if (wh > 1) {
+        it.water.rect(it.x, wy, it.w, wh)
+          .fill({ color: 0x1d4ed8, alpha: 0.55 });
+        it.water.rect(it.x, it.y + it.h - wh*0.5, it.w, wh*0.5)
+          .fill({ color: 0x1e3a8a, alpha: 0.3 });
+      }
+      // موجة السطح (خفيفة، مستمرة بعد الاستقرار)
+      it.phase += 0.06;
+      it.wave.clear();
+      if (it.level > 0.05) {
+        const amp = it.filling ? 3 : 1.5;
+        it.wave.moveTo(it.x, wy);
+        for (let xx = 0; xx <= it.w; xx += 4) {
+          const yy = wy + Math.sin(xx*0.25 + it.phase)*amp;
+          it.wave.lineTo(it.x + xx, yy);
+        }
+        it.wave.lineTo(it.x + it.w, wy + 4);
+        it.wave.lineTo(it.x, wy + 4);
+        it.wave.fill({ color: 0x60a5fa, alpha: 0.35 });
       }
     } else if (it.type === 'particle') {
       it.life -= 0.04;

@@ -4,9 +4,9 @@
 
 // السمكة الذهبية (نفس أسلوب اللوحة: جسم منحني + ذيل + زعانف + عين)
 export const FISH_SVG = `
-<svg viewBox="0 0 100 70" xmlns="http://www.w3.org/2000/svg" class="power-svg">
+<svg viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg" class="power-svg">
   <defs>
-    <radialGradient id="fishBodyGrad" cx="62%" cy="38%" r="65%">
+    <radialGradient id="fishBodyGrad" cx="62%" cy="38%" r="68%">
       <stop offset="0%" stop-color="#fecaca"/>
       <stop offset="35%" stop-color="#f87171"/>
       <stop offset="75%" stop-color="#ef4444"/>
@@ -14,23 +14,23 @@ export const FISH_SVG = `
     </radialGradient>
   </defs>
   <!-- الذيل -->
-  <path d="M30 35 Q10 12 4 26 Q16 35 4 44 Q10 58 30 35 Z" fill="#ef4444"/>
+  <path d="M40 40 C22 22 12 28 14 38 C8 40 8 40 14 42 C12 52 22 58 40 40 Z" fill="#ef4444"/>
   <!-- زعنفة علوية -->
-  <path d="M52 22 Q62 6 76 14 Q68 26 52 30 Z" fill="#f87171" opacity="0.92"/>
+  <path d="M58 24 C66 8 78 12 80 22 C72 26 64 28 60 32 Z" fill="#f87171" opacity="0.9"/>
   <!-- زعنفة سفلية -->
-  <path d="M56 48 Q62 62 74 56 Q66 46 56 44 Z" fill="#f87171" opacity="0.88"/>
+  <path d="M62 56 C66 70 78 66 78 56 C72 54 66 52 62 52 Z" fill="#f87171" opacity="0.85"/>
   <!-- الجسم -->
-  <path d="M28 35 Q28 8 60 8 Q92 10 96 35 Q92 60 60 62 Q28 62 28 35 Z" fill="url(#fishBodyGrad)"/>
+  <path d="M38 40 C38 16 60 12 82 18 C100 24 104 34 100 40 C104 46 100 56 82 62 C60 68 38 64 38 40 Z" fill="url(#fishBodyGrad)"/>
   <!-- بطن فاتح -->
-  <ellipse cx="58" cy="48" rx="22" ry="7" fill="#fffbeb" opacity="0.4"/>
+  <ellipse cx="72" cy="52" rx="22" ry="7" fill="#fffbeb" opacity="0.35"/>
   <!-- انعكاس -->
-  <ellipse cx="46" cy="26" rx="4" ry="11" fill="#ffffff" opacity="0.28"/>
+  <ellipse cx="58" cy="30" rx="4" ry="12" fill="#ffffff" opacity="0.25"/>
   <!-- العين -->
-  <circle cx="76" cy="28" r="8" fill="#ffffff"/>
-  <circle cx="78" cy="28" r="4.5" fill="#1a1505"/>
-  <circle cx="80" cy="25.5" r="1.6" fill="#ffffff"/>
+  <circle cx="88" cy="34" r="8" fill="#ffffff"/>
+  <circle cx="90" cy="34" r="4.5" fill="#1a1505"/>
+  <circle cx="92" cy="31.5" r="1.6" fill="#ffffff"/>
   <!-- ابتسامة -->
-  <path d="M86 36 Q92 35 89 42" fill="none" stroke="#7f1d1d" stroke-width="1.6" stroke-linecap="round" opacity="0.7"/>
+  <path d="M98 42 Q104 41 101 48" fill="none" stroke="#7f1d1d" stroke-width="1.6" stroke-linecap="round" opacity="0.7"/>
 </svg>`;
 
 // الجوهرة الذهبية (ماسة بأوجه لامعة)
