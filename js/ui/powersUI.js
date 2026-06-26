@@ -1,9 +1,9 @@
 // 📄 ui/powersUI.js
 // شريط المخزون — يعرض قدرات اللاعب الحالي + التفعيل
 
-import { POWERS, getInventory } from "../core/powers.js?v=1782474528";
-import { state } from "../core/state.js?v=1782474528";
-import { getPowerIcon } from "./powerIcons.js?v=1782474528";
+import { POWERS, getInventory } from "../core/powers.js?v=1782477081";
+import { state } from "../core/state.js?v=1782477081";
+import { getPowerIcon } from "./powerIcons.js?v=1782477081";
 
 let _onActivate = null;
 

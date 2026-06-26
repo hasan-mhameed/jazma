@@ -1,19 +1,19 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1782474528";
-import { makeKey }                            from "../utils.js?v=1782474528";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782474528";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782474528";
-import { endGame }                            from "./gameEnd.js?v=1782474528";
-import { audioManager }                       from "../audio/audioManager.js?v=1782474528";
-import { checkSquaresAround }                 from "../core/logic.js?v=1782474528";
-import { onlineManager }                      from "../firebase.js?v=1782474528";
-import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782474528";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782474528";
-import { refreshInventory } from "./powersUI.js?v=1782474528";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1782474528";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782474528";
+import { state }                              from "../core/state.js?v=1782477081";
+import { makeKey }                            from "../utils.js?v=1782477081";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782477081";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782477081";
+import { endGame }                            from "./gameEnd.js?v=1782477081";
+import { audioManager }                       from "../audio/audioManager.js?v=1782477081";
+import { checkSquaresAround }                 from "../core/logic.js?v=1782477081";
+import { onlineManager }                      from "../firebase.js?v=1782477081";
+import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782477081";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782477081";
+import { refreshInventory } from "./powersUI.js?v=1782477081";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1782477081";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782477081";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -220,32 +220,32 @@ function buildFish(cx, cy, size) {
       .bezierCurveTo(-s*0.85, -s*0.5, -s*1.0, -s*0.35, -s*0.95, -s*0.12)
       .bezierCurveTo(-s*0.78, 0, -s*0.78, 0, -s*0.95, s*0.12)
       .bezierCurveTo(-s*1.0, s*0.35, -s*0.85, s*0.5, -s*0.45, 0)
-      .fill({ color: 0xf59e0b });
+      .fill({ color: 0xef4444 });
   // خطوط الذيل
-  tail.moveTo(-s*0.5, 0).lineTo(-s*0.88, -s*0.28).stroke({ color: 0xd97706, width: 1, alpha: 0.5 });
-  tail.moveTo(-s*0.5, 0).lineTo(-s*0.88, s*0.28).stroke({ color: 0xd97706, width: 1, alpha: 0.5 });
+  tail.moveTo(-s*0.5, 0).lineTo(-s*0.88, -s*0.28).stroke({ color: 0xb91c1c, width: 1, alpha: 0.5 });
+  tail.moveTo(-s*0.5, 0).lineTo(-s*0.88, s*0.28).stroke({ color: 0xb91c1c, width: 1, alpha: 0.5 });
 
   // ── الزعنفة العلوية ──
   const finTop = new PIXI.Graphics();
   finTop.moveTo(s*0.1, -s*0.32)
         .bezierCurveTo(s*0.3, -s*0.62, s*0.5, -s*0.5, s*0.55, -s*0.32)
         .lineTo(s*0.1, -s*0.32)
-        .fill({ color: 0xfbbf24, alpha: 0.92 });
+        .fill({ color: 0xf87171, alpha: 0.92 });
 
   // ── الزعنفة السفلية ──
   const finBot = new PIXI.Graphics();
   finBot.moveTo(s*0.2, s*0.3)
         .bezierCurveTo(s*0.3, s*0.55, s*0.45, s*0.5, s*0.5, s*0.34)
         .lineTo(s*0.2, s*0.3)
-        .fill({ color: 0xfbbf24, alpha: 0.88 });
+        .fill({ color: 0xf87171, alpha: 0.88 });
 
   // ── الجسم (منحني طبيعي بتدرّج ذهبي) ──
   const body = new PIXI.Graphics();
   const grad = new PIXI.FillGradient(-s*0.45, -s*0.5, s*0.6, s*0.5);
-  grad.addColorStop(0, 0xfef3c7);
-  grad.addColorStop(0.35, 0xfbbf24);
-  grad.addColorStop(0.75, 0xf59e0b);
-  grad.addColorStop(1, 0xd97706);
+  grad.addColorStop(0, 0xfecaca);
+  grad.addColorStop(0.35, 0xf87171);
+  grad.addColorStop(0.75, 0xef4444);
+  grad.addColorStop(1, 0xb91c1c);
   body.moveTo(-s*0.45, 0)
       .bezierCurveTo(-s*0.45, -s*0.5, s*0.2, -s*0.55, s*0.62, -s*0.32)
       .bezierCurveTo(s*0.95, -s*0.12, s*0.95, s*0.12, s*0.62, s*0.32)
@@ -270,7 +270,7 @@ function buildFish(cx, cy, size) {
   // ابتسامة
   const mouth = new PIXI.Graphics();
   mouth.moveTo(s*0.78, s*0.02).bezierCurveTo(s*0.85, s*0.0, s*0.83, s*0.08, s*0.76, s*0.07)
-       .stroke({ color: 0xb45309, width: 1.5, alpha: 0.7 });
+       .stroke({ color: 0x7f1d1d, width: 1.5, alpha: 0.7 });
 
   container.addChild(tail, finTop, finBot, body, belly, shine, eye, mouth);
   container.alpha = 0.5;
@@ -287,38 +287,46 @@ function buildFish(cx, cy, size) {
 function buildGem(cx, cy, size) {
   const container = new PIXI.Container();
   container.x = cx; container.y = cy;
-  const s = size * 1.0;
+  const s = size * 1.3; // مقياس الماسة
 
-  // الأوجه الرئيسية (ماسة)
   const gem = new PIXI.Graphics();
-  // الجزء العلوي (طاولة الماسة)
-  gem.poly([ -s*0.5, -s*0.35,  s*0.5, -s*0.35,  s*0.32, -s*0.1,  -s*0.32, -s*0.1 ])
-     .fill({ color: 0xfde68a });
-  // الوجه الأيسر
-  gem.poly([ -s*0.5, -s*0.35,  -s*0.32, -s*0.1,  0, s*0.55 ])
-     .fill({ color: 0xf59e0b });
-  // الوجه الأيمن
-  gem.poly([ s*0.5, -s*0.35,  s*0.32, -s*0.1,  0, s*0.55 ])
-     .fill({ color: 0xd97706 });
-  // الوجه الأوسط
-  gem.poly([ -s*0.32, -s*0.1,  s*0.32, -s*0.1,  0, s*0.55 ])
-     .fill({ color: 0xfbbf24 });
+  // الطاولة العلوية (أوجه متعددة)
+  gem.poly([ -s*0.28, -s*0.14,  -s*0.13, -s*0.28,  s*0.13, -s*0.28,  s*0.28, -s*0.14 ]).fill({ color: 0xfde68a });
+  // مثلثات علوية
+  gem.poly([ -s*0.13, -s*0.28,  s*0, -s*0.14,  s*0, -s*0.28 ]).fill({ color: 0xfef3c7 });
+  gem.poly([ s*0.13, -s*0.28,  s*0, -s*0.14,  s*0, -s*0.28 ]).fill({ color: 0xfcd34d });
+  gem.poly([ -s*0.28, -s*0.14,  s*0, -s*0.14,  -s*0.13, -s*0.28 ]).fill({ color: 0xfbbf24 });
+  gem.poly([ s*0.28, -s*0.14,  s*0, -s*0.14,  s*0.13, -s*0.28 ]).fill({ color: 0xf59e0b });
+  // الأوجه السفلية (قاعدة أقصر — تنتهي عند 0.52)
+  gem.poly([ -s*0.28, -s*0.14,  s*0, -s*0.14,  s*0, s*0.52 ]).fill({ color: 0xf59e0b });
+  gem.poly([ s*0.28, -s*0.14,  s*0, -s*0.14,  s*0, s*0.52 ]).fill({ color: 0xd97706 });
   // حدود
-  gem.poly([ -s*0.5, -s*0.35,  s*0.5, -s*0.35,  0, s*0.55 ])
-     .stroke({ color: 0xfffbeb, width: 1, alpha: 0.5 });
+  gem.poly([ -s*0.28, -s*0.14,  s*0.28, -s*0.14,  s*0, s*0.52 ]).stroke({ color: 0xfffbeb, width: 1, alpha: 0.4 });
+  gem.moveTo(0, -s*0.14).lineTo(0, s*0.52).stroke({ color: 0xfffbeb, width: 0.8, alpha: 0.3 });
 
-  // بريق علوي
+  // بريق
   const shine = new PIXI.Graphics();
-  shine.poly([ -s*0.35, -s*0.28,  -s*0.1, -s*0.28,  -s*0.2, -s*0.14,  -s*0.32, -s*0.14 ])
-       .fill({ color: 0xffffff, alpha: 0.55 });
+  shine.poly([ -s*0.19, -s*0.19,  -s*0.09, -s*0.19,  -s*0.13, -s*0.14,  -s*0.17, -s*0.14 ])
+       .fill({ color: 0xffffff, alpha: 0.6 });
 
-  container.addChild(gem, shine);
+  // نجوم بريق متلألئة (sparkles)
+  const sparkles = [];
+  const spkPos = [ [s*0.42, -s*0.4, 2], [-s*0.46, s*0.28, 1.5], [s*0.4, s*0.3, 1.2] ];
+  for (const [sx, sy, sr] of spkPos) {
+    const sp = new PIXI.Graphics();
+    sp.star(sx, sy, 4, sr*2, sr*0.7).fill({ color: 0xffffff });
+    container.addChild(sp);
+    sparkles.push(sp);
+  }
+
+  container.addChildAt(gem, 0);
+  container.addChild(shine);
   container.alpha = 0.5;
   container.scale.set(0.85);
   layers.elements.addChild(container);
 
   animItems.push({
-    type:'gem', g:container,
+    type:'gem', g:container, sparkles,
     phase: Math.random()*Math.PI*2, baseX: cx, baseY: cy, consumed:false
   });
 }
@@ -632,6 +640,14 @@ function ticker() {
         it.g.alpha = 1;
         it.g.y = it.baseY + Math.sin(_t*2 + it.phase)*1.5;
         it.g.rotation = Math.sin(_t*1.4 + it.phase)*0.1;
+      }
+      // تلألؤ النجوم
+      if (it.sparkles) {
+        it.sparkles.forEach((sp, k) => {
+          sp.alpha = 0.3 + Math.abs(Math.sin(_t*2.5 + k*1.7 + it.phase))*0.7;
+          const sc = 0.7 + Math.abs(Math.sin(_t*2.5 + k*1.7 + it.phase))*0.5;
+          sp.scale.set(sc);
+        });
       }
     } else if (it.type === 'particle') {
       it.life -= 0.04;
