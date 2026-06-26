@@ -33,9 +33,27 @@ export const FISH_SVG = `
   <path d="M86 36 Q92 35 89 42" fill="none" stroke="#b45309" stroke-width="1.6" stroke-linecap="round" opacity="0.7"/>
 </svg>`;
 
+// الجوهرة الذهبية (ماسة بأوجه لامعة)
+export const GEM_SVG = `
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="power-svg">
+  <!-- الطاولة العلوية -->
+  <polygon points="25,28 75,28 66,45 34,45" fill="#fde68a"/>
+  <!-- الوجه الأيسر -->
+  <polygon points="25,28 34,45 50,90" fill="#f59e0b"/>
+  <!-- الوجه الأيمن -->
+  <polygon points="75,28 66,45 50,90" fill="#d97706"/>
+  <!-- الوجه الأوسط -->
+  <polygon points="34,45 66,45 50,90" fill="#fbbf24"/>
+  <!-- حدود -->
+  <polygon points="25,28 75,28 50,90" fill="none" stroke="#fffbeb" stroke-width="1.2" opacity="0.5"/>
+  <!-- بريق -->
+  <polygon points="30,32 42,32 37,40 32,40" fill="#ffffff" opacity="0.55"/>
+</svg>`;
+
 // خريطة الأيقونات حسب نوع القدرة
 export const POWER_ICONS = {
   water: FISH_SVG,
+  gem: GEM_SVG,
 };
 
 // نرجّع أيقونة القدرة (SVG لو متوفّر، وإلا الإيموجي fallback)

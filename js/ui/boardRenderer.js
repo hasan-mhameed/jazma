@@ -1,19 +1,19 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1782473608";
-import { makeKey }                            from "../utils.js?v=1782473608";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782473608";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782473608";
-import { endGame }                            from "./gameEnd.js?v=1782473608";
-import { audioManager }                       from "../audio/audioManager.js?v=1782473608";
-import { checkSquaresAround }                 from "../core/logic.js?v=1782473608";
-import { onlineManager }                      from "../firebase.js?v=1782473608";
-import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782473608";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782473608";
-import { refreshInventory } from "./powersUI.js?v=1782473608";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1782473608";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782473608";
+import { state }                              from "../core/state.js?v=1782474528";
+import { makeKey }                            from "../utils.js?v=1782474528";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782474528";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782474528";
+import { endGame }                            from "./gameEnd.js?v=1782474528";
+import { audioManager }                       from "../audio/audioManager.js?v=1782474528";
+import { checkSquaresAround }                 from "../core/logic.js?v=1782474528";
+import { onlineManager }                      from "../firebase.js?v=1782474528";
+import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782474528";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782474528";
+import { refreshInventory } from "./powersUI.js?v=1782474528";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1782474528";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782474528";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -191,8 +191,9 @@ function buildSpecialElements(cfg) {
 
       if (type === 'water') {
         buildFish(cx, cy, size);
+      } else if (type === 'gem') {
+        buildGem(cx, cy, size);
       } else {
-        // باقي العناصر — emoji مؤقتاً (الجوهرة لاحقاً)
         const el = ELEMENTS[type];
         const icon = new PIXI.Text({ text: el.icon, style:{
           fontSize: Math.floor(spacing*0.34), fontFamily:'sans-serif'
@@ -278,6 +279,46 @@ function buildFish(cx, cy, size) {
 
   animItems.push({
     type:'fish', g:container, tail,
+    phase: Math.random()*Math.PI*2, baseX: cx, baseY: cy, consumed:false
+  });
+}
+
+// ── رسم الجوهرة (ماسة ذهبية بأوجه لامعة) ──
+function buildGem(cx, cy, size) {
+  const container = new PIXI.Container();
+  container.x = cx; container.y = cy;
+  const s = size * 1.0;
+
+  // الأوجه الرئيسية (ماسة)
+  const gem = new PIXI.Graphics();
+  // الجزء العلوي (طاولة الماسة)
+  gem.poly([ -s*0.5, -s*0.35,  s*0.5, -s*0.35,  s*0.32, -s*0.1,  -s*0.32, -s*0.1 ])
+     .fill({ color: 0xfde68a });
+  // الوجه الأيسر
+  gem.poly([ -s*0.5, -s*0.35,  -s*0.32, -s*0.1,  0, s*0.55 ])
+     .fill({ color: 0xf59e0b });
+  // الوجه الأيمن
+  gem.poly([ s*0.5, -s*0.35,  s*0.32, -s*0.1,  0, s*0.55 ])
+     .fill({ color: 0xd97706 });
+  // الوجه الأوسط
+  gem.poly([ -s*0.32, -s*0.1,  s*0.32, -s*0.1,  0, s*0.55 ])
+     .fill({ color: 0xfbbf24 });
+  // حدود
+  gem.poly([ -s*0.5, -s*0.35,  s*0.5, -s*0.35,  0, s*0.55 ])
+     .stroke({ color: 0xfffbeb, width: 1, alpha: 0.5 });
+
+  // بريق علوي
+  const shine = new PIXI.Graphics();
+  shine.poly([ -s*0.35, -s*0.28,  -s*0.1, -s*0.28,  -s*0.2, -s*0.14,  -s*0.32, -s*0.14 ])
+       .fill({ color: 0xffffff, alpha: 0.55 });
+
+  container.addChild(gem, shine);
+  container.alpha = 0.5;
+  container.scale.set(0.85);
+  layers.elements.addChild(container);
+
+  animItems.push({
+    type:'gem', g:container,
     phase: Math.random()*Math.PI*2, baseX: cx, baseY: cy, consumed:false
   });
 }
@@ -492,7 +533,7 @@ export function fillSquare(r, c, cfg, player) {
 function activateElement(r, c, type, cx, cy, spacing) {
   // نلاقي العنصر (سمكة أو أيقونة) ونفعّله
   const item = animItems.find(it =>
-    (it.type==='element' || it.type==='fish') &&
+    (it.type==='element' || it.type==='fish' || it.type==='gem') &&
     Math.abs((it.baseX ?? it.g.x)-cx)<2 && Math.abs(it.baseY-cy)<2
   );
   if (!item) return;
@@ -581,6 +622,17 @@ function ticker() {
       }
       // الذيل يتحرك دائماً
       if (it.tail) it.tail.skew.y = Math.sin(_t*6 + it.phase)*0.3;
+    } else if (it.type === 'gem') {
+      // الجوهرة: تطفو + تتمايل + بريق نابض
+      if (!it.consumed) {
+        it.g.alpha = 0.45 + Math.sin(_t*1.6 + it.phase)*0.18;
+        it.g.y = it.baseY + Math.sin(_t*1.2 + it.phase)*2.2;
+        it.g.rotation = Math.sin(_t*0.9 + it.phase)*0.12;
+      } else {
+        it.g.alpha = 1;
+        it.g.y = it.baseY + Math.sin(_t*2 + it.phase)*1.5;
+        it.g.rotation = Math.sin(_t*1.4 + it.phase)*0.1;
+      }
     } else if (it.type === 'particle') {
       it.life -= 0.04;
       it.g.x += it.vx; it.g.y += it.vy*0.9; it.vy += 0.05;
