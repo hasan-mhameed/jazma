@@ -757,6 +757,8 @@ body {
   display: flex; align-items: center; justify-content: center;
 }
 .gc-icon .power-svg { width: 52px; height: 44px; }
+/* أيقونات مربّعة (ساعات الوقت) — نحافظ على النسبة */
+.gc-icon svg[viewBox="0 0 100 100"] { width: 48px; height: 48px; }
 .gc-info { flex: 1; min-width: 0; }
 .gc-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
 .gc-name { font-size: 1.08rem; font-weight: 800; color: var(--nat-text); }
@@ -816,3 +818,7 @@ body {
   box-shadow: 0 8px 30px rgba(0,0,0,0.4);
 }
 .shop-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* أيقونات الوقت المربّعة — نحافظ على نسبتها (لا تتفلطح) */
+#inventory-bar .inv-icon svg[viewBox="0 0 100 100"] { width: 26px; height: 26px; }
+.shop-btn .shop-icon svg[viewBox="0 0 100 100"] { width: 22px; height: 22px; }

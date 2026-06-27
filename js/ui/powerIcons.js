@@ -48,10 +48,37 @@ export const GEM_SVG = `
   <polygon points="26,35 36,35 32,40 28,40" fill="#ffffff" opacity="0.6"/>
 </svg>`;
 
+// أيقونة تمديد الوقت (ساعة بنفسجية + علامة + خضراء)
+export const TIME_EXTEND_SVG = `
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="power-svg">
+  <circle cx="50" cy="54" r="34" fill="#14342b" stroke="#a78bfa" stroke-width="4"/>
+  <circle cx="50" cy="54" r="34" fill="none" stroke="#c4b5fd" stroke-width="1.5" opacity="0.5"/>
+  <rect x="40" y="10" width="20" height="7" rx="3" fill="#a78bfa"/>
+  <line x1="50" y1="54" x2="50" y2="34" stroke="#e9d5ff" stroke-width="4" stroke-linecap="round"/>
+  <line x1="50" y1="54" x2="64" y2="60" stroke="#e9d5ff" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="78" cy="30" r="16" fill="#10b981"/>
+  <line x1="78" y1="23" x2="78" y2="37" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="71" y1="30" x2="85" y2="30" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+</svg>`;
+
+// أيقونة تقصير وقت الخصم (ساعة حمراء + علامة − حمراء)
+export const TIME_REDUCE_SVG = `
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="power-svg">
+  <circle cx="50" cy="54" r="34" fill="#14342b" stroke="#f87171" stroke-width="4"/>
+  <circle cx="50" cy="54" r="34" fill="none" stroke="#fca5a5" stroke-width="1.5" opacity="0.5"/>
+  <rect x="40" y="10" width="20" height="7" rx="3" fill="#f87171"/>
+  <line x1="50" y1="54" x2="50" y2="34" stroke="#fecaca" stroke-width="4" stroke-linecap="round"/>
+  <line x1="50" y1="54" x2="64" y2="60" stroke="#fecaca" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="78" cy="30" r="16" fill="#ef4444"/>
+  <line x1="71" y1="30" x2="85" y2="30" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+</svg>`;
+
 // خريطة الأيقونات حسب نوع القدرة
 export const POWER_ICONS = {
   water: FISH_SVG,
   gem: GEM_SVG,
+  time_extend: TIME_EXTEND_SVG,
+  time_reduce: TIME_REDUCE_SVG,
 };
 
 // نرجّع أيقونة القدرة (SVG لو متوفّر، وإلا الإيموجي fallback)

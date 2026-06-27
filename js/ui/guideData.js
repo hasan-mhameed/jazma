@@ -2,7 +2,7 @@
 // بيانات دليل الأدوات — كل عنصر وقدرة مع وصفه الكامل
 // تُعرض في دليل اللعبة (زر ؟ جنب المخزون)
 
-import { FISH_SVG, GEM_SVG } from "./powerIcons.js?v=1782602707";
+import { FISH_SVG, GEM_SVG, TIME_EXTEND_SVG, TIME_REDUCE_SVG } from "./powerIcons.js?v=1782603469";
 
 // قائمة كل العناصر/الأدوات في اللعبة
 export const GUIDE_ITEMS = [
@@ -26,7 +26,7 @@ export const GUIDE_ITEMS = [
   },
   {
     key: 'time_extend',
-    svg: '<div style="font-size:2.2rem">⏱️</div>',
+    svg: TIME_EXTEND_SVG,
     name: 'تمديد الوقت',
     kind: 'شراء',
     kindColor: '#a78bfa',
@@ -35,7 +35,7 @@ export const GUIDE_ITEMS = [
   },
   {
     key: 'time_reduce',
-    svg: '<div style="font-size:2.2rem">⏬</div>',
+    svg: TIME_REDUCE_SVG,
     name: 'تقصير وقت الخصم',
     kind: 'شراء',
     kindColor: '#f87171',

@@ -3,7 +3,7 @@
 
 import { getDatabase, ref, push, get, query, orderByKey, limitToLast }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1782602707";
+import { currentUser } from "./auth.js?v=1782603469";
 
 const db = getDatabase();
 const PAGE_SIZE = 20;
