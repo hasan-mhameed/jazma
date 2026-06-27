@@ -1,12 +1,21 @@
 // 📄 core/powers.js
 // منطق القدرات — مخزون لكل لاعب + تعريف القدرات
+// كل أداة لها: source ('board' تُجمع من اللوحة | 'shop' تُشترى بالجواهر)
 
-// تعريف القدرات (مرتبطة بالعناصر)
 export const POWERS = {
   water: {
     icon: '🐟', name: 'سمكة',
     desc: 'ارسم خطاً إضافياً مجاناً',
     type: 'free_line',
+    source: 'board',        // تُجمع من عنصر في اللوحة
+  },
+  time_extend: {
+    icon: '⏱️', name: 'تمديد الوقت',
+    desc: 'أضف 5 ثوانٍ لوقت دورك',
+    type: 'time_extend',
+    source: 'shop',         // تُشترى بالجواهر
+    cost: 5,                // السعر بالجواهر
+    requiresTimer: true,    // تظهر فقط مع المؤقّت المفعّل
   },
 };
 

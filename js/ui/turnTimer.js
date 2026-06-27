@@ -1,8 +1,8 @@
 // 📄 ui/turnTimer.js
 // مؤقّت الدور — عدّاد لكل لاعب مع تنبيه بصري وصوتي قرب النهاية
 
-import { audioManager } from "../audio/audioManager.js?v=1782550166";
-import { state } from "../core/state.js?v=1782550166";
+import { audioManager } from "../audio/audioManager.js?v=1782551599";
+import { state } from "../core/state.js?v=1782551599";
 
 // ألوان اللاعبين (تطابق ألوان اللوحة والبطاقات)
 const PLAYER_COLORS = ['#2dd4bf', '#fb923c', '#a78bfa', '#fcd34d'];
@@ -54,6 +54,14 @@ function tick() {
     try { audioManager.playTimeout?.(); } catch {}
     _onTimeout?.();
   }
+}
+
+// إضافة ثوانٍ للوقت الحالي (أداة تمديد الوقت)
+export function extendTime(seconds = 5) {
+  if (!_enabled || !_intervalId) return false;
+  _remaining += seconds;
+  renderTimer();
+  return true;
 }
 
 // رسم العدّاد في الواجهة

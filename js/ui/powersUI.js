@@ -1,18 +1,22 @@
 // 📄 ui/powersUI.js
 // شريط المخزون — يعرض قدرات اللاعب الحالي + التفعيل
 
-import { POWERS, getInventory } from "../core/powers.js?v=1782550166";
-import { state } from "../core/state.js?v=1782550166";
-import { getPowerIcon } from "./powerIcons.js?v=1782550166";
+import { POWERS, getInventory } from "../core/powers.js?v=1782551599";
+import { state } from "../core/state.js?v=1782551599";
+import { getPowerIcon } from "./powerIcons.js?v=1782551599";
 
 let _onActivate = null;
+let _onBuy = null;
+let _lastCfg = null;
 
-export function initPowersUI({ onActivate }) {
+export function initPowersUI({ onActivate, onBuy }) {
   _onActivate = onActivate;
+  _onBuy = onBuy;
 }
 
 // تحديث الشريط حسب قدرات اللاعب الحالي
 export function refreshInventory(cfg) {
+  _lastCfg = cfg;
   const bar = document.getElementById('inventory-bar');
   if (!bar) return;
 
@@ -73,15 +77,39 @@ export function refreshInventory(cfg) {
 
 // زر دليل الأدوات (؟) — يُضاف لنهاية الشريط دائماً
 function addGuideButton(bar) {
+  addShopButtons(bar, _lastCfg);
   const btn = document.createElement('button');
   btn.id = 'guide-btn';
   btn.className = 'guide-btn';
   btn.textContent = '؟';
   btn.title = 'دليل الأدوات';
   btn.addEventListener('click', () => {
-    import('./guideUI.js?v=1782550166').then(m => m.openGuide());
+    import('./guideUI.js?v=1782551599').then(m => m.openGuide());
   });
   bar.appendChild(btn);
+}
+
+// أزرار شراء الأدوات (shop) — تظهر حسب الشروط
+function addShopButtons(bar, cfg) {
+  if (!cfg) return;
+  const timerOn = cfg.aiMode === 'online' ? true : !!cfg.turnTimer;
+
+  Object.keys(POWERS).forEach(key => {
+    const p = POWERS[key];
+    if (p.source !== 'shop') return;
+    if (p.requiresTimer && !timerOn) return; // تظهر فقط مع المؤقّت
+
+    // متاحة فقط في دور اللاعب
+    const myTurn = canActivate(cfg, state.currentPlayer);
+
+    const btn = document.createElement('button');
+    btn.className = 'shop-btn';
+    btn.innerHTML = `<span class="shop-icon">${getPowerIcon(key, p.icon)}</span><span class="shop-cost">${p.cost}💎</span>`;
+    btn.title = `${p.name} — ${p.desc} (${p.cost} جوهرة)`;
+    if (!myTurn) btn.classList.add('disabled');
+    else btn.addEventListener('click', () => _onBuy?.(key));
+    bar.appendChild(btn);
+  });
 }
 
 function canActivate(cfg, viewPlayer) {

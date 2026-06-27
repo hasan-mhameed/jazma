@@ -2,7 +2,7 @@
 // بيانات دليل الأدوات — كل عنصر وقدرة مع وصفه الكامل
 // تُعرض في دليل اللعبة (زر ؟ جنب المخزون)
 
-import { FISH_SVG, GEM_SVG } from "./powerIcons.js?v=1782550166";
+import { FISH_SVG, GEM_SVG } from "./powerIcons.js?v=1782551599";
 
 // قائمة كل العناصر/الأدوات في اللعبة
 export const GUIDE_ITEMS = [
@@ -23,5 +23,14 @@ export const GUIDE_ITEMS = [
     kindColor: '#fbbf24',
     how: 'أكمل مربعاً يحتوي على جوهرة',
     desc: 'تكسب 3 عملات تُضاف لمحفظتك الدائمة. تتراكم بين المباريات.',
+  },
+  {
+    key: 'time_extend',
+    svg: '<div style="font-size:2.2rem">⏱️</div>',
+    name: 'تمديد الوقت',
+    kind: 'شراء',
+    kindColor: '#a78bfa',
+    how: 'اشترِها بـ 5 جواهر (مع المؤقّت المفعّل)',
+    desc: 'تضيف 5 ثوانٍ لوقت دورك الحالي. مفيدة لمّا يضيق الوقت.',
   },
 ];

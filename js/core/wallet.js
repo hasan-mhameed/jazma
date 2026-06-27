@@ -3,7 +3,7 @@
 
 import { getDatabase, ref, get, set, runTransaction }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser } from "../auth.js?v=1782550166";
+import { getCurrentUser } from "../auth.js?v=1782551599";
 
 const db = getDatabase();
 
@@ -32,6 +32,22 @@ export async function commitMatchCoins() {
   _matchCoins = 0;
   const total = await getCoins();
   return { earned, total };
+}
+
+// خصم عملات من الرصيد الدائم (لشراء أدوات) — يرجّع true لو نجح
+export async function spendCoins(amount) {
+  const uid = getCurrentUser()?.uid;
+  if (!uid || amount <= 0) return false;
+  let ok = false;
+  const r = ref(db, `users/${uid}/coins`);
+  await runTransaction(r, current => {
+    const cur = current || 0;
+    if (cur < amount) { ok = false; return cur; } // رصيد غير كافٍ
+    ok = true;
+    return cur - amount;
+  });
+  if (ok) refreshCoinsBadge();
+  return ok;
 }
 
 // تحديث شارة العملات في الواجهة

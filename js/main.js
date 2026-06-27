@@ -1,34 +1,37 @@
 // 📄 main.js — v13.9
 // Bootstrap فقط — يربط كل الـ modules
 
-import { config }                              from "./config/config.js?v=1782550166";
-import { state }                               from "./core/state.js?v=1782550166";
-import { startBoard, updateScoreboard, resetState } from "./board.js?v=1782550166";
-import { updateTurnUI }                        from "./ui/turnManager.js?v=1782550166";
-import { audioManager }                        from "./audio/audioManager.js?v=1782550166";
-import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1782550166";
-import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1782550166";
+import { config }                              from "./config/config.js?v=1782551599";
+import { state }                               from "./core/state.js?v=1782551599";
+import { startBoard, updateScoreboard, resetState } from "./board.js?v=1782551599";
+import { updateTurnUI }                        from "./ui/turnManager.js?v=1782551599";
+import { audioManager }                        from "./audio/audioManager.js?v=1782551599";
+import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1782551599";
+import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1782551599";
 
-import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1782550166";
-import { initGameSetup }       from "./ui/gameSetup.js?v=1782550166";
-import { initTurnTimer, stopTurnTimer, startTurnTimer } from "./ui/turnTimer.js?v=1782550166";
-import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1782550166";
-import { initFriendsUI }       from "./ui/friendsUI.js?v=1782550166";
-import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1782550166";
-import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1782550166";
-import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1782550166";
-import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1782550166";
-import { renderStatsModal }    from "./ui/statsModal.js?v=1782550166";
-import { initHistoryUI }       from "./ui/historyUI.js?v=1782550166";
-import { resetMatchTimer }     from "./ui/gameEnd.js?v=1782550166";
-import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1782550166";
-import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1782550166";
-import { refreshCoinsBadge } from "./core/wallet.js?v=1782550166";
-import { loadLearnedPowers } from "./ui/powerTutorial.js?v=1782550166";
-import { initPowersUI, refreshInventory } from "./ui/powersUI.js?v=1782550166";
-import { activatePower, triggerAI } from "./ui/boardRenderer.js?v=1782550166";
-import { initNavMenu }            from "./ui/navMenu.js?v=1782550166";
-import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1782550166";
+import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1782551599";
+import { initGameSetup }       from "./ui/gameSetup.js?v=1782551599";
+import { initTurnTimer, stopTurnTimer, startTurnTimer } from "./ui/turnTimer.js?v=1782551599";
+import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1782551599";
+import { initFriendsUI }       from "./ui/friendsUI.js?v=1782551599";
+import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1782551599";
+import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1782551599";
+import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1782551599";
+import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1782551599";
+import { renderStatsModal }    from "./ui/statsModal.js?v=1782551599";
+import { initHistoryUI }       from "./ui/historyUI.js?v=1782551599";
+import { resetMatchTimer }     from "./ui/gameEnd.js?v=1782551599";
+import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1782551599";
+import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1782551599";
+import { refreshCoinsBadge } from "./core/wallet.js?v=1782551599";
+import { loadLearnedPowers } from "./ui/powerTutorial.js?v=1782551599";
+import { initPowersUI, refreshInventory } from "./ui/powersUI.js?v=1782551599";
+import { POWERS } from "./core/powers.js?v=1782551599";
+import { spendCoins } from "./core/wallet.js?v=1782551599";
+import { extendTime } from "./ui/turnTimer.js?v=1782551599";
+import { activatePower, triggerAI } from "./ui/boardRenderer.js?v=1782551599";
+import { initNavMenu }            from "./ui/navMenu.js?v=1782551599";
+import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1782551599";
 
 // ── PWA ─────────────────────────────────────────────────────────
 let _deferredInstallPrompt = null;
@@ -117,6 +120,45 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // شراء أداة من المتجر بالجواهر وتطبيق تأثيرها فوراً
+  async function buyShopTool(type) {
+    const p = POWERS[type];
+    if (!p || p.source !== 'shop') return;
+
+    const ok = await spendCoins(p.cost);
+    if (!ok) {
+      audioManager.playError?.();
+      flashToast(`💎 رصيدك غير كافٍ (تحتاج ${p.cost})`);
+      return;
+    }
+
+    // تطبيق التأثير حسب نوع الأداة
+    if (type === 'time_extend') {
+      const done = extendTime(5);
+      if (done) {
+        audioManager.playSquareComplete?.();
+        flashToast('⏱️ +5 ثوانٍ!');
+      }
+    }
+    refreshInventory(config);
+  }
+
+  // رسالة عابرة قصيرة
+  function flashToast(text) {
+    let el = document.getElementById('shop-toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'shop-toast';
+      el.className = 'shop-toast';
+      document.body.appendChild(el);
+    }
+    el.textContent = text;
+    el.classList.remove('show');
+    void el.offsetWidth;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1800);
+  }
+
   // ── Game Setup ───────────────────────────────────────────────
   const gameSetup = initGameSetup({
     onGameStart:      () => launchGame(),
@@ -149,6 +191,9 @@ document.addEventListener("DOMContentLoaded", () => {
   initPowersUI({
     onActivate: (type, player) => {
       activatePower(type, player, config);
+    },
+    onBuy: async (type) => {
+      await buyShopTool(type);
     },
   });
 

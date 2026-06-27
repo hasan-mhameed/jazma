@@ -790,3 +790,29 @@ body {
   font-size: 0.95rem; color: var(--nat-text);
 }
 .timer-toggle input { width: 18px; height: 18px; accent-color: var(--nat-p1-bright); cursor: pointer; }
+
+/* ═══ زر شراء أداة (shop) ═══ */
+.shop-btn {
+  display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 4px 10px; border-radius: 12px;
+  background: linear-gradient(135deg, rgba(167,139,250,0.18), rgba(167,139,250,0.06));
+  border: 1px solid #a78bfa55; cursor: pointer;
+  transition: all 0.15s;
+}
+.shop-btn:hover { border-color: #a78bfa; transform: translateY(-2px); box-shadow: 0 4px 14px rgba(167,139,250,0.3); }
+.shop-btn .shop-icon { width: 26px; height: 20px; display: flex; align-items: center; justify-content: center; }
+.shop-btn .shop-icon .power-svg { width: 26px; height: 20px; }
+.shop-btn .shop-cost { font-size: 0.68rem; font-weight: 800; color: #c4b5fd; white-space: nowrap; }
+.shop-btn.disabled { opacity: 0.45; cursor: not-allowed; }
+.shop-btn.disabled:hover { transform: none; box-shadow: none; border-color: #a78bfa55; }
+
+/* ═══ رسالة عابرة (toast) ═══ */
+.shop-toast {
+  position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: rgba(20,52,43,0.96); border: 1px solid var(--nat-gold);
+  color: var(--nat-text); padding: 12px 24px; border-radius: 14px;
+  font-weight: 700; font-size: 0.95rem; z-index: 9999;
+  opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+}
+.shop-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }

@@ -132,6 +132,13 @@ class AudioManager {
     });
   }
 
+  // صوت خطأ (رصيد غير كافٍ مثلاً)
+  playError() {
+    if (!this.enabled) return;
+    this.playTone(200, 0.15, 'square');
+    setTimeout(() => this.playTone(150, 0.2, 'square'), 100);
+  }
+
   // صوت تيك المؤقّت (آخر ثوان)
   playTick() {
     if (!this.enabled) return;
