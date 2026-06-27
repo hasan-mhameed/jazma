@@ -1,20 +1,20 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1782511797";
-import { makeKey }                            from "../utils.js?v=1782511797";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782511797";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782511797";
-import { endGame }                            from "./gameEnd.js?v=1782511797";
-import { audioManager }                       from "../audio/audioManager.js?v=1782511797";
-import { checkSquaresAround }                 from "../core/logic.js?v=1782511797";
-import { onlineManager }                      from "../firebase.js?v=1782511797";
-import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782511797";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782511797";
-import { refreshInventory } from "./powersUI.js?v=1782511797";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1782511797";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1782511797";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782511797";
+import { state }                              from "../core/state.js?v=1782519228";
+import { makeKey }                            from "../utils.js?v=1782519228";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782519228";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782519228";
+import { endGame }                            from "./gameEnd.js?v=1782519228";
+import { audioManager }                       from "../audio/audioManager.js?v=1782519228";
+import { checkSquaresAround }                 from "../core/logic.js?v=1782519228";
+import { onlineManager }                      from "../firebase.js?v=1782519228";
+import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782519228";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782519228";
+import { refreshInventory } from "./powersUI.js?v=1782519228";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1782519228";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1782519228";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782519228";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -747,19 +747,18 @@ function ticker() {
 export function triggerAI(cfg) {
   if (!aiPlayer || state.currentPlayer !== 2 || isAIThinking) return;
   isAIThinking = true;
-  // نمهل اللوحة وقتاً لإنهاء أنميشن الحركة السابقة قبل الحساب الثقيل
+  // حساب في الخلفية (Web Worker) — الأنميشن يكمّل بسلاسة أثناء التفكير
   setTimeout(() => {
-    // نضمن رسم إطار قبل بدء الحساب (يمنع تجمّد الأنميشن المحسوس)
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const move = aiPlayer.makeMove(cfg);
-        isAIThinking = false;
-        if (!move) return;
-        const obj = edgeObjects.find(e => e.key === move.key);
-        if (obj && !obj.drawn) handleEdgeClick(obj, cfg);
-      });
+    const movePromise = aiPlayer.makeMoveAsync
+      ? aiPlayer.makeMoveAsync(cfg)
+      : Promise.resolve(aiPlayer.makeMove(cfg));
+    movePromise.then((move) => {
+      isAIThinking = false;
+      if (!move) return;
+      const obj = edgeObjects.find(e => e.key === move.key);
+      if (obj && !obj.drawn) handleEdgeClick(obj, cfg);
     });
-  }, 350);
+  }, 300);
 }
 
 // ═══════════════════════════════════════════════════════

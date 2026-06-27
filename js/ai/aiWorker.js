@@ -1,54 +1,30 @@
-// 📄 aiPlayer.js
-// الذكاء الاصطناعي للعب ضد الكمبيوتر
-// AI Player with different difficulty levels
+// 📄 aiWorker.js — حساب الآلة في thread منفصل (Web Worker)
+// نسخة معزولة عن state العام — تشتغل على بيانات مُمرّرة
 
-import { state } from "../core/state.js?v=1782519228";
-import { makeKey } from "../utils.js?v=1782519228";
-import { checkForSquare } from "../core/logic.js?v=1782519228";
+// كائن الحالة المحلي (بدل state العام)
+const _W = { lines: new Set() };
 
-export class AIPlayer {
+// makeKey معزولة (نسخة من utils)
+function makeKey(r1, c1, r2, c2) {
+  if (r1 > r2 || (r1 === r2 && c1 > c2)) {
+    [r1, c1, r2, c2] = [r2, c2, r1, c1];
+  }
+  return `${r1},${c1}-${r2},${c2}`;
+}
+
+// checkForSquare معزولة (تقرأ _W.lines)
+function checkForSquare(r, c) {
+  const top    = makeKey(r,   c,   r,   c+1);
+  const right  = makeKey(r,   c+1, r+1, c+1);
+  const bottom = makeKey(r+1, c,   r+1, c+1);
+  const left   = makeKey(r,   c,   r+1, c  );
+  return _W.lines.has(top) && _W.lines.has(right) &&
+         _W.lines.has(bottom) && _W.lines.has(left);
+}
+
+class AIPlayer {
   constructor(difficulty = 'medium') {
     this.difficulty = difficulty; // easy, medium, hard
-    this._worker = null;
-    this._reqId = 0;
-    this._initWorker();
-  }
-
-  // تهيئة الـ Web Worker (حساب في thread منفصل — يمنع تجمّد الأنميشن)
-  _initWorker() {
-    try {
-      this._worker = new Worker(new URL('./aiWorker.js', import.meta.url), { type: 'module' });
-    } catch (e) {
-      this._worker = null; // fallback للحساب العادي
-    }
-  }
-
-  // حساب الحركة بشكل غير متزامن عبر الـ Worker (لا يجمّد الواجهة)
-  makeMoveAsync(cfg) {
-    return new Promise((resolve) => {
-      // لو الـ Worker غير متاح، نرجع للحساب المتزامن العادي
-      if (!this._worker) { resolve(this.makeMove(cfg)); return; }
-
-      const reqId = ++this._reqId;
-      const lines = Array.from(state.lines); // ننقل الخطوط الحالية
-
-      const onMsg = (e) => {
-        if (e.data.reqId !== reqId) return;
-        this._worker.removeEventListener('message', onMsg);
-        resolve(e.data.move);
-      };
-      this._worker.addEventListener('message', onMsg);
-
-      // أمان: لو الـ Worker ما ردّ خلال 5 ثوان، نحسب محلياً
-      const safety = setTimeout(() => {
-        this._worker?.removeEventListener('message', onMsg);
-        resolve(this.makeMove(cfg));
-      }, 5000);
-      const origResolve = resolve;
-      resolve = (v) => { clearTimeout(safety); origResolve(v); };
-
-      this._worker.postMessage({ lines, cfg, difficulty: this.difficulty, reqId });
-    });
   }
 
   // 🎯 اختيار الحركة التالية حسب مستوى الصعوبة
@@ -74,13 +50,11 @@ export class AIPlayer {
   getAvailableMoves(cfg) {
     const moves = [];
     
-    console.log('🔍 Checking available moves. Current lines count:', state.lines.size);
-    
     // الخطوط الأفقية
     for (let r = 0; r < cfg.rows; r++) {
       for (let c = 0; c < cfg.cols - 1; c++) {
         const key = makeKey(r, c, r, c + 1);
-        if (!state.lines.has(key)) {
+        if (!_W.lines.has(key)) {
           moves.push({ r1: r, c1: c, r2: r, c2: c + 1, key });
         }
       }
@@ -90,13 +64,11 @@ export class AIPlayer {
     for (let r = 0; r < cfg.rows - 1; r++) {
       for (let c = 0; c < cfg.cols; c++) {
         const key = makeKey(r, c, r + 1, c);
-        if (!state.lines.has(key)) {
+        if (!_W.lines.has(key)) {
           moves.push({ r1: r, c1: c, r2: r + 1, c2: c, key });
         }
       }
     }
-    
-    console.log('✅ Available moves:', moves.length);
 
     return moves;
   }
@@ -137,26 +109,22 @@ export class AIPlayer {
     // المرحلة 1: ياخذ كل المربعات المتاحة فوراً
     const completingMoves = this.getCompletingMoves(moves, cfg);
     if (completingMoves.length > 0) {
-      console.log('🔥 Hard: Taking', completingMoves.length, 'available squares');
       return this.getBestCompletingMove(completingMoves, cfg);
     }
 
     // المرحلة 2: تجنب الحركات اللي تعطي الخصم فرصة
     const safeMoves = this.getSafeMoves(moves, cfg);
     if (safeMoves.length > 0) {
-      console.log('🔥 Hard: Found', safeMoves.length, 'safe moves');
       // من الحركات الآمنة، نختار الأفضل استراتيجياً
       return this.getAdvancedStrategicMove(safeMoves, cfg);
     }
 
     // المرحلة 3: كل الحركات خطيرة - استراتيجية Double-Cross
-    console.log('🔥 Hard: All moves dangerous, using double-cross');
     return this.getDoubleCrossMove(moves, cfg);
   }
 
   // 🏆 خبير - شبه مستحيل الفوز عليه
   getExpertMove(moves, cfg) {
-    console.log('🏆 EXPERT MODE');
     
     // المرحلة 1: ياخذ كل المربعات
     const completingMoves = this.getCompletingMoves(moves, cfg);
@@ -170,7 +138,6 @@ export class AIPlayer {
     
     const bestMove = this.minimaxSearch(moves, cfg, depth, true);
     if (bestMove) {
-      console.log(`🏆 Expert: Minimax depth ${depth}`);
       return bestMove;
     }
 
@@ -236,7 +203,7 @@ export class AIPlayer {
       if (this._aborted) break;
 
       const move = moves[i];
-      state.lines.add(move.key);
+      _W.lines.add(move.key);
 
       // في Dots & Boxes: لو كملت مربع، تلعب مرة ثانية!
       const squaresCompleted = this.countCompletedSquaresWithKey(move.key, cfg);
@@ -253,7 +220,7 @@ export class AIPlayer {
         score = result.score;
       }
 
-      state.lines.delete(move.key);
+      _W.lines.delete(move.key);
 
       if (isMaximizing) {
         if (score > bestScore) { bestScore = score; bestMove = move; }
@@ -357,10 +324,10 @@ export class AIPlayer {
       let priority = 0;
 
       // أولوية 1: الحركات التي تكمل مربعاً (تحقق سريع بدون state)
-      state.lines.add(move.key);
+      _W.lines.add(move.key);
       const completed = this.countCompletedSquaresWithKey(move.key, cfg);
       const danger = this.countDangerousSquares(cfg);
-      state.lines.delete(move.key);
+      _W.lines.delete(move.key);
 
       priority += completed * 1000;
       priority -= danger * 200;
@@ -395,7 +362,7 @@ export class AIPlayer {
     let bestScore = -Infinity;
 
     for (const move of moves) {
-      state.lines.add(move.key);
+      _W.lines.add(move.key);
 
       const chains = this.analyzeChains(cfg);
       let score = 0;
@@ -412,7 +379,7 @@ export class AIPlayer {
       const longChains = chains.filter(c => c.length >= 3).length;
       if (longChains % 2 === 0) score += 200;
 
-      state.lines.delete(move.key);
+      _W.lines.delete(move.key);
 
       if (score > bestScore) {
         bestScore = score;
@@ -429,10 +396,10 @@ export class AIPlayer {
     let bestScore = -Infinity;
 
     for (const move of safeMoves) {
-      state.lines.add(move.key);
+      _W.lines.add(move.key);
       const dangerous = this.countSquaresWithEdges(cfg, 2);
       const score = -dangerous * 10 - this.getCenterDistance(move, cfg);
-      state.lines.delete(move.key);
+      _W.lines.delete(move.key);
 
       if (score > bestScore) {
         bestScore = score;
@@ -451,8 +418,8 @@ export class AIPlayer {
         const right  = makeKey(r,   c+1, r+1, c+1);
         const bottom = makeKey(r+1, c,   r+1, c+1);
         const left   = makeKey(r,   c,   r+1, c  );
-        if (state.lines.has(top) && state.lines.has(right) &&
-            state.lines.has(bottom) && state.lines.has(left)) {
+        if (_W.lines.has(top) && _W.lines.has(right) &&
+            _W.lines.has(bottom) && _W.lines.has(left)) {
           count++;
         }
       }
@@ -471,11 +438,11 @@ export class AIPlayer {
     const movesToCheck = Math.min(moves.length, depth >= 4 ? 6 : 10);
 
     for (const move of moves.slice(0, movesToCheck)) {
-      state.lines.add(move.key);
+      _W.lines.add(move.key);
       
       const score = this.evaluateBoardDeep(cfg, depth);
       
-      state.lines.delete(move.key);
+      _W.lines.delete(move.key);
       
       if (isMaximizing) {
         if (score > bestScore) {
@@ -518,7 +485,7 @@ export class AIPlayer {
     let bestScore = -Infinity;
 
     for (const move of safeMoves) {
-      state.lines.add(move.key);
+      _W.lines.add(move.key);
       
       let score = 0;
       
@@ -534,7 +501,7 @@ export class AIPlayer {
       // 4. تجنب إنشاء مربعات بضلعين (خطيرة)
       score -= this.countSquaresWithEdges(cfg, 2) * 10;
       
-      state.lines.delete(move.key);
+      _W.lines.delete(move.key);
       
       if (score > bestScore) {
         bestScore = score;
@@ -552,7 +519,7 @@ export class AIPlayer {
     let maxKeep = -Infinity;
 
     for (const move of moves) {
-      state.lines.add(move.key);
+      _W.lines.add(move.key);
       
       // كم مربع رح يقدر الخصم ياخذ بعد هالحركة؟
       const giveaway = this.countDangerousSquares(cfg);
@@ -560,7 +527,7 @@ export class AIPlayer {
       // بعد ما الخصم ياخذ المربعات، كم رح يبقى للـ AI؟
       const keepForMe = this.estimateRemainingSquares(cfg);
       
-      state.lines.delete(move.key);
+      _W.lines.delete(move.key);
       
       // نختار الحركة اللي تعطي أقل مربعات للخصم وتخلي أكثر مربعات للـ AI
       if (giveaway < minGiveaway || (giveaway === minGiveaway && keepForMe > maxKeep)) {
@@ -569,15 +536,13 @@ export class AIPlayer {
         bestMove = move;
       }
     }
-
-    console.log('🎲 Double-Cross: Giving away', minGiveaway, 'squares, keeping', maxKeep);
     return bestMove;
   }
 
   // 📈 تقدير المربعات المتبقية بعد ضربة الخصم
   estimateRemainingSquares(cfg) {
     const totalSquares = (cfg.rows - 1) * (cfg.cols - 1);
-    const filledSquares = state.lines.size;
+    const filledSquares = _W.lines.size;
     const dangerousNow = this.countDangerousSquares(cfg);
     
     // تقريباً كم رح يبقى بعد ما الخصم ياخذ المربعات الخطرة
@@ -626,13 +591,13 @@ export class AIPlayer {
   getSafeMoves(moves, cfg) {
     return moves.filter(move => {
       // نجرب الحركة
-      state.lines.add(move.key);
+      _W.lines.add(move.key);
       
       // نشوف كم مربع رح يقدر الخصم يكمل بعد هالحركة
       const dangerousSquares = this.countDangerousSquares(cfg);
       
       // نرجع الحالة
-      state.lines.delete(move.key);
+      _W.lines.delete(move.key);
       
       return dangerousSquares === 0;
     });
@@ -645,7 +610,7 @@ export class AIPlayer {
     
     // نبحث عن مربعات بضلعين (خطيرة)
     for (const move of moves) {
-      state.lines.add(move.key);
+      _W.lines.add(move.key);
       
       // نشوف إذا هالحركة تخلق سلسلة يقدر يسيطر عليها
       const affectedSquares = this.getAffectedSquares(move, cfg);
@@ -656,7 +621,7 @@ export class AIPlayer {
         if (edges === 2) twoEdgeSquares++;
       });
       
-      state.lines.delete(move.key);
+      _W.lines.delete(move.key);
       
       // إذا ما خلق مربعات بضلعين، حركة جيدة
       if (twoEdgeSquares === 0) {
@@ -689,7 +654,7 @@ export class AIPlayer {
   evaluateMove(move, cfg) {
     let score = 0;
     
-    state.lines.add(move.key);
+    _W.lines.add(move.key);
     
     // كم مربع رح نكمل؟
     score += this.checkCompletedSquares(move, cfg) * 100;
@@ -701,7 +666,7 @@ export class AIPlayer {
     const centerDistance = this.getCenterDistance(move, cfg);
     score -= centerDistance * 5;
     
-    state.lines.delete(move.key);
+    _W.lines.delete(move.key);
     
     return score;
   }
@@ -712,9 +677,9 @@ export class AIPlayer {
     let minDanger = Infinity;
 
     for (const move of moves) {
-      state.lines.add(move.key);
+      _W.lines.add(move.key);
       const danger = this.countDangerousSquares(cfg);
-      state.lines.delete(move.key);
+      _W.lines.delete(move.key);
 
       if (danger < minDanger) {
         minDanger = danger;
@@ -748,10 +713,10 @@ export class AIPlayer {
     const bottom = makeKey(r + 1, c, r + 1, c + 1);
     const left = makeKey(r, c, r + 1, c);
     
-    if (state.lines.has(top)) count++;
-    if (state.lines.has(right)) count++;
-    if (state.lines.has(bottom)) count++;
-    if (state.lines.has(left)) count++;
+    if (_W.lines.has(top)) count++;
+    if (_W.lines.has(right)) count++;
+    if (_W.lines.has(bottom)) count++;
+    if (_W.lines.has(left)) count++;
     
     return count;
   }
@@ -796,7 +761,7 @@ export class AIPlayer {
     let count = 0;
     const squares = this.getAffectedSquares(move, cfg);
     
-    state.lines.add(move.key);
+    _W.lines.add(move.key);
     
     squares.forEach(sq => {
       if (sq.r >= 0 && sq.c >= 0 && sq.r < cfg.rows - 1 && sq.c < cfg.cols - 1) {
@@ -806,7 +771,7 @@ export class AIPlayer {
       }
     });
     
-    state.lines.delete(move.key);
+    _W.lines.delete(move.key);
     
     return count;
   }
@@ -837,3 +802,19 @@ export class AIPlayer {
     this.difficulty = difficulty;
   }
 }
+
+
+// ── استقبال الطلبات من الـ thread الرئيسي ──
+self.onmessage = function(e) {
+  const { lines, cfg, difficulty, reqId } = e.data;
+  // نبني الحالة المحلية من الخطوط المُمرّرة
+  _W.lines = new Set(lines);
+  const ai = new AIPlayer(difficulty);
+  let move = null;
+  try {
+    move = ai.makeMove(cfg);
+  } catch (err) {
+    move = null;
+  }
+  self.postMessage({ move, reqId });
+};
