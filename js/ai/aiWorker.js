@@ -154,7 +154,7 @@ class AIPlayer {
     }
 
     // المرحلة 2: Iterative Deepening مع حد زمني 800ms
-    const TIME_LIMIT = 250; // ms — استجابة سريعة جداً وتجمّد غير محسوس
+    const TIME_LIMIT = 1500; // ms — وقت أطول = ذكاء أعمق (Worker لا يجمّد الواجهة)
     this._startTime = performance.now();
     this._timeLimit = TIME_LIMIT;
     this._aborted = false;
