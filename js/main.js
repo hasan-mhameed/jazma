@@ -1,37 +1,37 @@
 // 📄 main.js — v13.9
 // Bootstrap فقط — يربط كل الـ modules
 
-import { config }                              from "./config/config.js?v=1782551599";
-import { state }                               from "./core/state.js?v=1782551599";
-import { startBoard, updateScoreboard, resetState } from "./board.js?v=1782551599";
-import { updateTurnUI }                        from "./ui/turnManager.js?v=1782551599";
-import { audioManager }                        from "./audio/audioManager.js?v=1782551599";
-import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1782551599";
-import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1782551599";
+import { config }                              from "./config/config.js?v=1782602707";
+import { state }                               from "./core/state.js?v=1782602707";
+import { startBoard, updateScoreboard, resetState } from "./board.js?v=1782602707";
+import { updateTurnUI }                        from "./ui/turnManager.js?v=1782602707";
+import { audioManager }                        from "./audio/audioManager.js?v=1782602707";
+import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1782602707";
+import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1782602707";
 
-import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1782551599";
-import { initGameSetup }       from "./ui/gameSetup.js?v=1782551599";
-import { initTurnTimer, stopTurnTimer, startTurnTimer } from "./ui/turnTimer.js?v=1782551599";
-import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1782551599";
-import { initFriendsUI }       from "./ui/friendsUI.js?v=1782551599";
-import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1782551599";
-import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1782551599";
-import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1782551599";
-import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1782551599";
-import { renderStatsModal }    from "./ui/statsModal.js?v=1782551599";
-import { initHistoryUI }       from "./ui/historyUI.js?v=1782551599";
-import { resetMatchTimer }     from "./ui/gameEnd.js?v=1782551599";
-import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1782551599";
-import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1782551599";
-import { refreshCoinsBadge } from "./core/wallet.js?v=1782551599";
-import { loadLearnedPowers } from "./ui/powerTutorial.js?v=1782551599";
-import { initPowersUI, refreshInventory } from "./ui/powersUI.js?v=1782551599";
-import { POWERS } from "./core/powers.js?v=1782551599";
-import { spendCoins } from "./core/wallet.js?v=1782551599";
-import { extendTime } from "./ui/turnTimer.js?v=1782551599";
-import { activatePower, triggerAI } from "./ui/boardRenderer.js?v=1782551599";
-import { initNavMenu }            from "./ui/navMenu.js?v=1782551599";
-import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1782551599";
+import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1782602707";
+import { initGameSetup }       from "./ui/gameSetup.js?v=1782602707";
+import { initTurnTimer, stopTurnTimer, startTurnTimer } from "./ui/turnTimer.js?v=1782602707";
+import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1782602707";
+import { initFriendsUI }       from "./ui/friendsUI.js?v=1782602707";
+import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1782602707";
+import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1782602707";
+import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1782602707";
+import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1782602707";
+import { renderStatsModal }    from "./ui/statsModal.js?v=1782602707";
+import { initHistoryUI }       from "./ui/historyUI.js?v=1782602707";
+import { resetMatchTimer }     from "./ui/gameEnd.js?v=1782602707";
+import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1782602707";
+import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1782602707";
+import { refreshCoinsBadge } from "./core/wallet.js?v=1782602707";
+import { loadLearnedPowers } from "./ui/powerTutorial.js?v=1782602707";
+import { initPowersUI, refreshInventory } from "./ui/powersUI.js?v=1782602707";
+import { POWERS, addPower } from "./core/powers.js?v=1782602707";
+import { spendCoins } from "./core/wallet.js?v=1782602707";
+import { extendTime } from "./ui/turnTimer.js?v=1782602707";
+import { activatePower, triggerAI } from "./ui/boardRenderer.js?v=1782602707";
+import { initNavMenu }            from "./ui/navMenu.js?v=1782602707";
+import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1782602707";
 
 // ── PWA ─────────────────────────────────────────────────────────
 let _deferredInstallPrompt = null;
@@ -120,7 +120,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // شراء أداة من المتجر بالجواهر وتطبيق تأثيرها فوراً
+  // شراء أداة من المتجر بالجواهر
   async function buyShopTool(type) {
     const p = POWERS[type];
     if (!p || p.source !== 'shop') return;
@@ -132,13 +132,20 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // تطبيق التأثير حسب نوع الأداة
-    if (type === 'time_extend') {
-      const done = extendTime(5);
-      if (done) {
-        audioManager.playSquareComplete?.();
-        flashToast('⏱️ +5 ثوانٍ!');
+    if (p.instant) {
+      // أدوات فورية (تمديد الوقت) — تُطبّق مباشرة
+      if (type === 'time_extend') {
+        const done = extendTime(5);
+        if (done) { audioManager.playSquareComplete?.(); flashToast('⏱️ +5 ثوانٍ!'); }
       }
+    } else {
+      // أدوات تُخزّن في المخزون وتُفعّل لاحقاً (تقصير وقت الخصم)
+      const buyer = config.aiMode === 'ai' ? 1
+                  : config.aiMode === 'online' ? (config.onlinePlayerNum || 1)
+                  : state.currentPlayer;
+      addPower(buyer, type);
+      audioManager.playSquareComplete?.();
+      flashToast(`${p.icon} اشتريت: ${p.name}`);
     }
     refreshInventory(config);
   }

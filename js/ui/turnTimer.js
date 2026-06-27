@@ -1,8 +1,9 @@
 // 📄 ui/turnTimer.js
 // مؤقّت الدور — عدّاد لكل لاعب مع تنبيه بصري وصوتي قرب النهاية
 
-import { audioManager } from "../audio/audioManager.js?v=1782551599";
-import { state } from "../core/state.js?v=1782551599";
+import { audioManager } from "../audio/audioManager.js?v=1782602707";
+import { state } from "../core/state.js?v=1782602707";
+import { getEffect, clearEffect } from "../core/powers.js?v=1782602707";
 
 // ألوان اللاعبين (تطابق ألوان اللوحة والبطاقات)
 const PLAYER_COLORS = ['#2dd4bf', '#fb923c', '#a78bfa', '#fcd34d'];
@@ -29,6 +30,14 @@ export function startTurnTimer() {
   if (!_enabled) return;
   stopTurnTimer();
   _remaining = TURN_SECONDS;
+
+  // لو على اللاعب الحالي علامة "قصّ وقت" (من أداة الخصم) — نطبّقها مرة وحدة
+  const cut = getEffect(state.currentPlayer, 'time_cut');
+  if (cut) {
+    _remaining = Math.max(5, TURN_SECONDS - cut); // لا يقل عن 5 ثوان
+    clearEffect(state.currentPlayer, 'time_cut');
+  }
+
   _lastTick = -1;
   renderTimer();
   _intervalId = setInterval(tick, 1000);

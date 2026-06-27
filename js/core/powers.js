@@ -16,6 +16,16 @@ export const POWERS = {
     source: 'shop',         // تُشترى بالجواهر
     cost: 5,                // السعر بالجواهر
     requiresTimer: true,    // تظهر فقط مع المؤقّت المفعّل
+    instant: true,          // يُفعّل فور الشراء
+  },
+  time_reduce: {
+    icon: '⏬', name: 'تقصير وقت الخصم',
+    desc: 'قصّ 5 ثوانٍ من دور خصمك القادم',
+    type: 'time_reduce',
+    source: 'shop',
+    cost: 8,                // أغلى لأنها هجومية
+    requiresTimer: true,
+    instant: false,         // تُخزّن وتُفعّل لاحقاً
   },
 };
 

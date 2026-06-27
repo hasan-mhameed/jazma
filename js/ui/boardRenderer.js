@@ -1,20 +1,20 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1782551599";
-import { makeKey }                            from "../utils.js?v=1782551599";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782551599";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782551599";
-import { endGame }                            from "./gameEnd.js?v=1782551599";
-import { audioManager }                       from "../audio/audioManager.js?v=1782551599";
-import { checkSquaresAround }                 from "../core/logic.js?v=1782551599";
-import { onlineManager }                      from "../firebase.js?v=1782551599";
-import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782551599";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782551599";
-import { refreshInventory } from "./powersUI.js?v=1782551599";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1782551599";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1782551599";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782551599";
+import { state }                              from "../core/state.js?v=1782602707";
+import { makeKey }                            from "../utils.js?v=1782602707";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782602707";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782602707";
+import { endGame }                            from "./gameEnd.js?v=1782602707";
+import { audioManager }                       from "../audio/audioManager.js?v=1782602707";
+import { checkSquaresAround }                 from "../core/logic.js?v=1782602707";
+import { onlineManager }                      from "../firebase.js?v=1782602707";
+import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782602707";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782602707";
+import { refreshInventory } from "./powersUI.js?v=1782602707";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1782602707";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1782602707";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782602707";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -781,6 +781,12 @@ export function activatePower(elementType, player, cfg) {
     consumePower(player, 'water');
     setEffect(player, 'free_line', true);
     flashMessage('🐟 لك خط إضافي!');
+  } else if (elementType === 'time_reduce') {
+    consumePower(player, 'time_reduce');
+    // نحدّد الخصم ونضع علامة قصّ على دوره القادم
+    const opponent = (player % cfg.players) + 1;
+    setEffect(opponent, 'time_cut', 5);
+    flashMessage('⏬ قصّيت وقت خصمك!');
   }
   refreshInventory(cfg);
 }
