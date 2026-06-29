@@ -788,13 +788,6 @@ body {
   100% { transform: scale(1); }
 }
 
-/* ═══ checkbox مؤقّت الدور في الإعدادات ═══ */
-.timer-toggle {
-  display: flex; align-items: center; gap: 10px; cursor: pointer;
-  font-size: 0.95rem; color: var(--nat-text);
-}
-.timer-toggle input { width: 18px; height: 18px; accent-color: var(--nat-p1-bright); cursor: pointer; }
-
 /* ═══ زر شراء أداة (shop) ═══ */
 .shop-btn {
   display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
@@ -972,3 +965,6 @@ body {
   .mc-desc { font-size: 0.7rem; }
   .btn-primary, #start-game { padding: 13px !important; font-size: 1rem !important; margin-top: 12px !important; }
 }
+
+/* إخفاء صريح (يطغى على display:grid/flex) */
+.preview-grid[hidden], [hidden] { display: none !important; }
