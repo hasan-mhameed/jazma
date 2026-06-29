@@ -1,9 +1,9 @@
 // 📄 ui/chatUI.js
 // المحادثة بين الأصدقاء + الإشعارات
-import { sendMessage, listenMessages, listenUnread, markAsRead, markDelivered, markRead } from "../chat.js?v=1782773057";
-import { getCurrentUser } from "../auth.js?v=1782773057";
-import { audioManager } from "../audio/audioManager.js?v=1782773057";
-import { playNotifSound } from "../audio/notif.js?v=1782773057";
+import { sendMessage, listenMessages, listenUnread, markAsRead, markDelivered, markRead } from "../chat.js?v=1782773501";
+import { getCurrentUser } from "../auth.js?v=1782773501";
+import { audioManager } from "../audio/audioManager.js?v=1782773501";
+import { playNotifSound } from "../audio/notif.js?v=1782773501";
 import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const EMOJIS = ["😊","😂","❤️","👍","🔥","🎮","😍","🤣","😭","💯",
