@@ -882,16 +882,17 @@ body {
 }
 .tt-text { color: var(--nat-text); font-size: 0.9rem; font-weight: 600; }
 .tt-switch {
-  width: 46px; height: 26px; border-radius: 13px; flex-shrink: 0;
-  background: rgba(255,255,255,0.15); position: relative; transition: background 0.2s;
+  width: 48px; height: 27px; border-radius: 14px; flex-shrink: 0;
+  background: #3a4a44; position: relative; transition: background 0.2s;
+  border: 1px solid #4a5a54;
 }
 .tt-switch::after {
   content: ''; position: absolute; top: 3px; right: 3px;
-  width: 20px; height: 20px; border-radius: 50%; background: #fff;
-  transition: transform 0.2s;
+  width: 19px; height: 19px; border-radius: 50%; background: #9ca3af;
+  transition: transform 0.2s, background 0.2s;
 }
-.tt-switch.on { background: var(--nat-p1-bright); }
-.tt-switch.on::after { transform: translateX(-20px); }
+.tt-switch.on { background: var(--nat-p1-bright); border-color: var(--nat-p1-bright); }
+.tt-switch.on::after { transform: translateX(-21px); background: #fff; }
 
 /* ═══ إصلاح شامل لشاشة الإعدادات (خلفية غامقة + إحكام + responsive) ═══ */
 #setup-box {
@@ -943,4 +944,31 @@ body {
   .mc-desc { font-size: 0.72rem; }
   .mc-icon { width: 36px; height: 36px; font-size: 1.1rem; }
   .setup-tagline { margin-bottom: 14px; }
+}
+
+/* ═══ إحكام إضافي للإعدادات (شاشة أقصر) ═══ */
+#setup-box .setup-section { margin-bottom: 12px !important; }
+#setup-box h2 { margin-bottom: 2px !important; }
+.setup-tagline { margin: 0 0 14px !important; }
+#mode-cards { gap: 7px; }
+.mode-card { padding: 10px 13px; }
+.timer-toggle { padding: 12px 14px; }
+
+/* responsive محسّن — يدخل الموبايل بأقل scroll */
+@media (max-width: 480px) {
+  #setup-screen { padding: 10px !important; align-items: flex-start !important; }
+  #setup-box {
+    padding: 16px 14px !important; width: 95vw !important;
+    margin-top: 8px !important;
+  }
+  #setup-box h2 { font-size: 1.1rem !important; }
+  .setup-tagline { font-size: 0.78rem; margin-bottom: 10px !important; }
+  #setup-box .setup-section { margin-bottom: 10px !important; }
+  #setup-box .setup-section label { font-size: 0.8rem !important; margin-bottom: 6px !important; }
+  .chip { padding: 9px 6px; font-size: 0.8rem; }
+  .mode-card { padding: 9px 11px; }
+  .mc-icon { width: 34px; height: 34px; font-size: 1.05rem; }
+  .mc-name { font-size: 0.85rem; }
+  .mc-desc { font-size: 0.7rem; }
+  .btn-primary, #start-game { padding: 13px !important; font-size: 1rem !important; margin-top: 12px !important; }
 }

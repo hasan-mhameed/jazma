@@ -13,7 +13,7 @@
     <title>جزمة — Dots & Boxes v11.7</title>
     <link rel="stylesheet" href="css/style.css" />
     <link rel="stylesheet" href="./css/animations.css" />
-    <link rel="stylesheet" href="./css/nature-theme.css?v=46" />
+    <link rel="stylesheet" href="./css/nature-theme.css?v=47" />
 
     <!-- 🆕 حل مشكلة favicon.ico -->
     <link rel="icon" href="data:," />
@@ -196,12 +196,9 @@
           <div class="setup-section">
             <label>📐 حجم اللوحة</label>
             <div id="size-chips" class="chip-row"></div>
-            <div id="grid-preview">
-              <div class="preview-grid" data-size="4"></div>
-            </div>
           </div>
 
-          <div class="setup-section">
+          <div class="setup-section" id="players-section">
             <label>👥 عدد اللاعبين</label>
             <div id="player-chips" class="chip-row"></div>
           </div>
@@ -210,6 +207,9 @@
             <label>🎮 وضع اللعب</label>
             <div id="mode-cards"></div>
           </div>
+
+          <!-- عناصر مخفية للتوافق -->
+          <div class="preview-grid" data-size="4" hidden></div>
 
           <div class="setup-section hidden" id="ai-difficulty-section">
             <label>⚡ صعوبة الكمبيوتر</label>
@@ -411,6 +411,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.1.0/dist/pixi.min.js"></script>
-    <script type="module" src="js/main.js?v=1782771668" defer></script>
+    <script type="module" src="js/main.js?v=1782772546" defer></script>
   </body>
 </html>

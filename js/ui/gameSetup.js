@@ -1,10 +1,10 @@
 // 📄 ui/gameSetup.js
 // شاشة إعداد اللعبة + بدء اللعبة المحلية
 // تصميم مرن: الأحجام/اللاعبين/الأوضاع تُبنى من مصفوفات (سهلة التعديل)
-import { config } from "../config/config.js?v=1782771668";
-import { AIPlayer } from "../ai/aiPlayer.js?v=1782771668";
-import { getCurrentUser } from "../auth.js?v=1782771668";
-import { state } from "../core/state.js?v=1782771668";
+import { config } from "../config/config.js?v=1782772546";
+import { AIPlayer } from "../ai/aiPlayer.js?v=1782772546";
+import { getCurrentUser } from "../auth.js?v=1782772546";
+import { state } from "../core/state.js?v=1782772546";
 
 export let aiPlayer = null;
 
@@ -131,6 +131,8 @@ export function initGameSetup({ onGameStart, onOnlineRequested }) {
   function applyMode() {
     aiDifficultySection?.classList.toggle("hidden", _mode !== 'ai');
     localP2Section?.classList.toggle("hidden", _mode !== 'human');
+    // عدد اللاعبين يظهر فقط لما اللعب مش ضد الكمبيوتر
+    document.getElementById("players-section")?.classList.toggle("hidden", _mode === 'ai');
     if (_mode === 'ai') { _players = 2; if (playerCountSelect) playerCountSelect.value = "2"; }
     buildPlayerChips();
   }
