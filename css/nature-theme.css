@@ -892,3 +892,55 @@ body {
 }
 .tt-switch.on { background: var(--nat-p1-bright); }
 .tt-switch.on::after { transform: translateX(-20px); }
+
+/* ═══ إصلاح شامل لشاشة الإعدادات (خلفية غامقة + إحكام + responsive) ═══ */
+#setup-box {
+  background: linear-gradient(165deg, #14342b, #102a22) !important;
+  border: 1px solid var(--nat-border) !important;
+  border-radius: 20px !important;
+  padding: 22px 20px !important;
+  min-width: unset !important;
+  width: min(92vw, 400px) !important;
+  box-shadow: 0 12px 50px rgba(0,0,0,0.5) !important;
+  margin: 0 auto;
+}
+#setup-box h2 {
+  color: var(--nat-text) !important;
+  margin-bottom: 4px !important;
+  font-size: 1.3rem !important;
+}
+#setup-box .setup-section { margin-bottom: 14px !important; }
+#setup-box .setup-section label {
+  color: var(--nat-text) !important;
+  font-size: 0.85rem !important; font-weight: 700 !important;
+  margin-bottom: 8px !important; display: block;
+}
+
+/* معاينة اللوحة — أصغر وأنسب */
+#grid-preview {
+  background: rgba(255,255,255,0.03) !important;
+  border: 1px solid var(--nat-border) !important;
+  border-radius: 14px !important;
+  padding: 12px !important; margin-top: 10px !important;
+  display: flex; justify-content: center;
+}
+.preview-grid {
+  display: grid !important; gap: 4px !important;
+  width: auto !important; max-width: 110px;
+}
+.preview-grid span {
+  width: 11px !important; height: 11px !important;
+  border-radius: 50% !important;
+  background: var(--nat-p1-bright) !important; opacity: 0.7;
+}
+
+/* ═══ responsive للموبايل ═══ */
+@media (max-width: 480px) {
+  #setup-box { padding: 18px 14px !important; width: 94vw !important; }
+  #setup-box h2 { font-size: 1.15rem !important; }
+  .chip { min-width: 48px; padding: 10px 6px; font-size: 0.8rem; }
+  .mc-name { font-size: 0.88rem; }
+  .mc-desc { font-size: 0.72rem; }
+  .mc-icon { width: 36px; height: 36px; font-size: 1.1rem; }
+  .setup-tagline { margin-bottom: 14px; }
+}
