@@ -13,7 +13,7 @@
     <title>جزمة — Dots & Boxes v11.7</title>
     <link rel="stylesheet" href="css/style.css" />
     <link rel="stylesheet" href="./css/animations.css" />
-    <link rel="stylesheet" href="./css/nature-theme.css?v=43" />
+    <link rel="stylesheet" href="./css/nature-theme.css?v=45" />
 
     <!-- 🆕 حل مشكلة favicon.ico -->
     <link rel="icon" href="data:," />
@@ -191,71 +191,60 @@
       <div id="setup-screen" class="hidden">
         <div id="setup-box">
           <h2>🎯 إعدادات اللعبة</h2>
-          
+          <p class="setup-tagline">جهّز لوحتك وابدأ التحدي</p>
+
           <div class="setup-section">
-            <label for="grid-size">📐 حجم اللوحة:</label>
-            <select id="grid-size">
-              <option value="3">صغير (3×3) - 4 مربعات</option>
-              <option value="4" selected>متوسط (4×4) - 9 مربعات</option>
-              <option value="5">كبير (5×5) - 16 مربع</option>
-              <option value="6">ضخم (6×6) - 25 مربع</option>
-              <option value="7">عملاق (7×7) - 36 مربع</option>
-            </select>
-          </div>
-          
-          <!-- 🔍 معاينة اللوحة -->
-          <div id="grid-preview">
-            <div class="preview-grid" data-size="4">
-              <span></span><span></span><span></span><span></span>
-              <span></span><span></span><span></span><span></span>
-              <span></span><span></span><span></span><span></span>
-              <span></span><span></span><span></span><span></span>
+            <label>📐 حجم اللوحة</label>
+            <div id="size-chips" class="chip-row"></div>
+            <div id="grid-preview">
+              <div class="preview-grid" data-size="4"></div>
             </div>
           </div>
-          
+
           <div class="setup-section">
-            <label for="player-count">👥 عدد اللاعبين:</label>
-            <select id="player-count">
-              <option value="2">لاعبين</option>
-              <option value="3" selected>3 لاعبين</option>
-              <option value="4">4 لاعبين</option>
-            </select>
+            <label>👥 عدد اللاعبين</label>
+            <div id="player-chips" class="chip-row"></div>
           </div>
-          
+
           <div class="setup-section">
-            <label for="ai-mode">🤖 وضع اللعب:</label>
-            <select id="ai-mode">
-              <option value="human">لاعبين بشريين</option>
-              <option value="ai">ضد الكمبيوتر 🤖</option>
-              <option value="online">🌐 أونلاين</option>
-            </select>
+            <label>🎮 وضع اللعب</label>
+            <div id="mode-cards"></div>
           </div>
-          
+
           <div class="setup-section hidden" id="ai-difficulty-section">
-            <label for="ai-difficulty">⚡ صعوبة الكمبيوتر:</label>
-            <select id="ai-difficulty">
-              <option value="easy">😊 سهل</option>
-              <option value="medium">🧠 متوسط</option>
-              <option value="nightmare">🔥 صعب</option>
-            </select>
+            <label>⚡ صعوبة الكمبيوتر</label>
+            <div id="difficulty-chips" class="chip-row"></div>
           </div>
 
-          <!-- اسم اللاعب الثاني (محلي فقط) لتتبع السجل -->
-          <div class="setup-section" id="local-p2-section">
-            <label for="local-p2-name">👤 اسم اللاعب 2 <span style="font-size:0.8em;opacity:0.6">(اختياري — لتتبع السجل)</span></label>
+          <div class="setup-section hidden" id="local-p2-section">
+            <label for="local-p2-name">👤 اسم اللاعب 2 <span class="label-hint">(اختياري)</span></label>
             <input id="local-p2-name" type="text" maxlength="16"
-              placeholder="مثال: سيمو..." autocomplete="off"
-              style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid #444;background:#1a1a2e;color:#e0e0ff;font-size:0.95rem;"/>
+              placeholder="مثال: سيمو..." autocomplete="off" class="setup-input"/>
           </div>
 
           <div class="setup-section">
-            <label class="timer-toggle">
-              <input id="turn-timer-toggle" type="checkbox"/>
-              <span>⏱️ مؤقّت الدور (15 ثانية لكل لاعب)</span>
+            <label class="timer-toggle" id="timer-toggle-row">
+              <span class="tt-text">⏱️ مؤقّت الدور (15 ثانية)</span>
+              <span class="tt-switch" id="tt-switch"></span>
+              <input id="turn-timer-toggle" type="checkbox" hidden/>
             </label>
           </div>
 
           <button id="start-game" class="btn-primary">🚀 ابدأ اللعبة</button>
+
+          <!-- عناصر مخفية للتوافق مع المنطق القديم -->
+          <select id="grid-size" hidden></select>
+          <select id="player-count" hidden></select>
+          <select id="ai-mode" hidden>
+            <option value="human">human</option>
+            <option value="ai">ai</option>
+            <option value="online">online</option>
+          </select>
+          <select id="ai-difficulty" hidden>
+            <option value="easy">easy</option>
+            <option value="medium">medium</option>
+            <option value="nightmare">nightmare</option>
+          </select>
         </div>
       </div>
 
@@ -422,6 +411,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.1.0/dist/pixi.min.js"></script>
-    <script type="module" src="js/main.js?v=1782603469" defer></script>
+    <script type="module" src="js/main.js?v=1782770973" defer></script>
   </body>
 </html>

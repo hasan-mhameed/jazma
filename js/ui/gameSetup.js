@@ -1,64 +1,171 @@
 // 📄 ui/gameSetup.js
 // شاشة إعداد اللعبة + بدء اللعبة المحلية
-import { config } from "../config/config.js?v=1782603469";
-import { AIPlayer } from "../ai/aiPlayer.js?v=1782603469";
-import { getCurrentUser } from "../auth.js?v=1782603469";
-import { state } from "../core/state.js?v=1782603469";
+// تصميم مرن: الأحجام/اللاعبين/الأوضاع تُبنى من مصفوفات (سهلة التعديل)
+import { config } from "../config/config.js?v=1782770973";
+import { AIPlayer } from "../ai/aiPlayer.js?v=1782770973";
+import { getCurrentUser } from "../auth.js?v=1782770973";
+import { state } from "../core/state.js?v=1782770973";
 
 export let aiPlayer = null;
 
-export function initGameSetup({ onGameStart, onOnlineRequested }) {
-  const gridSizeSelect      = document.getElementById("grid-size");
-  const playerCountSelect   = document.getElementById("player-count");
-  const aiModeSelect        = document.getElementById("ai-mode");
-  const aiDifficultySelect  = document.getElementById("ai-difficulty");
-  const aiDifficultySection = document.getElementById("ai-difficulty-section");
-  const localP2Input        = document.getElementById("local-p2-name");
-  const localP2Section      = document.getElementById("local-p2-section");
-  const gridPreview         = document.querySelector(".preview-grid");
-  const startGameBtn        = document.getElementById("start-game");
+// ── إعدادات مرنة (عدّلها لإضافة/إزالة خيارات) ──
+const BOARD_SIZES = [
+  { value: 3, label: '3×3' },
+  { value: 4, label: '4×4' },
+  { value: 5, label: '5×5' },
+  { value: 6, label: '6×6' },
+];
+const PLAYER_COUNTS = [
+  { value: 2, label: 'لاعبان' },
+  { value: 3, label: '3 لاعبين' },
+  { value: 4, label: '4 لاعبين' },
+];
+const GAME_MODES = [
+  { value: 'ai',     icon: '🤖', name: 'ضد الكمبيوتر',   desc: 'تحدّى الذكاء الاصطناعي' },
+  { value: 'human',  icon: '👥', name: 'لاعبون محليون',   desc: 'على نفس الجهاز' },
+  { value: 'online', icon: '🌐', name: 'أونلاين',         desc: 'العب مع أصدقائك عن بُعد' },
+];
+const DIFFICULTIES = [
+  { value: 'easy',      label: '😊 سهل' },
+  { value: 'medium',    label: '🧠 متوسط' },
+  { value: 'nightmare', label: '🔥 صعب' },
+];
 
-  // ── معاينة اللوحة ────────────────────────────────────────────
+let _size = 4, _players = 2, _mode = 'ai', _difficulty = 'medium', _timerOn = false;
+
+export function initGameSetup({ onGameStart, onOnlineRequested }) {
+  const gridPreview  = document.querySelector(".preview-grid");
+  const startGameBtn = document.getElementById("start-game");
+
+  const gridSizeSelect     = document.getElementById("grid-size");
+  const playerCountSelect  = document.getElementById("player-count");
+  const aiModeSelect       = document.getElementById("ai-mode");
+  const aiDifficultySelect = document.getElementById("ai-difficulty");
+
+  const aiDifficultySection = document.getElementById("ai-difficulty-section");
+  const localP2Section      = document.getElementById("local-p2-section");
+  const localP2Input        = document.getElementById("local-p2-name");
+
   function updateGridPreview(size) {
     if (!gridPreview) return;
     gridPreview.setAttribute("data-size", size);
     gridPreview.innerHTML = "";
     for (let i = 0; i < size * size; i++) gridPreview.appendChild(document.createElement("span"));
   }
-  gridSizeSelect?.addEventListener("change", e => updateGridPreview(+e.target.value));
 
-  // ── تبديل وضع اللعب ─────────────────────────────────────────
-  function syncLocalP2() {
-    if (!localP2Section || !aiModeSelect) return;
-    localP2Section.classList.toggle("hidden", aiModeSelect.value !== "human");
+  const sizeRow = document.getElementById("size-chips");
+  function buildSizeChips() {
+    sizeRow.innerHTML = "";
+    BOARD_SIZES.forEach(s => {
+      const chip = document.createElement("button");
+      chip.className = "chip" + (s.value === _size ? " active" : "");
+      chip.textContent = s.label;
+      chip.addEventListener("click", () => {
+        _size = s.value;
+        if (gridSizeSelect) gridSizeSelect.value = s.value;
+        buildSizeChips();
+        updateGridPreview(s.value);
+      });
+      sizeRow.appendChild(chip);
+    });
   }
-  syncLocalP2();
 
-  aiModeSelect?.addEventListener("change", e => {
-    const isAI = e.target.value === "ai";
-    aiDifficultySection.classList.toggle("hidden", !isAI);
-    if (isAI) { playerCountSelect.value = "2"; playerCountSelect.disabled = true; }
-    else       { playerCountSelect.disabled = false; }
-    syncLocalP2();
-    if (e.target.value === "online") onOnlineRequested?.();
+  const playerRow = document.getElementById("player-chips");
+  function buildPlayerChips() {
+    playerRow.innerHTML = "";
+    PLAYER_COUNTS.forEach(p => {
+      const chip = document.createElement("button");
+      chip.className = "chip" + (p.value === _players ? " active" : "");
+      chip.textContent = p.label;
+      if (_mode === 'ai' && p.value !== 2) chip.classList.add("disabled");
+      chip.addEventListener("click", () => {
+        if (_mode === 'ai' && p.value !== 2) return;
+        _players = p.value;
+        if (playerCountSelect) playerCountSelect.value = p.value;
+        buildPlayerChips();
+      });
+      playerRow.appendChild(chip);
+    });
+  }
+
+  const modeBox = document.getElementById("mode-cards");
+  function buildModeCards() {
+    modeBox.innerHTML = "";
+    GAME_MODES.forEach(m => {
+      const card = document.createElement("button");
+      card.className = "mode-card" + (m.value === _mode ? " active" : "");
+      card.innerHTML =
+        '<span class="mc-icon">' + m.icon + '</span>' +
+        '<span class="mc-text">' +
+          '<span class="mc-name">' + m.name + '</span>' +
+          '<span class="mc-desc">' + m.desc + '</span>' +
+        '</span>' +
+        '<span class="mc-check">✓</span>';
+      card.addEventListener("click", () => {
+        _mode = m.value;
+        if (aiModeSelect) aiModeSelect.value = m.value;
+        applyMode();
+        buildModeCards();
+        if (m.value === 'online') onOnlineRequested?.();
+      });
+      modeBox.appendChild(card);
+    });
+  }
+
+  const diffRow = document.getElementById("difficulty-chips");
+  function buildDifficultyChips() {
+    diffRow.innerHTML = "";
+    DIFFICULTIES.forEach(d => {
+      const chip = document.createElement("button");
+      chip.className = "chip" + (d.value === _difficulty ? " active" : "");
+      chip.textContent = d.label;
+      chip.addEventListener("click", () => {
+        _difficulty = d.value;
+        if (aiDifficultySelect) aiDifficultySelect.value = d.value;
+        buildDifficultyChips();
+      });
+      diffRow.appendChild(chip);
+    });
+  }
+
+  function applyMode() {
+    aiDifficultySection?.classList.toggle("hidden", _mode !== 'ai');
+    localP2Section?.classList.toggle("hidden", _mode !== 'human');
+    if (_mode === 'ai') { _players = 2; if (playerCountSelect) playerCountSelect.value = "2"; }
+    buildPlayerChips();
+  }
+
+  const timerRow = document.getElementById("timer-toggle-row");
+  const ttSwitch = document.getElementById("tt-switch");
+  const ttCheckbox = document.getElementById("turn-timer-toggle");
+  function syncTimerSwitch() {
+    ttSwitch?.classList.toggle("on", _timerOn);
+    if (ttCheckbox) ttCheckbox.checked = _timerOn;
+  }
+  timerRow?.addEventListener("click", (e) => {
+    e.preventDefault();
+    _timerOn = !_timerOn;
+    syncTimerSwitch();
   });
 
-  // ── بدء اللعبة ───────────────────────────────────────────────
+  buildSizeChips();
+  buildPlayerChips();
+  buildModeCards();
+  buildDifficultyChips();
+  applyMode();
+  updateGridPreview(_size);
+  syncTimerSwitch();
+
   startGameBtn?.addEventListener("click", () => {
-    const gridSize    = +gridSizeSelect.value;
-    const playerCount = +playerCountSelect.value;
-    const aiMode      = aiModeSelect?.value || "human";
-    const aiDifficulty= aiDifficultySelect?.value || "medium";
+    if (_mode === "online") { onOnlineRequested?.(); return; }
 
-    if (aiMode === "online") { onOnlineRequested?.(); return; }
-
-    config.rows    = gridSize;
-    config.cols    = gridSize;
-    config.players = playerCount;
-    config.aiMode  = aiMode;
-    config.aiDifficulty = aiDifficulty;
+    config.rows    = _size;
+    config.cols    = _size;
+    config.players = _players;
+    config.aiMode  = _mode;
+    config.aiDifficulty = _difficulty;
     config.online  = false;
-    config.turnTimer = !!document.getElementById("turn-timer-toggle")?.checked;
+    config.turnTimer = _timerOn;
 
     const p2Name = localP2Input?.value?.trim() || "";
     config.localPlayerNames = {
@@ -66,20 +173,19 @@ export function initGameSetup({ onGameStart, onOnlineRequested }) {
       2: p2Name || "لاعب 2",
     };
 
-    aiPlayer = aiMode === "ai" ? new AIPlayer(aiDifficulty) : null;
-    if (aiMode === "ai") config.players = 2;
+    aiPlayer = _mode === "ai" ? new AIPlayer(_difficulty) : null;
+    if (_mode === "ai") config.players = 2;
 
     onGameStart?.();
   });
 
-  // ── إعادة الضبط بعد اللعبة ──────────────────────────────────
   return {
     resetUI() {
-      if (aiModeSelect)        aiModeSelect.value = "human";
-      if (aiDifficultySection) aiDifficultySection.classList.add("hidden");
-      if (playerCountSelect)   playerCountSelect.disabled = false;
+      _mode = 'human';
+      if (aiModeSelect) aiModeSelect.value = "human";
+      applyMode();
+      buildModeCards();
       aiPlayer = null;
-      syncLocalP2();
     },
     getAiPlayer() { return aiPlayer; },
   };

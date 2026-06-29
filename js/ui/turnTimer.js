@@ -1,9 +1,9 @@
 // 📄 ui/turnTimer.js
 // مؤقّت الدور — عدّاد لكل لاعب مع تنبيه بصري وصوتي قرب النهاية
 
-import { audioManager } from "../audio/audioManager.js?v=1782603469";
-import { state } from "../core/state.js?v=1782603469";
-import { getEffect, clearEffect } from "../core/powers.js?v=1782603469";
+import { audioManager } from "../audio/audioManager.js?v=1782770973";
+import { state } from "../core/state.js?v=1782770973";
+import { getEffect, clearEffect } from "../core/powers.js?v=1782770973";
 
 // ألوان اللاعبين (تطابق ألوان اللوحة والبطاقات)
 const PLAYER_COLORS = ['#2dd4bf', '#fb923c', '#a78bfa', '#fcd34d'];

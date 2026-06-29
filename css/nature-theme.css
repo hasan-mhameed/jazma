@@ -142,13 +142,15 @@ body {
 }
 
 .btn-primary, #start-game {
-  background: linear-gradient(135deg, var(--nat-p1), var(--nat-p1-bright)) !important;
-  color: #04130d !important;
+  background: linear-gradient(135deg, #059669, #10b981) !important;
+  color: #ffffff !important;
   border: none !important;
   box-shadow: 0 4px 16px var(--nat-p1-glow)40 !important;
-  font-weight: 700 !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 .btn-primary:hover, #start-game:hover {
+  background: linear-gradient(135deg, #10b981, #2dd4bf) !important;
   box-shadow: 0 6px 24px var(--nat-p1-glow)60 !important;
   transform: translateY(-1px);
 }
@@ -822,3 +824,71 @@ body {
 /* أيقونات الوقت المربّعة — نحافظ على نسبتها (لا تتفلطح) */
 #inventory-bar .inv-icon svg[viewBox="0 0 100 100"] { width: 26px; height: 26px; }
 .shop-btn .shop-icon svg[viewBox="0 0 100 100"] { width: 22px; height: 22px; }
+
+/* ═══ شاشة الإعدادات الجديدة (chips + بطاقات) ═══ */
+.setup-tagline { color: var(--nat-text-dim); font-size: 0.85rem; text-align: center; margin: -6px 0 18px; }
+.label-hint { font-size: 0.78em; opacity: 0.6; font-weight: 400; }
+
+/* أزرار الاختيار (chips) */
+.chip-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip {
+  flex: 1; min-width: 56px; text-align: center;
+  padding: 11px 8px; border-radius: 12px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--nat-border);
+  color: var(--nat-text); font-size: 0.86rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s; font-family: inherit;
+}
+.chip:hover:not(.active):not(.disabled) { border-color: var(--nat-p1-bright); }
+.chip.active {
+  background: rgba(45,212,191,0.18); border-color: var(--nat-p1-bright);
+  color: #5eead4; font-weight: 800;
+}
+.chip.disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* بطاقات أوضاع اللعب */
+#mode-cards { display: flex; flex-direction: column; gap: 8px; }
+.mode-card {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 12px 14px; border-radius: 14px; text-align: right;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--nat-border);
+  cursor: pointer; transition: all 0.15s; font-family: inherit;
+}
+.mode-card:hover:not(.active) { border-color: var(--nat-p1-bright); }
+.mode-card.active { background: rgba(45,212,191,0.14); border-color: var(--nat-p1-bright); }
+.mc-icon {
+  width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0;
+  background: rgba(45,212,191,0.15); display: flex; align-items: center;
+  justify-content: center; font-size: 1.25rem;
+}
+.mc-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.mc-name { color: var(--nat-text); font-size: 0.95rem; font-weight: 700; }
+.mc-desc { color: var(--nat-text-dim); font-size: 0.76rem; }
+.mc-check { color: var(--nat-p1-bright); font-size: 1.15rem; opacity: 0; transition: opacity 0.15s; }
+.mode-card.active .mc-check { opacity: 1; }
+
+/* حقل اسم اللاعب */
+.setup-input {
+  width: 100%; padding: 11px 12px; border-radius: 10px;
+  border: 1px solid var(--nat-border); background: rgba(255,255,255,0.04);
+  color: var(--nat-text); font-size: 0.95rem; font-family: inherit;
+}
+.setup-input:focus { outline: none; border-color: var(--nat-p1-bright); }
+
+/* سويتش المؤقّت */
+.timer-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 14px; border-radius: 14px; cursor: pointer;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--nat-border);
+}
+.tt-text { color: var(--nat-text); font-size: 0.9rem; font-weight: 600; }
+.tt-switch {
+  width: 46px; height: 26px; border-radius: 13px; flex-shrink: 0;
+  background: rgba(255,255,255,0.15); position: relative; transition: background 0.2s;
+}
+.tt-switch::after {
+  content: ''; position: absolute; top: 3px; right: 3px;
+  width: 20px; height: 20px; border-radius: 50%; background: #fff;
+  transition: transform 0.2s;
+}
+.tt-switch.on { background: var(--nat-p1-bright); }
+.tt-switch.on::after { transform: translateX(-20px); }
