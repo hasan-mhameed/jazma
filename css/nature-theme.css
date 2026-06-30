@@ -875,17 +875,17 @@ body {
 }
 .tt-text { color: var(--nat-text); font-size: 0.9rem; font-weight: 600; }
 .tt-switch {
-  width: 48px; height: 27px; border-radius: 14px; flex-shrink: 0;
+  width: 46px; height: 26px; border-radius: 13px; flex-shrink: 0;
   background: #3a4a44; position: relative; transition: background 0.2s;
-  border: 1px solid #4a5a54; direction: ltr;
+  border: 1px solid #4a5a54; overflow: hidden; display: inline-block;
 }
 .tt-switch::after {
-  content: ''; position: absolute; top: 3px; left: 3px;
-  width: 19px; height: 19px; border-radius: 50%; background: #9ca3af;
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 20px; height: 20px; border-radius: 50%; background: #9ca3af;
   transition: left 0.2s, background 0.2s;
 }
 .tt-switch.on { background: var(--nat-p1-bright); border-color: var(--nat-p1-bright); }
-.tt-switch.on::after { left: 24px; background: #fff; }
+.tt-switch.on::after { left: 22px; background: #fff; }
 
 /* ═══ إصلاح شامل لشاشة الإعدادات (خلفية غامقة + إحكام + responsive) ═══ */
 #setup-box {
@@ -966,5 +966,5 @@ body {
   .btn-primary, #start-game { padding: 13px !important; font-size: 1rem !important; margin-top: 12px !important; }
 }
 
-/* إخفاء صريح (يطغى على display:grid/flex) */
-.preview-grid[hidden], [hidden] { display: none !important; }
+/* إخفاء المعاينة فقط (تجنّب تأثير عام) */
+.preview-grid[hidden] { display: none !important; }
