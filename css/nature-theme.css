@@ -968,3 +968,21 @@ body {
 
 /* إخفاء المعاينة فقط (تجنّب تأثير عام) */
 .preview-grid[hidden] { display: none !important; }
+
+/* ═══ إصلاح hover العالق على اللمس + سرعة الاستجابة ═══ */
+/* نلغي تأثيرات hover على أجهزة اللمس (تبقى للماوس فقط) */
+@media (hover: none) {
+  .chip:hover, .mode-card:hover, .shop-btn:hover,
+  .btn-primary:hover, #start-game:hover, .guide-btn:hover {
+    background: inherit; border-color: var(--nat-border); transform: none;
+  }
+  /* نعيد للحالة active لونها حتى على اللمس */
+  .chip.active { background: rgba(45,212,191,0.18) !important; border-color: var(--nat-p1-bright) !important; }
+  .mode-card.active { background: rgba(45,212,191,0.14) !important; border-color: var(--nat-p1-bright) !important; }
+}
+/* تسريع الاستجابة للمس (يزيل تأخير 300ms ويمنع التظليل الأزرق) */
+.chip, .mode-card, .btn-primary, #start-game, .shop-btn, .guide-btn,
+.timer-toggle, .inv-slot {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}

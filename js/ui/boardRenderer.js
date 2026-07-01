@@ -1,20 +1,20 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1782829249";
-import { makeKey }                            from "../utils.js?v=1782829249";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782829249";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782829249";
-import { endGame }                            from "./gameEnd.js?v=1782829249";
-import { audioManager }                       from "../audio/audioManager.js?v=1782829249";
-import { checkSquaresAround }                 from "../core/logic.js?v=1782829249";
-import { onlineManager }                      from "../firebase.js?v=1782829249";
-import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782829249";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782829249";
-import { refreshInventory } from "./powersUI.js?v=1782829249";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1782829249";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1782829249";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782829249";
+import { state }                              from "../core/state.js?v=1782862594";
+import { makeKey }                            from "../utils.js?v=1782862594";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1782862594";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1782862594";
+import { endGame }                            from "./gameEnd.js?v=1782862594";
+import { audioManager }                       from "../audio/audioManager.js?v=1782862594";
+import { checkSquaresAround }                 from "../core/logic.js?v=1782862594";
+import { onlineManager }                      from "../firebase.js?v=1782862594";
+import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1782862594";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1782862594";
+import { refreshInventory } from "./powersUI.js?v=1782862594";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1782862594";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1782862594";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1782862594";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
