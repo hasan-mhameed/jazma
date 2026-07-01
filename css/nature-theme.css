@@ -986,3 +986,20 @@ body {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
+
+/* إزالة focus/التظليل العالق على أزرار الاختيار بعد اللمس */
+.mode-card:focus, .chip:focus, .guide-btn:focus,
+.mode-card:focus-visible, .chip:focus-visible {
+  outline: none;
+}
+/* على اللمس: البطاقة غير المختارة ترجع لحالتها فوراً (لا focus/hover عالق) */
+@media (hover: none) {
+  .mode-card:not(.active), .chip:not(.active) {
+    background: rgba(255,255,255,0.04) !important;
+    border-color: var(--nat-border) !important;
+  }
+  .mode-card:not(.active):focus, .chip:not(.active):focus {
+    background: rgba(255,255,255,0.04) !important;
+    border-color: var(--nat-border) !important;
+  }
+}

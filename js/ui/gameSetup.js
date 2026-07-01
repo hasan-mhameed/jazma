@@ -1,10 +1,10 @@
 // 📄 ui/gameSetup.js
 // شاشة إعداد اللعبة + بدء اللعبة المحلية
 // تصميم مرن: الأحجام/اللاعبين/الأوضاع تُبنى من مصفوفات (سهلة التعديل)
-import { config } from "../config/config.js?v=1782862594";
-import { AIPlayer } from "../ai/aiPlayer.js?v=1782862594";
-import { getCurrentUser } from "../auth.js?v=1782862594";
-import { state } from "../core/state.js?v=1782862594";
+import { config } from "../config/config.js?v=1782904325";
+import { AIPlayer } from "../ai/aiPlayer.js?v=1782904325";
+import { getCurrentUser } from "../auth.js?v=1782904325";
+import { state } from "../core/state.js?v=1782904325";
 
 export let aiPlayer = null;
 
@@ -60,7 +60,8 @@ export function initGameSetup({ onGameStart, onOnlineRequested }) {
       const chip = document.createElement("button");
       chip.className = "chip" + (s.value === _size ? " active" : "");
       chip.textContent = s.label;
-      chip.addEventListener("click", () => {
+      chip.addEventListener("click", (e) => {
+        e.currentTarget.blur();
         _size = s.value;
         if (gridSizeSelect) gridSizeSelect.value = s.value;
         buildSizeChips();
@@ -78,7 +79,8 @@ export function initGameSetup({ onGameStart, onOnlineRequested }) {
       chip.className = "chip" + (p.value === _players ? " active" : "");
       chip.textContent = p.label;
       if (_mode === 'ai' && p.value !== 2) chip.classList.add("disabled");
-      chip.addEventListener("click", () => {
+      chip.addEventListener("click", (e) => {
+        e.currentTarget.blur();
         if (_mode === 'ai' && p.value !== 2) return;
         _players = p.value;
         if (playerCountSelect) playerCountSelect.value = p.value;
@@ -101,7 +103,8 @@ export function initGameSetup({ onGameStart, onOnlineRequested }) {
           '<span class="mc-desc">' + m.desc + '</span>' +
         '</span>' +
         '<span class="mc-check">✓</span>';
-      card.addEventListener("click", () => {
+      card.addEventListener("click", (e) => {
+        e.currentTarget.blur();
         _mode = m.value;
         if (aiModeSelect) aiModeSelect.value = m.value;
         applyMode();
@@ -119,7 +122,8 @@ export function initGameSetup({ onGameStart, onOnlineRequested }) {
       const chip = document.createElement("button");
       chip.className = "chip" + (d.value === _difficulty ? " active" : "");
       chip.textContent = d.label;
-      chip.addEventListener("click", () => {
+      chip.addEventListener("click", (e) => {
+        e.currentTarget.blur();
         _difficulty = d.value;
         if (aiDifficultySelect) aiDifficultySelect.value = d.value;
         buildDifficultyChips();
