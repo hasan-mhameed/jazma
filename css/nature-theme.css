@@ -1003,3 +1003,32 @@ body {
     border-color: var(--nat-border) !important;
   }
 }
+
+/* ═══ زر اللعب العشوائي + شاشة البحث ═══ */
+.btn-random {
+  background: linear-gradient(135deg, #7c3aed, #a78bfa) !important;
+  color: #fff !important;
+}
+.btn-random:hover { background: linear-gradient(135deg, #6d28d9, #9333ea) !important; }
+
+#online-step-searching { text-align: center; padding: 10px 0; }
+.searching-anim {
+  display: flex; align-items: center; justify-content: center;
+  height: 120px; margin: 16px 0;
+}
+.radar {
+  width: 90px; height: 90px; border-radius: 50%;
+  border: 3px solid rgba(167,139,250,0.25);
+  position: relative;
+}
+.radar::before {
+  content: ''; position: absolute; inset: -3px;
+  border-radius: 50%; border: 3px solid transparent;
+  border-top-color: #a78bfa;
+  animation: radarSpin 1s linear infinite;
+}
+.radar::after {
+  content: '🎲'; position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%,-50%); font-size: 1.8rem;
+}
+@keyframes radarSpin { to { transform: rotate(360deg); } }

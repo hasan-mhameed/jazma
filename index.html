@@ -13,7 +13,7 @@
     <title>جزمة — Dots & Boxes v11.7</title>
     <link rel="stylesheet" href="css/style.css" />
     <link rel="stylesheet" href="./css/animations.css" />
-    <link rel="stylesheet" href="./css/nature-theme.css?v=52" />
+    <link rel="stylesheet" href="./css/nature-theme.css?v=53" />
 
     <!-- 🆕 حل مشكلة favicon.ico -->
     <link rel="icon" href="data:," />
@@ -369,6 +369,7 @@
             <input id="player-name-input" type="text" maxlength="16"
               placeholder="اسمك هنا..." autocomplete="off" />
             <div class="online-actions">
+              <button id="random-match-btn" class="btn-primary btn-online btn-random">🎲 لعب عشوائي</button>
               <button id="create-room-btn" class="btn-primary btn-online">🏠 إنشاء غرفة</button>
               <div class="online-divider">— أو —</div>
               <div class="join-row">
@@ -379,6 +380,16 @@
             </div>
             <div id="online-error" class="online-error hidden"></div>
             <button id="online-back-btn" class="btn-back">↩ رجوع</button>
+          </div>
+
+          <!-- شاشة البحث عن خصم عشوائي -->
+          <div id="online-step-searching" class="hidden">
+            <h2>🎲 البحث عن خصم</h2>
+            <div class="searching-anim">
+              <div class="radar"></div>
+            </div>
+            <p id="searching-text" class="online-hint">جارٍ البحث عن لاعب متاح...</p>
+            <button id="cancel-search-btn" class="btn-back">✕ إلغاء</button>
           </div>
 
           <!-- الخطوة 2: لوبي الانتظار -->
@@ -411,6 +422,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.1.0/dist/pixi.min.js"></script>
-    <script type="module" src="js/main.js?v=1782904325" defer></script>
+    <script type="module" src="js/main.js?v=1782906216" defer></script>
   </body>
 </html>

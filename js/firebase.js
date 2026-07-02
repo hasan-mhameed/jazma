@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1782904325";
+import { getCurrentUser }   from "./auth.js?v=1782906216";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -101,6 +101,74 @@ export class OnlineManager {
     this._listenForRestart(code);
     this._monitorConnection();
     return { cfg: room.cfg, p1name: room.p1name, p1uid: room.p1uid };
+  }
+
+  // ══ مطابقة عشوائية (زي السنوكر) ═══════════════════════════════
+  // تبحث عن خصم ينتظر؛ إن وُجد تنضم إليه، وإلا تنشئ غرفة عامة وتنتظر
+  async findRandomMatch(cfg, name) {
+    const myUid = getCurrentUser()?.uid || "";
+    // نبحث عن غرف عامة منتظرة
+    let joinCode = null, joinRoom = null;
+    try {
+      const snap = await get(ref(db, "rooms"));
+      if (snap.exists()) {
+        const rooms = snap.val();
+        for (const [code, room] of Object.entries(rooms)) {
+          if (room && room.public === true && room.status === "waiting"
+              && room.p1uid !== myUid
+              && room.cfg && room.cfg.rows === cfg.rows) {
+            joinCode = code; joinRoom = room; break;
+          }
+        }
+      }
+    } catch {}
+
+    if (joinCode) {
+      // ننضم كخصم — نحاول حجز المكان
+      this.roomCode  = joinCode;
+      this.playerNum = 2;
+      this._gameStarted = false;
+      await update(ref(db, `rooms/${joinCode}`), {
+        p2name: name, p2uid: myUid, status: "playing", public: false,
+      });
+      onDisconnect(ref(db, `rooms/${joinCode}/status`)).set("finished");
+      this._listenForMoves(joinCode);
+      this._listenForOpponentLeave(joinCode);
+      this._listenForRestart(joinCode);
+      this._monitorConnection();
+      return { role: "guest", code: joinCode, cfg: joinRoom.cfg,
+               p1name: joinRoom.p1name, p1uid: joinRoom.p1uid };
+    }
+
+    // لا يوجد خصم — ننشئ غرفة عامة وننتظر
+    const code = genCode();
+    this.roomCode  = code;
+    this.playerNum = 1;
+    this._gameStarted = false;
+    await set(ref(db, `rooms/${code}`), {
+      cfg:       { rows: cfg.rows, cols: cfg.cols },
+      status:    "waiting",
+      public:    true,           // غرفة مطابقة عشوائية
+      p1name:    name,
+      p1uid:     myUid,
+      p2name:    "", p2uid: "",
+      createdAt: Date.now(),
+      move:      { key: "", by: 0, seq: 0 },
+    });
+    onDisconnect(ref(db, `rooms/${code}`)).remove();
+    this._listenForPlayer2(code);
+    this._listenForMoves(code);
+    this._listenForRestart(code);
+    this._monitorConnection();
+    return { role: "host", code };
+  }
+
+  // إلغاء انتظار المطابقة العشوائية
+  async cancelRandomMatch() {
+    if (this.roomCode && this.playerNum === 1) {
+      try { await remove(ref(db, `rooms/${this.roomCode}`)); } catch {}
+    }
+    this.roomCode = null; this.playerNum = null;
   }
 
   // ══ إرسال حركة ══════════════════════════════════════════════

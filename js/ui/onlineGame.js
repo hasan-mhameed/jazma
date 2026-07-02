@@ -1,10 +1,10 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1782904325";
-import { onlineManager } from "../firebase.js?v=1782904325";
-import { applyOnlineMove } from "./boardRenderer.js?v=1782904325";
-import { state } from "../core/state.js?v=1782904325";
-import { getCurrentUser } from "../auth.js?v=1782904325";
+import { config } from "../config/config.js?v=1782906216";
+import { onlineManager } from "../firebase.js?v=1782906216";
+import { applyOnlineMove } from "./boardRenderer.js?v=1782906216";
+import { state } from "../core/state.js?v=1782906216";
+import { getCurrentUser } from "../auth.js?v=1782906216";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -14,6 +14,10 @@ export function initOnlineGame({ onGameStart }) {
   const roomCodeInput   = document.getElementById("room-code-input");
   const createRoomBtn   = document.getElementById("create-room-btn");
   const joinRoomBtn     = document.getElementById("join-room-btn");
+  const randomMatchBtn  = document.getElementById("random-match-btn");
+  const cancelSearchBtn = document.getElementById("cancel-search-btn");
+  const stepSearching   = document.getElementById("online-step-searching");
+  const searchingText   = document.getElementById("searching-text");
   const cancelRoomBtn   = document.getElementById("cancel-room-btn");
   const onlineBackBtn   = document.getElementById("online-back-btn");
   const copyCodeBtn     = document.getElementById("copy-code-btn");
@@ -30,13 +34,15 @@ export function initOnlineGame({ onGameStart }) {
     stepName.classList.add("hidden");
     stepLobby.classList.add("hidden");
     stepPlaying.classList.add("hidden");
+    stepSearching?.classList.add("hidden");
     onlineError.classList.add("hidden");
     if (step === "name" || step === "lobby") {
       if (getCurrentUser()?.displayName) playerNameInput.value = getCurrentUser().displayName;
     }
-    if (step === "name")    stepName.classList.remove("hidden");
-    if (step === "lobby")   stepLobby.classList.remove("hidden");
-    if (step === "playing") stepPlaying.classList.remove("hidden");
+    if (step === "name")      stepName.classList.remove("hidden");
+    if (step === "lobby")     stepLobby.classList.remove("hidden");
+    if (step === "playing")   stepPlaying.classList.remove("hidden");
+    if (step === "searching") stepSearching?.classList.remove("hidden");
   }
 
   function showError(msg) { onlineError.textContent = msg; onlineError.classList.remove("hidden"); }
@@ -100,6 +106,57 @@ export function initOnlineGame({ onGameStart }) {
       launchOnlineGame(2, onlineTurnInd, onGameStart);
     } catch (e) { showError(e.message); }
     finally { joinRoomBtn.disabled = false; }
+  });
+
+  // ── مطابقة عشوائية (زي السنوكر) ─────────────────────────────
+  randomMatchBtn?.addEventListener("click", async () => {
+    const name = getPlayerName(); if (!name) return;
+    randomMatchBtn.disabled = true;
+    try {
+      const gridSize = +document.getElementById("grid-size").value;
+      config.rows = config.cols = gridSize;
+      config.players = 2; config.online = true;
+
+      // لو انضممنا كخصم لغرفة موجودة، نبدأ فوراً كلاعب 2
+      onlineManager.onOpponentJoined(oppName => {
+        // هذا يُستدعى لو كنا مضيفين وانضم إلينا خصم
+        config.onlinePlayerNames = { 1: name, 2: oppName };
+        config.onlinePlayerNum = 1;
+        onlineMyName.textContent  = name;
+        onlineOppName.textContent = oppName;
+        showStep("playing");
+        launchOnlineGame(1, onlineTurnInd, onGameStart);
+      });
+
+      showStep("searching");
+      searchingText.textContent = "جارٍ البحث عن لاعب متاح...";
+
+      const result = await onlineManager.findRandomMatch(config, name);
+
+      if (result.role === "guest") {
+        // انضممنا لخصم موجود — نبدأ كلاعب 2 فوراً
+        config.rows = result.cfg.rows; config.cols = result.cfg.cols;
+        config.onlinePlayerNum = 2;
+        const oppName = result.p1name || "الخصم";
+        config.onlinePlayerNames = { 1: oppName, 2: name };
+        onlineMyName.textContent  = name;
+        onlineOppName.textContent = oppName;
+        showStep("playing");
+        launchOnlineGame(2, onlineTurnInd, onGameStart);
+      } else {
+        // أنشأنا غرفة عامة — ننتظر خصماً (onOpponentJoined سيتكفّل بالبدء)
+        searchingText.textContent = "بانتظار انضمام خصم...";
+      }
+    } catch (e) {
+      showError(e.message || "تعذّر البحث عن خصم");
+      showStep("name");
+    } finally { randomMatchBtn.disabled = false; }
+  });
+
+  // ── إلغاء البحث العشوائي ────────────────────────────────────
+  cancelSearchBtn?.addEventListener("click", async () => {
+    await onlineManager.cancelRandomMatch();
+    showStep("name");
   });
 
   // ── إلغاء الغرفة ─────────────────────────────────────────────
