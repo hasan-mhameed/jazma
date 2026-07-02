@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1782997845";
+import { getCurrentUser }   from "./auth.js?v=1783025890";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -158,6 +158,7 @@ export class OnlineManager {
     onDisconnect(ref(db, `rooms/${code}`)).remove();
     this._listenForPlayer2(code);
     this._listenForMoves(code);
+    this._listenForOpponentLeave(code);
     this._listenForRestart(code);
     this._monitorConnection();
     return { role: "host", code };
