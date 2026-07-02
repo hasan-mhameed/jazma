@@ -1,10 +1,10 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1782906216";
-import { onlineManager } from "../firebase.js?v=1782906216";
-import { applyOnlineMove } from "./boardRenderer.js?v=1782906216";
-import { state } from "../core/state.js?v=1782906216";
-import { getCurrentUser } from "../auth.js?v=1782906216";
+import { config } from "../config/config.js?v=1782996657";
+import { onlineManager } from "../firebase.js?v=1782996657";
+import { applyOnlineMove } from "./boardRenderer.js?v=1782996657";
+import { state } from "../core/state.js?v=1782996657";
+import { getCurrentUser } from "../auth.js?v=1782996657";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -136,7 +136,7 @@ export function initOnlineGame({ onGameStart }) {
       if (result.role === "guest") {
         // انضممنا لخصم موجود — نبدأ كلاعب 2 فوراً
         config.rows = result.cfg.rows; config.cols = result.cfg.cols;
-        config.onlinePlayerNum = 2;
+        config.players = 2; config.online = true; config.onlinePlayerNum = 2;
         const oppName = result.p1name || "الخصم";
         config.onlinePlayerNames = { 1: oppName, 2: name };
         onlineMyName.textContent  = name;

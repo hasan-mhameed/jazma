@@ -1,37 +1,37 @@
 // 📄 main.js — v13.9
 // Bootstrap فقط — يربط كل الـ modules
 
-import { config }                              from "./config/config.js?v=1782906216";
-import { state }                               from "./core/state.js?v=1782906216";
-import { startBoard, updateScoreboard, resetState } from "./board.js?v=1782906216";
-import { updateTurnUI }                        from "./ui/turnManager.js?v=1782906216";
-import { audioManager }                        from "./audio/audioManager.js?v=1782906216";
-import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1782906216";
-import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1782906216";
+import { config }                              from "./config/config.js?v=1782996657";
+import { state }                               from "./core/state.js?v=1782996657";
+import { startBoard, updateScoreboard, resetState } from "./board.js?v=1782996657";
+import { updateTurnUI }                        from "./ui/turnManager.js?v=1782996657";
+import { audioManager }                        from "./audio/audioManager.js?v=1782996657";
+import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1782996657";
+import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1782996657";
 
-import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1782906216";
-import { initGameSetup }       from "./ui/gameSetup.js?v=1782906216";
-import { initTurnTimer, stopTurnTimer, startTurnTimer } from "./ui/turnTimer.js?v=1782906216";
-import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1782906216";
-import { initFriendsUI }       from "./ui/friendsUI.js?v=1782906216";
-import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1782906216";
-import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1782906216";
-import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1782906216";
-import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1782906216";
-import { renderStatsModal }    from "./ui/statsModal.js?v=1782906216";
-import { initHistoryUI }       from "./ui/historyUI.js?v=1782906216";
-import { resetMatchTimer }     from "./ui/gameEnd.js?v=1782906216";
-import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1782906216";
-import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1782906216";
-import { refreshCoinsBadge } from "./core/wallet.js?v=1782906216";
-import { loadLearnedPowers } from "./ui/powerTutorial.js?v=1782906216";
-import { initPowersUI, refreshInventory } from "./ui/powersUI.js?v=1782906216";
-import { POWERS, addPower } from "./core/powers.js?v=1782906216";
-import { spendCoins } from "./core/wallet.js?v=1782906216";
-import { extendTime } from "./ui/turnTimer.js?v=1782906216";
-import { activatePower, triggerAI } from "./ui/boardRenderer.js?v=1782906216";
-import { initNavMenu }            from "./ui/navMenu.js?v=1782906216";
-import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1782906216";
+import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1782996657";
+import { initGameSetup }       from "./ui/gameSetup.js?v=1782996657";
+import { initTurnTimer, stopTurnTimer, startTurnTimer } from "./ui/turnTimer.js?v=1782996657";
+import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1782996657";
+import { initFriendsUI }       from "./ui/friendsUI.js?v=1782996657";
+import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1782996657";
+import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1782996657";
+import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1782996657";
+import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1782996657";
+import { renderStatsModal }    from "./ui/statsModal.js?v=1782996657";
+import { initHistoryUI }       from "./ui/historyUI.js?v=1782996657";
+import { resetMatchTimer }     from "./ui/gameEnd.js?v=1782996657";
+import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1782996657";
+import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1782996657";
+import { refreshCoinsBadge } from "./core/wallet.js?v=1782996657";
+import { loadLearnedPowers } from "./ui/powerTutorial.js?v=1782996657";
+import { initPowersUI, refreshInventory } from "./ui/powersUI.js?v=1782996657";
+import { POWERS, addPower } from "./core/powers.js?v=1782996657";
+import { spendCoins } from "./core/wallet.js?v=1782996657";
+import { extendTime } from "./ui/turnTimer.js?v=1782996657";
+import { activatePower, triggerAI } from "./ui/boardRenderer.js?v=1782996657";
+import { initNavMenu }            from "./ui/navMenu.js?v=1782996657";
+import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1782996657";
 
 // ── PWA ─────────────────────────────────────────────────────────
 let _deferredInstallPrompt = null;

@@ -1,10 +1,10 @@
 // 📄 ui/gameSetup.js
 // شاشة إعداد اللعبة + بدء اللعبة المحلية
 // تصميم مرن: الأحجام/اللاعبين/الأوضاع تُبنى من مصفوفات (سهلة التعديل)
-import { config } from "../config/config.js?v=1782906216";
-import { AIPlayer } from "../ai/aiPlayer.js?v=1782906216";
-import { getCurrentUser } from "../auth.js?v=1782906216";
-import { state } from "../core/state.js?v=1782906216";
+import { config } from "../config/config.js?v=1782996657";
+import { AIPlayer } from "../ai/aiPlayer.js?v=1782996657";
+import { getCurrentUser } from "../auth.js?v=1782996657";
+import { state } from "../core/state.js?v=1782996657";
 
 export let aiPlayer = null;
 
@@ -54,6 +54,15 @@ export function initGameSetup({ onGameStart, onOnlineRequested }) {
   }
 
   const sizeRow = document.getElementById("size-chips");
+  // نملأ الـ select المخفي بالخيارات (للتوافق مع منطق الأونلاين)
+  if (gridSizeSelect && !gridSizeSelect.options.length) {
+    BOARD_SIZES.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.value; opt.textContent = s.label;
+      if (s.value === _size) opt.selected = true;
+      gridSizeSelect.appendChild(opt);
+    });
+  }
   function buildSizeChips() {
     sizeRow.innerHTML = "";
     BOARD_SIZES.forEach(s => {
@@ -72,6 +81,14 @@ export function initGameSetup({ onGameStart, onOnlineRequested }) {
   }
 
   const playerRow = document.getElementById("player-chips");
+  if (playerCountSelect && !playerCountSelect.options.length) {
+    PLAYER_COUNTS.forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = p.value; opt.textContent = p.label;
+      if (p.value === _players) opt.selected = true;
+      playerCountSelect.appendChild(opt);
+    });
+  }
   function buildPlayerChips() {
     playerRow.innerHTML = "";
     PLAYER_COUNTS.forEach(p => {
