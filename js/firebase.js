@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1782996657";
+import { getCurrentUser }   from "./auth.js?v=1782997845";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -116,7 +116,7 @@ export class OnlineManager {
         for (const [code, room] of Object.entries(rooms)) {
           if (room && room.public === true && room.status === "waiting"
               && room.p1uid !== myUid
-              && room.cfg && room.cfg.rows === cfg.rows) {
+              && room.cfg && Number(room.cfg.rows) === Number(cfg.rows)) {
             joinCode = code; joinRoom = room; break;
           }
         }

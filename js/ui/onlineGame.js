@@ -1,10 +1,10 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1782996657";
-import { onlineManager } from "../firebase.js?v=1782996657";
-import { applyOnlineMove } from "./boardRenderer.js?v=1782996657";
-import { state } from "../core/state.js?v=1782996657";
-import { getCurrentUser } from "../auth.js?v=1782996657";
+import { config } from "../config/config.js?v=1782997845";
+import { onlineManager } from "../firebase.js?v=1782997845";
+import { applyOnlineMove } from "./boardRenderer.js?v=1782997845";
+import { state } from "../core/state.js?v=1782997845";
+import { getCurrentUser } from "../auth.js?v=1782997845";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -129,7 +129,7 @@ export function initOnlineGame({ onGameStart }) {
       });
 
       showStep("searching");
-      searchingText.textContent = "جارٍ البحث عن لاعب متاح...";
+      searchingText.textContent = `جارٍ البحث عن خصم بلوحة ${gridSize}×${gridSize}...`;
 
       const result = await onlineManager.findRandomMatch(config, name);
 
@@ -145,7 +145,7 @@ export function initOnlineGame({ onGameStart }) {
         launchOnlineGame(2, onlineTurnInd, onGameStart);
       } else {
         // أنشأنا غرفة عامة — ننتظر خصماً (onOpponentJoined سيتكفّل بالبدء)
-        searchingText.textContent = "بانتظار انضمام خصم...";
+        searchingText.textContent = `بانتظار خصم بلوحة ${gridSize}×${gridSize}...`;
       }
     } catch (e) {
       showError(e.message || "تعذّر البحث عن خصم");
