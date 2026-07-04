@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1783025890";
+import { getCurrentUser }   from "./auth.js?v=1783033864";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -170,6 +170,20 @@ export class OnlineManager {
       try { await remove(ref(db, `rooms/${this.roomCode}`)); } catch {}
     }
     this.roomCode = null; this.playerNum = null;
+  }
+
+  // ══ مشاركة خريطة العناصر (تزامن التوزيع) ═══════════════════════
+  async shareElementMap(map) {
+    if (!this.roomCode) return;
+    try { await update(ref(db, `rooms/${this.roomCode}`), { elementMap: map || {} }); } catch {}
+  }
+  // الضيف يجلب خريطة العناصر التي بثّها المضيف
+  async fetchElementMap() {
+    if (!this.roomCode) return null;
+    try {
+      const snap = await get(ref(db, `rooms/${this.roomCode}/elementMap`));
+      return snap.exists() ? snap.val() : null;
+    } catch { return null; }
   }
 
   // ══ إرسال حركة ══════════════════════════════════════════════

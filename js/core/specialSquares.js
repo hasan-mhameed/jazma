@@ -13,6 +13,12 @@ let _map = {};
 export function getElementAt(r, c) { return _map[`${r},${c}`] || null; }
 export function getElementMap()    { return _map; }
 
+// ضبط الخريطة من مصدر خارجي (تزامن الأونلاين — الضيف يستقبل خريطة المضيف)
+export function setElementMap(map) {
+  _map = map && typeof map === 'object' ? { ...map } : {};
+  return _map;
+}
+
 // توليد توزيع عشوائي متناظر — نسبة ~30%
 export function generateSpecialSquares(cfg) {
   _map = {};

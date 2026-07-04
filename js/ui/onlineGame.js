@@ -1,10 +1,10 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1783025890";
-import { onlineManager } from "../firebase.js?v=1783025890";
-import { applyOnlineMove } from "./boardRenderer.js?v=1783025890";
-import { state } from "../core/state.js?v=1783025890";
-import { getCurrentUser } from "../auth.js?v=1783025890";
+import { config } from "../config/config.js?v=1783033864";
+import { onlineManager } from "../firebase.js?v=1783033864";
+import { applyOnlineMove } from "./boardRenderer.js?v=1783033864";
+import { state } from "../core/state.js?v=1783033864";
+import { getCurrentUser } from "../auth.js?v=1783033864";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -180,6 +180,7 @@ export function initOnlineGame({ onGameStart }) {
 
 export function launchOnlineGame(myPlayerNum, onlineTurnInd, onGameStart) {
   config.aiMode = "online";
+  config.onlinePlayerNum = myPlayerNum;
   onlineManager.getOpponentUid().then(uid => { config.onlineOpponentUid = uid; });
 
   if (onlineTurnInd) {
@@ -187,7 +188,21 @@ export function launchOnlineGame(myPlayerNum, onlineTurnInd, onGameStart) {
     onlineTurnInd.style.color = "#888";
   }
 
-  setTimeout(() => {
+  // الضيف ينتظر خريطة العناصر من المضيف (تزامن التوزيع)
+  const prepare = async () => {
+    config._sharedElementMap = null;
+    if (myPlayerNum === 2) {
+      // نحاول جلب الخريطة (مع إعادة محاولة قصيرة لو المضيف لسا ما بثّها)
+      for (let i = 0; i < 10; i++) {
+        const map = await onlineManager.fetchElementMap();
+        if (map && Object.keys(map).length) { config._sharedElementMap = map; break; }
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+  };
+
+  setTimeout(async () => {
+    await prepare();
     onGameStart?.();
     updateOnlineTurnIndicator(onlineTurnInd);
 

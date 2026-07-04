@@ -1,20 +1,20 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1783025890";
-import { makeKey }                            from "../utils.js?v=1783025890";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1783025890";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1783025890";
-import { endGame }                            from "./gameEnd.js?v=1783025890";
-import { audioManager }                       from "../audio/audioManager.js?v=1783025890";
-import { checkSquaresAround }                 from "../core/logic.js?v=1783025890";
-import { onlineManager }                      from "../firebase.js?v=1783025890";
-import { generateSpecialSquares, getElementAt, ELEMENTS } from "../core/specialSquares.js?v=1783025890";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1783025890";
-import { refreshInventory } from "./powersUI.js?v=1783025890";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1783025890";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1783025890";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1783025890";
+import { state }                              from "../core/state.js?v=1783033864";
+import { makeKey }                            from "../utils.js?v=1783033864";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1783033864";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1783033864";
+import { endGame }                            from "./gameEnd.js?v=1783033864";
+import { audioManager }                       from "../audio/audioManager.js?v=1783033864";
+import { checkSquaresAround }                 from "../core/logic.js?v=1783033864";
+import { onlineManager }                      from "../firebase.js?v=1783033864";
+import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1783033864";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1783033864";
+import { refreshInventory } from "./powersUI.js?v=1783033864";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1783033864";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1783033864";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1783033864";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -179,7 +179,16 @@ function buildDots(cfg) {
 //  العناصر الخاصة (خافتة + نابضة قبل الإكمال)
 // ═══════════════════════════════════════════════════════
 function buildSpecialElements(cfg) {
-  generateSpecialSquares(cfg);
+  // تزامن الأونلاين: الضيف يستخدم خريطة المضيف؛ غير ذلك يولّد محلياً
+  if (cfg.aiMode === 'online' && cfg._sharedElementMap) {
+    setElementMap(cfg._sharedElementMap);
+  } else {
+    generateSpecialSquares(cfg);
+    // المضيف يبثّ الخريطة للخصم (ليروا نفس التوزيع)
+    if (cfg.aiMode === 'online' && cfg.onlinePlayerNum === 1) {
+      try { onlineManager.shareElementMap(getElementMap()); } catch {}
+    }
+  }
   const { spacing, padding } = cfg._pixi;
 
   for (let r = 0; r < cfg.rows-1; r++) {
