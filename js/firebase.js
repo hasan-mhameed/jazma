@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1783033864";
+import { getCurrentUser }   from "./auth.js?v=1783197904";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -203,6 +203,11 @@ export class OnlineManager {
       const room = snap.val();
       if (room.status === "playing" && !this._gameStarted && room.p2name) {
         this._gameStarted = true;
+        // بدأ اللعب: نغيّر سلوك الانقطاع من "مسح" إلى "إنهاء" (ليصل إشعار للخصم)
+        try {
+          onDisconnect(ref(db, `rooms/${code}`)).cancel();
+          onDisconnect(ref(db, `rooms/${code}/status`)).set("finished");
+        } catch {}
         this._cbJoined && this._cbJoined(room.p2name);
       }
       if (room.status === "finished" && this._gameStarted) {
