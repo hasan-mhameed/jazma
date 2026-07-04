@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1783197904";
+import { getCurrentUser }   from "./auth.js?v=1783201920";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -50,6 +50,11 @@ export class OnlineManager {
     this._cbLeft   = null;
     this._gameStarted = false; // ✅ منع تشغيل اللعبة أكثر من مرة
     this._lastMoveKey = null;  // ✅ منع تطبيق نفس الحركة مرتين
+    // ── حالة التعدد (3-4 لاعبين) ──
+    this._isMulti     = false;
+    this._cbLobby     = null;  // تحديث قائمة اللاعبين في اللوبي
+    this._cbMultiStart= null;  // بدء المباراة المتعددة
+    this._cbPlayerLeft= null;  // خروج لاعب (تعدد)
   }
 
   // ══ إنشاء غرفة ══════════════════════════════════════════════
@@ -218,6 +223,115 @@ export class OnlineManager {
   }
 
   // ══ الاستماع للحركات ════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════
+  //  الغرف متعددة اللاعبين (3-4) — نظام players مرن
+  // ═══════════════════════════════════════════════════════════
+
+  // إنشاء غرفة متعددة (المضيف يحدّد الحد الأقصى)
+  async createMultiRoom(cfg, name, maxPlayers) {
+    const code = genCode();
+    const myUid = getCurrentUser()?.uid || ("guest_" + Date.now());
+    this.roomCode  = code;
+    this.playerNum = 1;
+    this._isMulti  = true;
+    this._gameStarted = false;
+    this._myUid = myUid;
+
+    await set(ref(db, `rooms/${code}`), {
+      cfg:        { rows: cfg.rows, cols: cfg.cols },
+      status:     "lobby",
+      multi:      true,
+      maxPlayers: Math.min(Math.max(maxPlayers, 2), 4),
+      hostUid:    myUid,
+      players:    { [myUid]: { name, num: 1, active: true } },
+      playerCount: 1,
+      turn:       1,
+      move:       { key: "", by: 0, seq: 0 },
+      createdAt:  Date.now(),
+    });
+    // عند انقطاع المضيف في اللوبي: تُمسح الغرفة
+    onDisconnect(ref(db, `rooms/${code}`)).remove();
+    this._listenLobby(code);
+    this._monitorConnection();
+    return { code };
+  }
+
+  // الانضمام لغرفة متعددة
+  async joinMultiRoom(code, name) {
+    code = (code || "").trim();
+    const myUid = getCurrentUser()?.uid || ("guest_" + Date.now());
+    const snap = await get(ref(db, `rooms/${code}`));
+    if (!snap.exists()) throw new Error("الغرفة غير موجودة!");
+    const room = snap.val();
+    if (!room.multi) throw new Error("هذه ليست غرفة متعددة!");
+    if (room.status !== "lobby") throw new Error("المباراة بدأت أو انتهت!");
+    if (room.playerCount >= room.maxPlayers) throw new Error("الغرفة ممتلئة!");
+
+    const myNum = room.playerCount + 1;
+    this.roomCode  = code;
+    this.playerNum = myNum;
+    this._isMulti  = true;
+    this._gameStarted = false;
+    this._myUid = myUid;
+
+    await update(ref(db, `rooms/${code}`), {
+      [`players/${myUid}`]: { name, num: myNum, active: true },
+      playerCount: myNum,
+    });
+    // عند انقطاع اللاعب: نعلّمه غير نشط
+    onDisconnect(ref(db, `rooms/${code}/players/${myUid}/active`)).set(false);
+    this._listenLobby(code);
+    this._monitorConnection();
+    return { code, myNum, cfg: room.cfg, maxPlayers: room.maxPlayers };
+  }
+
+  // المضيف يبدأ المباراة
+  async startMultiGame() {
+    if (!this.roomCode) return;
+    await update(ref(db, `rooms/${this.roomCode}`), { status: "playing", turn: 1 });
+  }
+
+  // الاستماع للوبي (انضمام/خروج لاعبين + بدء المباراة)
+  _listenLobby(code) {
+    const unsub = onValue(ref(db, `rooms/${code}`), (snap) => {
+      if (!snap.exists()) { this._cbPlayerLeft && this._cbPlayerLeft("host_left"); return; }
+      const room = snap.val();
+      const players = room.players || {};
+      // تحديث قائمة اللوبي
+      this._cbLobby && this._cbLobby(players, room);
+      // بدء المباراة
+      if (room.status === "playing" && !this._gameStarted) {
+        this._gameStarted = true;
+        // عند بدء اللعب: المضيف يبدّل onDisconnect لعدم مسح الغرفة
+        if (this.playerNum === 1) {
+          try {
+            onDisconnect(ref(db, `rooms/${code}`)).cancel();
+            onDisconnect(ref(db, `rooms/${code}/players/${this._myUid}/active`)).set(false);
+          } catch {}
+        }
+        this._cbMultiStart && this._cbMultiStart(room);
+      }
+      // خروج لاعب أثناء اللعب (صار غير نشط)
+      if (room.status === "playing" && this._gameStarted) {
+        this._cbPlayerLeft && this._cbPlayerLeft(players);
+      }
+    });
+    this._unsubs.push(unsub);
+  }
+
+  // إرسال حركة متعددة (مع رقم الدور التالي)
+  async pushMultiMove(lineKey, nextTurn, seq) {
+    if (!this.roomCode) return;
+    await update(ref(db, `rooms/${this.roomCode}`), {
+      move: { key: lineKey, by: this.playerNum, seq: seq || Date.now() },
+      turn: nextTurn,
+    });
+  }
+
+  onLobbyUpdate(cb)  { this._cbLobby = cb; }
+  onMultiStart(cb)   { this._cbMultiStart = cb; }
+  onPlayerLeft(cb)   { this._cbPlayerLeft = cb; }
+
   _listenForMoves(code) {
     const unsub = onValue(ref(db, `rooms/${code}/move`), (snap) => {
       if (!snap.exists()) return;
