@@ -1032,3 +1032,14 @@ body {
   transform: translate(-50%,-50%); font-size: 1.8rem;
 }
 @keyframes radarSpin { to { transform: rotate(360deg); } }
+
+/* ═══ الغرفة الجماعية (لوبي) ═══ */
+.btn-multi { background: linear-gradient(135deg, #0891b2, #06b6d4) !important; color:#fff !important; }
+.btn-multi:hover { background: linear-gradient(135deg, #0e7490, #0891b2) !important; }
+#multi-code-display { font-size: 1.8rem; font-weight: 800; letter-spacing: 4px; color: var(--nat-p1-bright); text-align: center; padding: 12px; background: rgba(45,212,191,0.1); border-radius: 12px; margin: 10px 0; }
+#multi-players-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.multi-player-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--nat-border); }
+.multi-player-item.inactive { opacity: 0.4; text-decoration: line-through; }
+.mp-num { width: 26px; height: 26px; border-radius: 50%; background: var(--nat-p1-bright); color:#04130d; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.85rem; }
+.mp-name { flex: 1; color: var(--nat-text); font-weight: 600; }
+.mp-host { font-size: 1.1rem; }

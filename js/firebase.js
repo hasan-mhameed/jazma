@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1783201920";
+import { getCurrentUser }   from "./auth.js?v=1783204799";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -223,6 +223,15 @@ export class OnlineManager {
   }
 
   // ══ الاستماع للحركات ════════════════════════════════════════
+  // كشف نوع الغرفة (multi أو duo) قبل الانضمام
+  async getRoomType(code) {
+    try {
+      const snap = await get(ref(db, `rooms/${(code||"").trim()}`));
+      if (!snap.exists()) throw new Error("الغرفة غير موجودة!");
+      return snap.val().multi ? "multi" : "duo";
+    } catch (e) { throw e; }
+  }
+
   // ═══════════════════════════════════════════════════════════
   //  الغرف متعددة اللاعبين (3-4) — نظام players مرن
   // ═══════════════════════════════════════════════════════════

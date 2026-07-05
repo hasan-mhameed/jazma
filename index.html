@@ -370,7 +370,8 @@
               placeholder="اسمك هنا..." autocomplete="off" />
             <div class="online-actions">
               <button id="random-match-btn" class="btn-primary btn-online btn-random">🎲 لعب عشوائي</button>
-              <button id="create-room-btn" class="btn-primary btn-online">🏠 إنشاء غرفة</button>
+              <button id="create-room-btn" class="btn-primary btn-online">🏠 إنشاء غرفة (لاعبان)</button>
+              <button id="create-multi-btn" class="btn-primary btn-online btn-multi">👥 غرفة جماعية (3-4)</button>
               <div class="online-divider">— أو —</div>
               <div class="join-row">
                 <input id="room-code-input" type="text" maxlength="6"
@@ -380,6 +381,27 @@
             </div>
             <div id="online-error" class="online-error hidden"></div>
             <button id="online-back-btn" class="btn-back">↩ رجوع</button>
+          </div>
+
+          <!-- اختيار عدد اللاعبين للغرفة الجماعية -->
+          <div id="online-step-multi-count" class="hidden">
+            <h2>👥 غرفة جماعية</h2>
+            <p class="online-hint">كم لاعباً كحد أقصى؟</p>
+            <div id="multi-count-chips" class="chip-row"></div>
+            <button id="multi-create-confirm" class="btn-primary btn-online">🏠 إنشاء الغرفة</button>
+            <button id="multi-count-back" class="btn-back">↩ رجوع</button>
+          </div>
+
+          <!-- لوبي الغرفة الجماعية -->
+          <div id="online-step-multi-lobby" class="hidden">
+            <h2>👥 لوبي الغرفة</h2>
+            <div id="multi-code-display"></div>
+            <button id="multi-copy-code" class="btn-copy">📋 نسخ الكود</button>
+            <p class="online-hint">اللاعبون المنضمّون:</p>
+            <div id="multi-players-list"></div>
+            <button id="multi-start-btn" class="btn-primary btn-online hidden">🚀 ابدأ المباراة</button>
+            <p id="multi-wait-hint" class="online-hint"></p>
+            <button id="multi-lobby-leave" class="btn-back">✕ مغادرة</button>
           </div>
 
           <!-- شاشة البحث عن خصم عشوائي -->
@@ -422,6 +444,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.1.0/dist/pixi.min.js"></script>
-    <script type="module" src="js/main.js?v=1783201920" defer></script>
+    <script type="module" src="js/main.js?v=1783204799" defer></script>
   </body>
 </html>
