@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1783204799";
+import { getCurrentUser }   from "./auth.js?v=1783551240";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -332,7 +332,7 @@ export class OnlineManager {
   async pushMultiMove(lineKey, nextTurn, seq) {
     if (!this.roomCode) return;
     await update(ref(db, `rooms/${this.roomCode}`), {
-      move: { key: lineKey, by: this.playerNum, seq: seq || Date.now() },
+      move: { key: lineKey, by: this.playerNum, seq: seq || Date.now(), nextTurn },
       turn: nextTurn,
     });
   }
@@ -350,7 +350,8 @@ export class OnlineManager {
       const moveId = `${data.key}_${data.seq}`;
       if (moveId === this._lastApplied) return;
       this._lastApplied = moveId;
-      this._cbMove && this._cbMove(data.key);
+      // للتعدد: نمرّر رقم الدور التالي المرسل مع الحركة
+      this._cbMove && this._cbMove(data.key, data.nextTurn);
     });
     this._unsubs.push(unsub);
   }

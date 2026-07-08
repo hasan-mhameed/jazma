@@ -1,10 +1,10 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1783204799";
-import { onlineManager } from "../firebase.js?v=1783204799";
-import { applyOnlineMove } from "./boardRenderer.js?v=1783204799";
-import { state } from "../core/state.js?v=1783204799";
-import { getCurrentUser } from "../auth.js?v=1783204799";
+import { config } from "../config/config.js?v=1783551240";
+import { onlineManager } from "../firebase.js?v=1783551240";
+import { applyOnlineMove } from "./boardRenderer.js?v=1783551240";
+import { state } from "../core/state.js?v=1783551240";
+import { getCurrentUser } from "../auth.js?v=1783551240";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -413,9 +413,9 @@ export function launchOnlineMultiGame(myPlayerNum, onlineTurnInd, onGameStart) {
     updateOnlineTurnIndicator(onlineTurnInd);
 
     requestAnimationFrame(() => {
-      // تطبيق حركات أي خصم (متعدد)
-      onlineManager.onMove(lineKey => {
-        applyOnlineMove(lineKey, config);
+      // تطبيق حركات أي خصم (متعدد) مع رقم الدور التالي
+      onlineManager.onMove((lineKey, nextTurn) => {
+        applyOnlineMove(lineKey, config, nextTurn);
         updateOnlineTurnIndicator(onlineTurnInd);
       });
     });

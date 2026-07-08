@@ -1,20 +1,20 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1783204799";
-import { makeKey }                            from "../utils.js?v=1783204799";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1783204799";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1783204799";
-import { endGame }                            from "./gameEnd.js?v=1783204799";
-import { audioManager }                       from "../audio/audioManager.js?v=1783204799";
-import { checkSquaresAround }                 from "../core/logic.js?v=1783204799";
-import { onlineManager }                      from "../firebase.js?v=1783204799";
-import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1783204799";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1783204799";
-import { refreshInventory } from "./powersUI.js?v=1783204799";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1783204799";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1783204799";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1783204799";
+import { state }                              from "../core/state.js?v=1783551240";
+import { makeKey }                            from "../utils.js?v=1783551240";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1783551240";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1783551240";
+import { endGame }                            from "./gameEnd.js?v=1783551240";
+import { audioManager }                       from "../audio/audioManager.js?v=1783551240";
+import { checkSquaresAround }                 from "../core/logic.js?v=1783551240";
+import { onlineManager }                      from "../firebase.js?v=1783551240";
+import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1783551240";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1783551240";
+import { refreshInventory } from "./powersUI.js?v=1783551240";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1783551240";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1783551240";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1783551240";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -457,12 +457,18 @@ export function handleEdgeClick(obj, cfg, isOpponentMove=false) {
   // إيقاف المؤقّت فور الحركة (نعيد تشغيله حسب الحالة)
   if (isTimerEnabled()) stopTurnTimer();
 
+  // حساب الدور التالي (يُستخدم للتزامن المتعدد)
+  let nextPlayer = player;
+  if (!completed && !hadFreeLine) {
+    nextPlayer = nextActivePlayer(player, cfg);
+  }
+
   if (!completed) {
     if (hadFreeLine) {
       // الخط الإضافي: نفس اللاعب يكمل (لا نبدّل الدور)
       restartTimerIfHuman(cfg);
     } else {
-      state.currentPlayer = (player % cfg.players) + 1;
+      state.currentPlayer = nextPlayer;
       updateTurn(cfg);
     }
     refreshInventory(cfg);
@@ -472,8 +478,29 @@ export function handleEdgeClick(obj, cfg, isOpponentMove=false) {
     refreshInventory(cfg);
   }
 
-  if (cfg.aiMode==='online' && !isOpponentMove) onlineManager.pushMove(obj.key, Date.now());
+  // إرسال الحركة أونلاين
+  if (cfg.aiMode==='online' && !isOpponentMove) {
+    if (cfg.multiPlayers) {
+      onlineManager.pushMultiMove(obj.key, nextPlayer, Date.now());
+    } else {
+      onlineManager.pushMove(obj.key, Date.now());
+    }
+  }
   setTimeout(() => triggerAI(cfg), 100);
+}
+
+// الدور التالي مع تخطّي المنسحبين (للتعدد)
+function nextActivePlayer(current, cfg) {
+  const count = cfg.players || 2;
+  const players = cfg.multiPlayers;
+  let next = (current % count) + 1;
+  if (!players) return next;
+  for (let i = 0; i < count; i++) {
+    const active = Object.values(players).some(p => p.num === next && p.active !== false);
+    if (active) return next;
+    next = (next % count) + 1;
+  }
+  return next;
 }
 
 // يعيد تشغيل المؤقّت لو الدور الحالي بشري
@@ -825,10 +852,15 @@ function flashMessage(text) {
 // ═══════════════════════════════════════════════════════
 //  أونلاين
 // ═══════════════════════════════════════════════════════
-export function applyOnlineMove(lineKey, cfg) {
+export function applyOnlineMove(lineKey, cfg, nextTurn) {
   if (state.lines.has(lineKey)) return;
   const obj = edgeObjects.find(e => e.key === lineKey);
   if (obj && !obj.drawn) handleEdgeClick(obj, cfg, true);
+  // في الغرفة الجماعية: نثق برقم الدور الذي حسبه المُرسِل (يراعي إكمال المربع والانسحاب)
+  if (cfg.multiPlayers && typeof nextTurn === 'number' && nextTurn > 0) {
+    state.currentPlayer = nextTurn;
+    updateTurn(cfg);
+  }
 }
 
 // ═══════════════════════════════════════════════════════
