@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1783724197";
+import { getCurrentUser }   from "./auth.js?v=1783725994";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -364,8 +364,8 @@ export class OnlineManager {
       const moveId = `${data.key}_${data.seq}`;
       if (moveId === this._lastApplied) return;
       this._lastApplied = moveId;
-      // للتعدد: نمرّر رقم الدور التالي المرسل مع الحركة
-      this._cbMove && this._cbMove(data.key, data.nextTurn);
+      // للتعدد: نمرّر (مفتاح الخط، الدور التالي، صاحب الحركة)
+      this._cbMove && this._cbMove(data.key, data.nextTurn, data.by);
     });
     this._unsubs.push(unsub);
   }
