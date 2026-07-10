@@ -1,8 +1,8 @@
 // 📄 firebase.js — v11.8
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off }
+import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1783723313";
+import { getCurrentUser }   from "./auth.js?v=1783724197";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -277,17 +277,29 @@ export class OnlineManager {
     if (room.status !== "lobby") throw new Error("المباراة بدأت أو انتهت!");
     if (room.playerCount >= room.maxPlayers) throw new Error("الغرفة ممتلئة!");
 
-    const myNum = room.playerCount + 1;
+    // نستخدم transaction لضمان رقم لاعب فريد (يمنع تعارض الانضمام المتزامن)
+    let myNum = null;
+    const roomRef = ref(db, `rooms/${code}`);
+    await runTransaction(roomRef, (cur) => {
+      if (!cur) return cur;
+      if (cur.status !== "lobby") return cur; // بدأت المباراة
+      const count = cur.playerCount || Object.keys(cur.players || {}).length;
+      if (count >= cur.maxPlayers) return cur; // ممتلئة
+      myNum = count + 1;
+      cur.players = cur.players || {};
+      cur.players[myUid] = { name, num: myNum, active: true };
+      cur.playerCount = myNum;
+      return cur;
+    });
+
+    if (!myNum) throw new Error("تعذّر الانضمام (الغرفة ممتلئة أو بدأت)!");
+
     this.roomCode  = code;
     this.playerNum = myNum;
     this._isMulti  = true;
     this._gameStarted = false;
     this._myUid = myUid;
 
-    await update(ref(db, `rooms/${code}`), {
-      [`players/${myUid}`]: { name, num: myNum, active: true },
-      playerCount: myNum,
-    });
     // عند انقطاع اللاعب: نعلّمه غير نشط
     onDisconnect(ref(db, `rooms/${code}/players/${myUid}/active`)).set(false);
     this._listenLobby(code);
