@@ -1,8 +1,8 @@
 // 📄 scoreboard.js — v16.0 (Nature cards + level badge)
-import { state }  from "../core/state.js?v=1783551240";
-import { config } from "../config/config.js?v=1783551240";
-import { getXP, getLevelFromXP } from "../xp.js?v=1783551240";
-import { getCurrentUser } from "../auth.js?v=1783551240";
+import { state }  from "../core/state.js?v=1783723313";
+import { config } from "../config/config.js?v=1783723313";
+import { getXP, getLevelFromXP } from "../xp.js?v=1783723313";
+import { getCurrentUser } from "../auth.js?v=1783723313";
 
 const AVATARS = ['🦊', '🤖', '🦅', '🐺'];
 const COLORS  = ['p1', 'p2', 'p3', 'p4'];

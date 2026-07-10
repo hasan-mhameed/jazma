@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1783551240";
+import { getCurrentUser }   from "./auth.js?v=1783723313";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -261,6 +261,7 @@ export class OnlineManager {
     // عند انقطاع المضيف في اللوبي: تُمسح الغرفة
     onDisconnect(ref(db, `rooms/${code}`)).remove();
     this._listenLobby(code);
+    this._listenForMoves(code);
     this._monitorConnection();
     return { code };
   }
@@ -290,6 +291,7 @@ export class OnlineManager {
     // عند انقطاع اللاعب: نعلّمه غير نشط
     onDisconnect(ref(db, `rooms/${code}/players/${myUid}/active`)).set(false);
     this._listenLobby(code);
+    this._listenForMoves(code);
     this._monitorConnection();
     return { code, myNum, cfg: room.cfg, maxPlayers: room.maxPlayers };
   }
