@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1783755247";
+import { getCurrentUser }   from "./auth.js?v=1783791347";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -390,13 +390,30 @@ export class OnlineManager {
     this._unsubs.forEach(u => u());
     this._unsubs = [];
     if (this.roomCode) {
-      await update(ref(db, `rooms/${this.roomCode}`), { status: "finished" });
+      if (this._isMulti && this._gameStarted) {
+        // غرفة جماعية أثناء اللعب: نعلّم أنفسنا منسحبين فقط — المباراة تكمل للباقين
+        try { await update(ref(db, `rooms/${this.roomCode}/players/${this._myUid}`), { active: false }); } catch {}
+      } else if (this._isMulti && !this._gameStarted) {
+        // في اللوبي الجماعي: المضيف يمسح الغرفة، الضيف يزيل نفسه
+        try {
+          if (this.playerNum === 1) {
+            await remove(ref(db, `rooms/${this.roomCode}`));
+          } else {
+            await remove(ref(db, `rooms/${this.roomCode}/players/${this._myUid}`));
+          }
+        } catch {}
+      } else {
+        // الثنائي: كما كان
+        await update(ref(db, `rooms/${this.roomCode}`), { status: "finished" });
+      }
     }
     this.roomCode  = null;
     this.playerNum = null;
+    this._isMulti  = false;
     this._gameStarted = false;
     this._lastMoveKey = null;
     this._lastApplied = null;
+    this._pendingMove = null;
   }
 
   // ══ إرسال إشعار restart ═════════════════════════════════════

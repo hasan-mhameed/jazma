@@ -1,10 +1,10 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1783755247";
-import { onlineManager } from "../firebase.js?v=1783755247";
-import { applyOnlineMove } from "./boardRenderer.js?v=1783755247";
-import { state } from "../core/state.js?v=1783755247";
-import { getCurrentUser } from "../auth.js?v=1783755247";
+import { config } from "../config/config.js?v=1783791347";
+import { onlineManager } from "../firebase.js?v=1783791347";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1783791347";
+import { state } from "../core/state.js?v=1783791347";
+import { getCurrentUser } from "../auth.js?v=1783791347";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -438,6 +438,9 @@ function handleMultiPlayerLeft(players, onlineTurnInd) {
   // نحدّث حالة اللاعبين النشطين (المنسحب active:false)
   const active = Object.values(players || {}).filter(p => p.active !== false);
   config.multiPlayers = players;
+  // لو الدور الحالي عند لاعب منسحب → ننقله لأول نشط (حساب متطابق عند الجميع)
+  try { skipInactiveTurn(config); } catch {}
+  updateOnlineTurnIndicator(onlineTurnInd);
   // لو بقي لاعب واحد فقط نشط → انتهت المباراة
   if (active.length <= 1) {
     showAlert("#4ade80", "🏆 انتهت المباراة! بقيت وحيداً في الساحة", "🏠 العودة للقائمة");
