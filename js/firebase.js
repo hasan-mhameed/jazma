@@ -1,8 +1,8 @@
 // 📄 firebase.js — v11.8
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction }
+import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1783791347";
+import { getCurrentUser }   from "./auth.js?v=1783792812";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -50,7 +50,8 @@ export class OnlineManager {
     this._cbLeft   = null;
     this._gameStarted = false; // ✅ منع تشغيل اللعبة أكثر من مرة
     this._lastMoveKey = null;  // ✅ منع تطبيق نفس الحركة مرتين
-    this._pendingMove = null;  // ✅ حركة وصلت قبل جاهزية المستقبِل
+    this._pendingMove = null;  // ✅ حركة وصلت قبل جاهزية المستقبِل (ثنائي)
+    this._pendingMoves = [];   // ✅ طابور حركات معلّقة (جماعي — سجل كامل)
     // ── حالة التعدد (3-4 لاعبين) ──
     this._isMulti     = false;
     this._cbLobby     = null;  // تحديث قائمة اللاعبين في اللوبي
@@ -262,7 +263,7 @@ export class OnlineManager {
     // عند انقطاع المضيف في اللوبي: تُمسح الغرفة
     onDisconnect(ref(db, `rooms/${code}`)).remove();
     this._listenLobby(code);
-    this._listenForMoves(code);
+    this._listenForMultiMoves(code);
     this._monitorConnection();
     return { code };
   }
@@ -304,7 +305,7 @@ export class OnlineManager {
     // عند انقطاع اللاعب: نعلّمه غير نشط
     onDisconnect(ref(db, `rooms/${code}/players/${myUid}/active`)).set(false);
     this._listenLobby(code);
-    this._listenForMoves(code);
+    this._listenForMultiMoves(code);
     this._monitorConnection();
     return { code, myNum, cfg: room.cfg, maxPlayers: room.maxPlayers };
   }
@@ -346,10 +347,22 @@ export class OnlineManager {
   // إرسال حركة متعددة (مع رقم الدور التالي)
   async pushMultiMove(lineKey, nextTurn, seq) {
     if (!this.roomCode) return;
-    await update(ref(db, `rooms/${this.roomCode}`), {
-      move: { key: lineKey, by: this.playerNum, seq: seq || Date.now(), nextTurn },
-      turn: nextTurn,
+    // سجل حركات كامل (append) — لا حركة تمحو أخرى، والمتأخر يستلم الكل بالترتيب
+    const mref = push(ref(db, `rooms/${this.roomCode}/moves`));
+    await set(mref, { key: lineKey, by: this.playerNum, seq: seq || Date.now(), nextTurn });
+    await update(ref(db, `rooms/${this.roomCode}`), { turn: nextTurn });
+  }
+
+  // مستمع سجل الحركات الجماعي — onChildAdded يسلّم كل الحركات (حتى القديمة) بالترتيب
+  _listenForMultiMoves(code) {
+    const unsub = onChildAdded(ref(db, `rooms/${code}/moves`), (snap) => {
+      const data = snap.val();
+      if (!data || !data.by || !data.key) return;
+      if (data.by === this.playerNum) return; // حركاتنا لا تُعاد علينا
+      if (!this._cbMove) { this._pendingMoves.push(data); return; } // لسا نحمّل: نخزّن بالطابور
+      this._cbMove(data.key, data.nextTurn, data.by);
     });
+    this._unsubs.push(unsub);
   }
 
   onLobbyUpdate(cb)  { this._cbLobby = cb; }
@@ -414,6 +427,7 @@ export class OnlineManager {
     this._lastMoveKey = null;
     this._lastApplied = null;
     this._pendingMove = null;
+    this._pendingMoves = [];
   }
 
   // ══ إرسال إشعار restart ═════════════════════════════════════
@@ -441,7 +455,12 @@ export class OnlineManager {
   onRestart(cb)       { this._cbRestart = cb; }
   onMove(cb) {
     this._cbMove = cb;
-    // تسليم حركة وصلت قبل جاهزية المستقبِل (أثناء تحميل اللعبة)
+    // تسليم طابور الحركات الجماعية المعلّقة (بالترتيب)
+    if (this._pendingMoves && this._pendingMoves.length) {
+      const q = this._pendingMoves; this._pendingMoves = [];
+      q.forEach(d => cb(d.key, d.nextTurn, d.by));
+    }
+    // تسليم حركة معلّقة (الثنائي)
     if (this._pendingMove) {
       const d = this._pendingMove; this._pendingMove = null;
       const moveId = `${d.key}_${d.seq}`;
