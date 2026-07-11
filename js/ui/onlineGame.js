@@ -1,10 +1,10 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1783792812";
-import { onlineManager } from "../firebase.js?v=1783792812";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1783792812";
-import { state } from "../core/state.js?v=1783792812";
-import { getCurrentUser } from "../auth.js?v=1783792812";
+import { config } from "../config/config.js?v=1783805737";
+import { onlineManager } from "../firebase.js?v=1783805737";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1783805737";
+import { state } from "../core/state.js?v=1783805737";
+import { getCurrentUser } from "../auth.js?v=1783805737";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -434,16 +434,33 @@ export function launchOnlineMultiGame(myPlayerNum, onlineTurnInd, onGameStart) {
 }
 
 // معالجة خروج لاعب في المباراة الجماعية
+// إشعار عابر (توست) لأحداث المباراة الجماعية
+function showLeaveToast(text) {
+  const t = document.createElement("div");
+  t.textContent = text;
+  t.style.cssText = "position:fixed;top:70px;left:50%;transform:translateX(-50%);background:#1e293bee;color:#fff;padding:10px 18px;border-radius:12px;z-index:9999;font-weight:700;font-size:0.95rem;box-shadow:0 4px 20px rgba(0,0,0,.4);direction:rtl";
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2800);
+}
+
 function handleMultiPlayerLeft(players, onlineTurnInd) {
+  // إشعار "اللاعب X انسحب" — نكتشف من تحوّل لغير نشط (مقارنة بالحالة السابقة)
+  const prev = config.multiPlayers || {};
+  Object.values(players || {}).forEach(p => {
+    const was = Object.values(prev).find(q => q.num === p.num);
+    if (was && was.active !== false && p.active === false) {
+      showLeaveToast(`🚪 ${p.name} انسحب من المباراة`);
+    }
+  });
   // نحدّث حالة اللاعبين النشطين (المنسحب active:false)
   const active = Object.values(players || {}).filter(p => p.active !== false);
   config.multiPlayers = players;
   // لو الدور الحالي عند لاعب منسحب → ننقله لأول نشط (حساب متطابق عند الجميع)
   try { skipInactiveTurn(config); } catch {}
   updateOnlineTurnIndicator(onlineTurnInd);
-  // لو بقي لاعب واحد فقط نشط → انتهت المباراة
+  // لو بقي لاعب واحد فقط نشط → فوز بانسحاب الخصوم
   if (active.length <= 1) {
-    showAlert("#4ade80", "🏆 انتهت المباراة! بقيت وحيداً في الساحة", "🏠 العودة للقائمة");
+    showAlert("#4ade80", "🏆 فزت بالمباراة! انسحب جميع خصومك", "🏠 العودة للقائمة");
   }
   // (تخطّي أدوار المنسحب يُدار في منطق الدور)
 }
