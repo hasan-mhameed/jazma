@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1783725994";
+import { getCurrentUser }   from "./auth.js?v=1783755247";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -50,6 +50,7 @@ export class OnlineManager {
     this._cbLeft   = null;
     this._gameStarted = false; // ✅ منع تشغيل اللعبة أكثر من مرة
     this._lastMoveKey = null;  // ✅ منع تطبيق نفس الحركة مرتين
+    this._pendingMove = null;  // ✅ حركة وصلت قبل جاهزية المستقبِل
     // ── حالة التعدد (3-4 لاعبين) ──
     this._isMulti     = false;
     this._cbLobby     = null;  // تحديث قائمة اللاعبين في اللوبي
@@ -364,8 +365,10 @@ export class OnlineManager {
       const moveId = `${data.key}_${data.seq}`;
       if (moveId === this._lastApplied) return;
       this._lastApplied = moveId;
+      // لو المستقبِل غير جاهز بعد (لسا يحمّل اللعبة): نخزّن الحركة معلّقة
+      if (!this._cbMove) { this._pendingMove = data; this._lastApplied = null; return; }
       // للتعدد: نمرّر (مفتاح الخط، الدور التالي، صاحب الحركة)
-      this._cbMove && this._cbMove(data.key, data.nextTurn, data.by);
+      this._cbMove(data.key, data.nextTurn, data.by);
     });
     this._unsubs.push(unsub);
   }
@@ -419,7 +422,18 @@ export class OnlineManager {
   }
 
   onRestart(cb)       { this._cbRestart = cb; }
-  onMove(cb)          { this._cbMove    = cb; }
+  onMove(cb) {
+    this._cbMove = cb;
+    // تسليم حركة وصلت قبل جاهزية المستقبِل (أثناء تحميل اللعبة)
+    if (this._pendingMove) {
+      const d = this._pendingMove; this._pendingMove = null;
+      const moveId = `${d.key}_${d.seq}`;
+      if (moveId !== this._lastApplied) {
+        this._lastApplied = moveId;
+        cb(d.key, d.nextTurn, d.by);
+      }
+    }
+  }
   onOpponentJoined(cb){ this._cbJoined  = cb; }
   onOpponentLeft(cb)  { this._cbLeft    = cb; }
   onConnectionChange(cb) { this._cbConnection = cb; }
