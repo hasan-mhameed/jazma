@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1783805737";
+import { getCurrentUser }   from "./auth.js?v=1783896061";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -350,6 +350,14 @@ export class OnlineManager {
     // سجل حركات كامل (append) — لا حركة تمحو أخرى، والمتأخر يستلم الكل بالترتيب
     const mref = push(ref(db, `rooms/${this.roomCode}/moves`));
     await set(mref, { key: lineKey, by: this.playerNum, seq: seq || Date.now(), nextTurn });
+    await update(ref(db, `rooms/${this.roomCode}`), { turn: nextTurn });
+  }
+
+  // نقل الدور بدون حركة (انتهاء الوقت) — عبر نفس سجل الحركات الموثوق
+  async pushTurnSkip(nextTurn) {
+    if (!this.roomCode) return;
+    const mref = push(ref(db, `rooms/${this.roomCode}/moves`));
+    await set(mref, { key: "__skip__", by: this.playerNum, seq: Date.now(), nextTurn });
     await update(ref(db, `rooms/${this.roomCode}`), { turn: nextTurn });
   }
 

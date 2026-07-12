@@ -1,37 +1,37 @@
 // 📄 main.js — v13.9
 // Bootstrap فقط — يربط كل الـ modules
 
-import { config }                              from "./config/config.js?v=1783805737";
-import { state }                               from "./core/state.js?v=1783805737";
-import { startBoard, updateScoreboard, resetState } from "./board.js?v=1783805737";
-import { updateTurnUI }                        from "./ui/turnManager.js?v=1783805737";
-import { audioManager }                        from "./audio/audioManager.js?v=1783805737";
-import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1783805737";
-import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1783805737";
+import { config }                              from "./config/config.js?v=1783896061";
+import { state }                               from "./core/state.js?v=1783896061";
+import { startBoard, updateScoreboard, resetState } from "./board.js?v=1783896061";
+import { updateTurnUI }                        from "./ui/turnManager.js?v=1783896061";
+import { audioManager }                        from "./audio/audioManager.js?v=1783896061";
+import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1783896061";
+import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1783896061";
 
-import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1783805737";
-import { initGameSetup }       from "./ui/gameSetup.js?v=1783805737";
-import { initTurnTimer, stopTurnTimer, startTurnTimer } from "./ui/turnTimer.js?v=1783805737";
-import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1783805737";
-import { initFriendsUI }       from "./ui/friendsUI.js?v=1783805737";
-import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1783805737";
-import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1783805737";
-import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1783805737";
-import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1783805737";
-import { renderStatsModal }    from "./ui/statsModal.js?v=1783805737";
-import { initHistoryUI }       from "./ui/historyUI.js?v=1783805737";
-import { resetMatchTimer }     from "./ui/gameEnd.js?v=1783805737";
-import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1783805737";
-import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1783805737";
-import { refreshCoinsBadge } from "./core/wallet.js?v=1783805737";
-import { loadLearnedPowers } from "./ui/powerTutorial.js?v=1783805737";
-import { initPowersUI, refreshInventory } from "./ui/powersUI.js?v=1783805737";
-import { POWERS, addPower } from "./core/powers.js?v=1783805737";
-import { spendCoins } from "./core/wallet.js?v=1783805737";
-import { extendTime } from "./ui/turnTimer.js?v=1783805737";
-import { activatePower, triggerAI } from "./ui/boardRenderer.js?v=1783805737";
-import { initNavMenu }            from "./ui/navMenu.js?v=1783805737";
-import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1783805737";
+import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1783896061";
+import { initGameSetup }       from "./ui/gameSetup.js?v=1783896061";
+import { initTurnTimer, stopTurnTimer, startTurnTimer } from "./ui/turnTimer.js?v=1783896061";
+import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1783896061";
+import { initFriendsUI }       from "./ui/friendsUI.js?v=1783896061";
+import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1783896061";
+import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1783896061";
+import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1783896061";
+import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1783896061";
+import { renderStatsModal }    from "./ui/statsModal.js?v=1783896061";
+import { initHistoryUI }       from "./ui/historyUI.js?v=1783896061";
+import { resetMatchTimer }     from "./ui/gameEnd.js?v=1783896061";
+import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1783896061";
+import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1783896061";
+import { refreshCoinsBadge } from "./core/wallet.js?v=1783896061";
+import { loadLearnedPowers } from "./ui/powerTutorial.js?v=1783896061";
+import { initPowersUI, refreshInventory } from "./ui/powersUI.js?v=1783896061";
+import { POWERS, addPower } from "./core/powers.js?v=1783896061";
+import { spendCoins } from "./core/wallet.js?v=1783896061";
+import { extendTime } from "./ui/turnTimer.js?v=1783896061";
+import { activatePower, triggerAI, nextActivePlayer } from "./ui/boardRenderer.js?v=1783896061";
+import { initNavMenu }            from "./ui/navMenu.js?v=1783896061";
+import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1783896061";
 
 // ── PWA ─────────────────────────────────────────────────────────
 let _deferredInstallPrompt = null;
@@ -110,7 +110,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // عند انتهاء وقت الدور — ينتقل الدور للاعب التالي
   function handleTurnTimeout() {
-    // ننهي دور اللاعب الحالي (محلياً)
+    // ═══ غرفة جماعية: نقل متزامن عبر Firebase (مصدر قرار واحد) ═══
+    if (config.online && config.multiPlayers) {
+      const cur = state.currentPlayer;
+      const doSkip = () => {
+        const next = nextActivePlayer(cur, config); // يتخطّى المنسحبين
+        state.currentPlayer = next;
+        updateTurnUI(config);
+        refreshInventory(config);
+        onlineManager.pushTurnSkip(next); // يُبلّغ الجميع عبر سجل الحركات
+      };
+      if (cur === config.onlinePlayerNum) {
+        // صاحب الدور: ينقل ويبعث فوراً
+        doSkip();
+      } else {
+        // مشاهد: ننتظر نقل صاحب الدور؛ لو لم يصل خلال 4 ثوانٍ (تبويب خامل/انقطاع) نُنقذ
+        // (الحساب حتمي ومتطابق عند الجميع، فالتكرار المحتمل غير ضار)
+        setTimeout(() => {
+          if (state.currentPlayer === cur) doSkip();
+        }, 4000);
+      }
+      return;
+    }
+    // ═══ محلي/ثنائي: المنطق السابق ═══
     state.currentPlayer = (state.currentPlayer % config.players) + 1;
     updateTurnUI(config);
     refreshInventory(config);
