@@ -1,10 +1,10 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1784072479";
-import { onlineManager } from "../firebase.js?v=1784072479";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1784072479";
-import { state } from "../core/state.js?v=1784072479";
-import { getCurrentUser } from "../auth.js?v=1784072479";
+import { config } from "../config/config.js?v=1784291737";
+import { onlineManager } from "../firebase.js?v=1784291737";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1784291737";
+import { state } from "../core/state.js?v=1784291737";
+import { getCurrentUser } from "../auth.js?v=1784291737";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -532,6 +532,8 @@ function showLeaveToast(text) {
 }
 
 function handleMultiPlayerLeft(players, onlineTurnInd) {
+  // المباراة انتهت طبيعياً؟ مغادرة الآخرين بعدها ليست انسحاباً — نتجاهل بصمت
+  if (state.gameFinished) { config.multiPlayers = players; return; }
   // إشعار "اللاعب X انسحب" — نكتشف من تحوّل لغير نشط (مقارنة بالحالة السابقة)
   const prev = config.multiPlayers || {};
   Object.values(players || {}).forEach(p => {
