@@ -1,10 +1,10 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1783896061";
-import { onlineManager } from "../firebase.js?v=1783896061";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1783896061";
-import { state } from "../core/state.js?v=1783896061";
-import { getCurrentUser } from "../auth.js?v=1783896061";
+import { config } from "../config/config.js?v=1784072479";
+import { onlineManager } from "../firebase.js?v=1784072479";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1784072479";
+import { state } from "../core/state.js?v=1784072479";
+import { getCurrentUser } from "../auth.js?v=1784072479";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -32,6 +32,7 @@ export function initOnlineGame({ onGameStart }) {
 
   const stepMultiCount  = document.getElementById("online-step-multi-count");
   const stepMultiLobby  = document.getElementById("online-step-multi-lobby");
+  const stepRandCount   = document.getElementById("online-step-random-count");
 
   function showStep(step) {
     stepName.classList.add("hidden");
@@ -40,16 +41,18 @@ export function initOnlineGame({ onGameStart }) {
     stepSearching?.classList.add("hidden");
     stepMultiCount?.classList.add("hidden");
     stepMultiLobby?.classList.add("hidden");
+    stepRandCount?.classList.add("hidden");
     onlineError.classList.add("hidden");
     if (step === "name" || step === "lobby") {
       if (getCurrentUser()?.displayName) playerNameInput.value = getCurrentUser().displayName;
     }
-    if (step === "name")       stepName.classList.remove("hidden");
-    if (step === "lobby")      stepLobby.classList.remove("hidden");
-    if (step === "playing")    stepPlaying.classList.remove("hidden");
-    if (step === "searching")  stepSearching?.classList.remove("hidden");
-    if (step === "multiCount") stepMultiCount?.classList.remove("hidden");
-    if (step === "multiLobby") stepMultiLobby?.classList.remove("hidden");
+    if (step === "name")        stepName.classList.remove("hidden");
+    if (step === "lobby")       stepLobby.classList.remove("hidden");
+    if (step === "playing")     stepPlaying.classList.remove("hidden");
+    if (step === "searching")   stepSearching?.classList.remove("hidden");
+    if (step === "multiCount")  stepMultiCount?.classList.remove("hidden");
+    if (step === "multiLobby")  stepMultiLobby?.classList.remove("hidden");
+    if (step === "randomCount") stepRandCount?.classList.remove("hidden");
   }
 
   function showError(msg) { onlineError.textContent = msg; onlineError.classList.remove("hidden"); }
@@ -128,9 +131,46 @@ export function initOnlineGame({ onGameStart }) {
   });
 
   // ── مطابقة عشوائية (زي السنوكر) ─────────────────────────────
-  randomMatchBtn?.addEventListener("click", async () => {
+  // ═══ العشوائي: اختيار العدد أولاً (2 = ثنائي / 3-4 = جماعي) ═══
+  const stepRandomCount  = document.getElementById("online-step-random-count");
+  const randomCountChips = document.getElementById("random-count-chips");
+  const randomSearchStart= document.getElementById("random-search-start");
+  const randomCountBack  = document.getElementById("random-count-back");
+  let _randomWanted = 2;      // العدد المختار
+  let _isMultiSearch = false; // هل البحث الجاري جماعي؟
+
+  function buildRandomCountChips() {
+    if (!randomCountChips) return;
+    randomCountChips.innerHTML = "";
+    [2, 3, 4].forEach(n => {
+      const chip = document.createElement("button");
+      chip.className = "chip" + (n === _randomWanted ? " active" : "");
+      chip.textContent = n === 2 ? "لاعبان (راس براس)" : `${n} لاعبين`;
+      chip.addEventListener("click", (e) => {
+        e.currentTarget.blur();
+        _randomWanted = n;
+        buildRandomCountChips();
+      });
+      randomCountChips.appendChild(chip);
+    });
+  }
+
+  randomMatchBtn?.addEventListener("click", () => {
     const name = getPlayerName(); if (!name) return;
-    randomMatchBtn.disabled = true;
+    buildRandomCountChips();
+    showStep("randomCount");
+  });
+  randomCountBack?.addEventListener("click", () => showStep("name"));
+
+  randomSearchStart?.addEventListener("click", async () => {
+    if (_randomWanted === 2) await startDuoRandomSearch();
+    else await startMultiRandomSearch(_randomWanted);
+  });
+
+  // ── البحث الثنائي (المنطق السابق كما هو) ─────────────────────
+  async function startDuoRandomSearch() {
+    const name = getPlayerName(); if (!name) return;
+    _isMultiSearch = false;
     try {
       const gridSize = +document.getElementById("grid-size").value;
       config.rows = config.cols = gridSize;
@@ -169,12 +209,60 @@ export function initOnlineGame({ onGameStart }) {
     } catch (e) {
       showError(e.message || "تعذّر البحث عن خصم");
       showStep("name");
-    } finally { randomMatchBtn.disabled = false; }
-  });
+    }
+  }
+
+  // ── البحث الجماعي العشوائي (3-4) ─────────────────────────────
+  async function startMultiRandomSearch(wanted) {
+    const name = getPlayerName(); if (!name) return;
+    _isMultiSearch = true;
+    try {
+      const gridSize = +document.getElementById("grid-size").value || 4;
+      config.rows = config.cols = gridSize;
+
+      showStep("searching");
+      searchingText.textContent = `جارٍ البحث عن لاعبين (${wanted} لاعبين، لوحة ${gridSize}×${gridSize})...`;
+
+      // تحديث حي لعدد المنضمّين + بدء تلقائي عند الاكتمال (المنشئ يقرر)
+      onlineManager.onLobbyUpdate((players, room) => {
+        const count = Object.keys(players || {}).length;
+        const max = room?.maxPlayers || wanted;
+        searchingText.textContent = `👥 انضم ${count} من ${max} — بانتظار البقية...`;
+        // المنشئ (رقم 1) يبدأ تلقائياً عند اكتمال العدد
+        if (onlineManager.playerNum === 1 && count >= max && room?.status === "lobby") {
+          onlineManager.startMultiGame();
+        }
+      });
+      // بدء المباراة (للجميع) — نفس مسار الغرف الجماعية
+      onlineManager.onMultiStart((room) => {
+        _isMultiSearch = false;
+        startMultiMatch(room);
+      });
+      // المنشئ غادر قبل البدء
+      onlineManager.onPlayerLeft((reason) => {
+        if (reason === "host_left" && _isMultiSearch) {
+          _isMultiSearch = false;
+          showLeaveToast("🚪 غادر منشئ الغرفة — ابحث من جديد");
+          showStep("randomCount");
+        }
+      });
+
+      await onlineManager.findRandomMultiMatch(config, name, wanted);
+      // الانتظار يُدار عبر onLobbyUpdate أعلاه
+    } catch (e) {
+      showError(e.message || "تعذّر البحث");
+      showStep("name");
+    }
+  }
 
   // ── إلغاء البحث العشوائي ────────────────────────────────────
   cancelSearchBtn?.addEventListener("click", async () => {
-    await onlineManager.cancelRandomMatch();
+    if (_isMultiSearch) {
+      _isMultiSearch = false;
+      await onlineManager.leaveRoom(); // لوبي جماعي: منشئ يمسح / منضم يزيل نفسه
+    } else {
+      await onlineManager.cancelRandomMatch();
+    }
     showStep("name");
   });
 

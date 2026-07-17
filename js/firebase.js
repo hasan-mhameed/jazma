@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1783896061";
+import { getCurrentUser }   from "./auth.js?v=1784072479";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -359,6 +359,39 @@ export class OnlineManager {
     const mref = push(ref(db, `rooms/${this.roomCode}/moves`));
     await set(mref, { key: "__skip__", by: this.playerNum, seq: Date.now(), nextTurn });
     await update(ref(db, `rooms/${this.roomCode}`), { turn: nextTurn });
+  }
+
+  // ══ مطابقة عشوائية جماعية (3-4) — تطابق العدد والحجم ══════════
+  async findRandomMultiMatch(cfg, name, wantedPlayers) {
+    const myUid = getCurrentUser()?.uid || ("guest_" + Date.now());
+    // نبحث عن غرفة جماعية عامة مطابقة (نفس العدد المطلوب + نفس الحجم) وفيها مكان
+    let foundCode = null;
+    try {
+      const snap = await get(ref(db, "rooms"));
+      if (snap.exists()) {
+        for (const [code, room] of Object.entries(snap.val())) {
+          if (room && room.multi === true && room.public === true
+              && room.status === "lobby"
+              && Number(room.maxPlayers) === Number(wantedPlayers)
+              && room.cfg && Number(room.cfg.rows) === Number(cfg.rows)
+              && (room.playerCount || 0) < room.maxPlayers
+              && !(room.players && room.players[myUid])) {
+            foundCode = code; break;
+          }
+        }
+      }
+    } catch {}
+
+    if (foundCode) {
+      try {
+        const res = await this.joinMultiRoom(foundCode, name);
+        return { role: "joiner", ...res };
+      } catch { /* امتلأت في سباق — ننشئ بدلاً */ }
+    }
+    // لا غرفة مناسبة — ننشئ غرفة جماعية عامة وننتظر
+    const { code } = await this.createMultiRoom(cfg, name, wantedPlayers);
+    await update(ref(db, `rooms/${code}`), { public: true });
+    return { role: "creator", code };
   }
 
   // مستمع سجل الحركات الجماعي — onChildAdded يسلّم كل الحركات (حتى القديمة) بالترتيب
