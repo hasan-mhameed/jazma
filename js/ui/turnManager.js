@@ -1,7 +1,7 @@
 // 📄 turnManager.js — v15.8
-import { state }  from "../core/state.js?v=1784291737";
-import { config } from "../config/config.js?v=1784291737";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1784291737";
+import { state }  from "../core/state.js?v=1784310079";
+import { config } from "../config/config.js?v=1784310079";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1784310079";
 
 export function updateTurn(cfg) { updateTurnUI(cfg); }
 
@@ -21,11 +21,12 @@ export function updateTurnUI(cfg) {
     if (card) card.classList.toggle("active", i === state.currentPlayer);
   }
 
-  // مؤقّت الدور — يبدأ لدور اللاعب البشري فقط
+  // مؤقّت الدور — أونلاين: يظهر ويعدّ عند الجميع (الكل يشاهد وقت صاحب الدور)
+  // ضد الكمبيوتر: لدور اللاعب البشري فقط
   if (isTimerEnabled()) {
     const humanTurn =
       cfg.aiMode === "ai"     ? state.currentPlayer === 1 :
-      cfg.aiMode === "online" ? state.currentPlayer === cfg.onlinePlayerNum :
+      cfg.aiMode === "online" ? true :
       true; // محلي: كل الأدوار بشرية
     if (humanTurn) startTurnTimer();
     else stopTurnTimer();

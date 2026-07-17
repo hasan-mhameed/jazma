@@ -1,10 +1,10 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1784291737";
-import { onlineManager } from "../firebase.js?v=1784291737";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1784291737";
-import { state } from "../core/state.js?v=1784291737";
-import { getCurrentUser } from "../auth.js?v=1784291737";
+import { config } from "../config/config.js?v=1784310079";
+import { onlineManager } from "../firebase.js?v=1784310079";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1784310079";
+import { state } from "../core/state.js?v=1784310079";
+import { getCurrentUser } from "../auth.js?v=1784310079";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
