@@ -1043,3 +1043,6 @@ body {
 .mp-num { width: 26px; height: 26px; border-radius: 50%; background: var(--nat-p1-bright); color:#04130d; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.85rem; }
 .mp-name { flex: 1; color: var(--nat-text); font-weight: 600; }
 .mp-host { font-size: 1.1rem; }
+
+/* أسماء المنضمّين أثناء البحث العشوائي الجماعي */
+.search-names { color: var(--nat-p1-bright); font-weight: 700; line-height: 1.9; display: inline-block; margin: 6px 0; }

@@ -1,10 +1,10 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1784310079";
-import { onlineManager } from "../firebase.js?v=1784310079";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1784310079";
-import { state } from "../core/state.js?v=1784310079";
-import { getCurrentUser } from "../auth.js?v=1784310079";
+import { config } from "../config/config.js?v=1784311409";
+import { onlineManager } from "../firebase.js?v=1784311409";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1784311409";
+import { state } from "../core/state.js?v=1784311409";
+import { getCurrentUser } from "../auth.js?v=1784311409";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -223,11 +223,14 @@ export function initOnlineGame({ onGameStart }) {
       showStep("searching");
       searchingText.textContent = `جارٍ البحث عن لاعبين (${wanted} لاعبين، لوحة ${gridSize}×${gridSize})...`;
 
-      // تحديث حي لعدد المنضمّين + بدء تلقائي عند الاكتمال (المنشئ يقرر)
+      // تحديث حي: الأسماء المنضمّة + العدد + بدء تلقائي عند الاكتمال (المنشئ يقرر)
       onlineManager.onLobbyUpdate((players, room) => {
-        const count = Object.keys(players || {}).length;
+        const list = Object.values(players || {}).sort((a, b) => a.num - b.num);
+        const count = list.length;
         const max = room?.maxPlayers || wanted;
-        searchingText.textContent = `👥 انضم ${count} من ${max} — بانتظار البقية...`;
+        const names = list.map(p => `✓ ${p.name}`).join("<br>");
+        searchingText.innerHTML =
+          `👥 انضم ${count} من ${max}<br><span class="search-names">${names}</span><br>بانتظار البقية...`;
         // المنشئ (رقم 1) يبدأ تلقائياً عند اكتمال العدد
         if (onlineManager.playerNum === 1 && count >= max && room?.status === "lobby") {
           onlineManager.startMultiGame();

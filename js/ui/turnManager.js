@@ -1,7 +1,7 @@
 // 📄 turnManager.js — v15.8
-import { state }  from "../core/state.js?v=1784310079";
-import { config } from "../config/config.js?v=1784310079";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1784310079";
+import { state }  from "../core/state.js?v=1784311409";
+import { config } from "../config/config.js?v=1784311409";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1784311409";
 
 export function updateTurn(cfg) { updateTurnUI(cfg); }
 
@@ -30,5 +30,23 @@ export function updateTurnUI(cfg) {
       true; // محلي: كل الأدوار بشرية
     if (humanTurn) startTurnTimer();
     else stopTurnTimer();
+  }
+
+  // نصّ الدور — يتغيّر حسب صاحب الدور (كان ثابتاً "دورك" دائماً)
+  const turnText = document.getElementById("nat-turn-text");
+  if (turnText) {
+    const cp = state.currentPlayer;
+    if (cfg.aiMode === "online") {
+      if (cp === cfg.onlinePlayerNum) turnText.textContent = "🟢 دورك — ارسم خطاً";
+      else {
+        const oppName = cfg.onlinePlayerNames?.[cp] || `اللاعب ${cp}`;
+        turnText.textContent = `⏳ دور ${oppName}...`;
+      }
+    } else if (cfg.aiMode === "ai") {
+      turnText.textContent = cp === 1 ? "🟢 دورك — ارسم خطاً" : "🤖 دور الكمبيوتر...";
+    } else {
+      const pName = cfg.localPlayerNames?.[cp] || `اللاعب ${cp}`;
+      turnText.textContent = `🎯 دور ${pName} — ارسم خطاً`;
+    }
   }
 }
