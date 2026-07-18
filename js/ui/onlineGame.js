@@ -1,10 +1,10 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1784361079";
-import { onlineManager } from "../firebase.js?v=1784361079";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1784361079";
-import { state } from "../core/state.js?v=1784361079";
-import { getCurrentUser } from "../auth.js?v=1784361079";
+import { config } from "../config/config.js?v=1784362401";
+import { onlineManager } from "../firebase.js?v=1784362401";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1784362401";
+import { state } from "../core/state.js?v=1784362401";
+import { getCurrentUser } from "../auth.js?v=1784362401";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -145,7 +145,7 @@ export function initOnlineGame({ onGameStart }) {
     [2, 3, 4].forEach(n => {
       const chip = document.createElement("button");
       chip.className = "chip" + (n === _randomWanted ? " active" : "");
-      chip.textContent = n === 2 ? "لاعبان (راس براس)" : `${n} لاعبين`;
+      chip.textContent = n === 2 ? "لاعبان" : `${n} لاعبين`;
       chip.addEventListener("click", (e) => {
         e.currentTarget.blur();
         _randomWanted = n;
@@ -449,8 +449,8 @@ export function launchOnlineGame(myPlayerNum, onlineTurnInd, onGameStart) {
       });
     });
 
-    onlineManager.onOpponentLeft(() => showDisconnectAlert());
-    onlineManager.onRestart(() => showRestartAlert());
+    onlineManager.onOpponentLeft(() => { if (!state.gameFinished) showDisconnectAlert(); });
+    onlineManager.onRestart(() => { if (!state.gameFinished) showRestartAlert(); });
 
     // ── مراقبة الاتصال ──────────────────────────────────────
     let reconnectBanner = null;
@@ -513,10 +513,10 @@ export function launchOnlineMultiGame(myPlayerNum, onlineTurnInd, onGameStart) {
 
     // خروج لاعب أثناء اللعب — المباراة تكمّل بالباقين
     onlineManager.onPlayerLeft((playersOrReason) => {
-      if (playersOrReason === "host_left") { showDisconnectAlert(); return; }
+      if (playersOrReason === "host_left") { if (!state.gameFinished) showDisconnectAlert(); return; }
       handleMultiPlayerLeft(playersOrReason, onlineTurnInd);
     });
-    onlineManager.onRestart(() => showRestartAlert());
+    onlineManager.onRestart(() => { if (!state.gameFinished) showRestartAlert(); });
 
     onlineManager.onConnectionChange(connected => {
       if (onlineTurnInd && connected) updateOnlineTurnIndicator(onlineTurnInd);
