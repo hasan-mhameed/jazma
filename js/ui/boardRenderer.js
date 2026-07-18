@@ -1,20 +1,20 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1784311409";
-import { makeKey }                            from "../utils.js?v=1784311409";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1784311409";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1784311409";
-import { endGame }                            from "./gameEnd.js?v=1784311409";
-import { audioManager }                       from "../audio/audioManager.js?v=1784311409";
-import { checkSquaresAround }                 from "../core/logic.js?v=1784311409";
-import { onlineManager }                      from "../firebase.js?v=1784311409";
-import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1784311409";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1784311409";
-import { refreshInventory } from "./powersUI.js?v=1784311409";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1784311409";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1784311409";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1784311409";
+import { state }                              from "../core/state.js?v=1784361079";
+import { makeKey }                            from "../utils.js?v=1784361079";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1784361079";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1784361079";
+import { endGame }                            from "./gameEnd.js?v=1784361079";
+import { audioManager }                       from "../audio/audioManager.js?v=1784361079";
+import { checkSquaresAround }                 from "../core/logic.js?v=1784361079";
+import { onlineManager }                      from "../firebase.js?v=1784361079";
+import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1784361079";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1784361079";
+import { refreshInventory } from "./powersUI.js?v=1784361079";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1784361079";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1784361079";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1784361079";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -514,7 +514,7 @@ export function nextActivePlayer(current, cfg) {
 
 // يعيد تشغيل المؤقّت لو الدور الحالي بشري
 function restartTimerIfHuman(cfg) {
-  if (!isTimerEnabled()) return;
+  if (!isTimerEnabled() || state.gameFinished) return;
   // أونلاين: المؤقّت يُعاد للجميع (الكل يشاهد وقت صاحب الدور)
   const humanTurn =
     cfg.aiMode === "ai"     ? state.currentPlayer === 1 :
@@ -881,6 +881,8 @@ export function applyOnlineMove(lineKey, cfg, nextTurn, byPlayer) {
     const forced = (cfg.multiPlayers && typeof byPlayer === 'number') ? byPlayer : null;
     handleEdgeClick(obj, cfg, true, forced);
   }
+  // المباراة انتهت بهذه الحركة؟ لا دور جديد ولا مؤقّت (شاشة النتيجة ظاهرة)
+  if (state.gameFinished) { stopTurnTimer(); return; }
   // في الغرفة الجماعية: الدور يُضبط حصرياً من nextTurn (مصدر الحقيقة الوحيد)
   if (cfg.multiPlayers && typeof nextTurn === 'number' && nextTurn > 0) {
     state.currentPlayer = nextTurn;
