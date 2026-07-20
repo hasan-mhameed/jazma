@@ -1,10 +1,10 @@
 // 📄 ui/gameSetup.js
 // شاشة إعداد اللعبة + بدء اللعبة المحلية
 // تصميم مرن: الأحجام/اللاعبين/الأوضاع تُبنى من مصفوفات (سهلة التعديل)
-import { config } from "../config/config.js?v=1784404579";
-import { AIPlayer } from "../ai/aiPlayer.js?v=1784404579";
-import { getCurrentUser } from "../auth.js?v=1784404579";
-import { state } from "../core/state.js?v=1784404579";
+import { config } from "../config/config.js?v=1784503058";
+import { AIPlayer } from "../ai/aiPlayer.js?v=1784503058";
+import { getCurrentUser } from "../auth.js?v=1784503058";
+import { state } from "../core/state.js?v=1784503058";
 
 export let aiPlayer = null;
 
@@ -156,14 +156,44 @@ export function initGameSetup({ onGameStart, onOnlineRequested }) {
     document.getElementById("players-section")?.classList.toggle("hidden", _mode === 'ai');
     if (_mode === 'ai') { _players = 2; if (playerCountSelect) playerCountSelect.value = "2"; }
     buildPlayerChips();
+    syncTimerModeRow();
   }
 
   const timerRow = document.getElementById("timer-toggle-row");
   const ttSwitch = document.getElementById("tt-switch");
   const ttCheckbox = document.getElementById("turn-timer-toggle");
+  const timerModeRow = document.getElementById("timer-mode-row");
+  let _timerMode = 'perTurn'; // 'perTurn' | 'bank' (للمحلي فقط)
+
+  const TIMER_MODES = [
+    { value: 'perTurn', label: '⚡ 15ث/خطوة' },
+    { value: 'bank',    label: '🏦 بنك وقت' },
+  ];
+  function buildTimerModeChips() {
+    if (!timerModeRow) return;
+    timerModeRow.innerHTML = "";
+    TIMER_MODES.forEach(m => {
+      const chip = document.createElement("button");
+      chip.className = "chip" + (m.value === _timerMode ? " active" : "");
+      chip.textContent = m.label;
+      chip.addEventListener("click", (e) => {
+        e.currentTarget.blur();
+        _timerMode = m.value;
+        buildTimerModeChips();
+      });
+      timerModeRow.appendChild(chip);
+    });
+  }
+  function syncTimerModeRow() {
+    // اختيار النمط: فقط للمحلي (human) ولمّا المؤقّت مفعّل — الأونلاين بنك إجباري
+    const show = _timerOn && _mode === 'human';
+    timerModeRow?.classList.toggle("hidden", !show);
+    if (show) buildTimerModeChips();
+  }
   function syncTimerSwitch() {
     ttSwitch?.classList.toggle("on", _timerOn);
     if (ttCheckbox) ttCheckbox.checked = _timerOn;
+    syncTimerModeRow();
   }
   timerRow?.addEventListener("click", (e) => {
     e.preventDefault();
@@ -189,6 +219,7 @@ export function initGameSetup({ onGameStart, onOnlineRequested }) {
     config.aiDifficulty = _difficulty;
     config.online  = false;
     config.turnTimer = _timerOn;
+    config.timerMode = _timerMode;
 
     const p2Name = localP2Input?.value?.trim() || "";
     config.localPlayerNames = {

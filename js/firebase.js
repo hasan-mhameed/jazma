@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1784404579";
+import { getCurrentUser }   from "./auth.js?v=1784503058";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -392,6 +392,25 @@ export class OnlineManager {
     const { code } = await this.createMultiRoom(cfg, name, wantedPlayers);
     await update(ref(db, `rooms/${code}`), { public: true });
     return { role: "creator", code };
+  }
+
+  // تعليم نفسي/لاعب آخر خارج المباراة (نفاد بنك الوقت — نمط bank)
+  async markSelfInactive() {
+    if (!this.roomCode || !this._myUid) return;
+    try { await update(ref(db, `rooms/${this.roomCode}/players/${this._myUid}`), { active: false }); } catch {}
+  }
+  async markPlayerInactiveByNum(num) {
+    if (!this.roomCode) return;
+    try {
+      const snap = await get(ref(db, `rooms/${this.roomCode}/players`));
+      if (!snap.exists()) return;
+      for (const [uid, p] of Object.entries(snap.val())) {
+        if (p && p.num === num && p.active !== false) {
+          await update(ref(db, `rooms/${this.roomCode}/players/${uid}`), { active: false });
+          return;
+        }
+      }
+    } catch {}
   }
 
   // مستمع سجل الحركات الجماعي — onChildAdded يسلّم كل الحركات (حتى القديمة) بالترتيب

@@ -1,63 +1,90 @@
 // 📄 ui/turnTimer.js
-// مؤقّت الدور — عدّاد لكل لاعب مع تنبيه بصري وصوتي قرب النهاية
-
-import { audioManager } from "../audio/audioManager.js?v=1784404579";
-import { state } from "../core/state.js?v=1784404579";
-import { getEffect, clearEffect } from "../core/powers.js?v=1784404579";
+// مؤقّت الدور — نمطان:
+//   perTurn: عدّاد ثابت لكل خطوة (15 ثانية)
+//   bank:    بنك وقت لكل لاعب (Chess Clock) — ينزل بدوره فقط، نفاده = خسارة
+import { audioManager } from "../audio/audioManager.js?v=1784503058";
+import { state } from "../core/state.js?v=1784503058";
+import { getEffect, clearEffect } from "../core/powers.js?v=1784503058";
 
 // ألوان اللاعبين (تطابق ألوان اللوحة والبطاقات)
 const PLAYER_COLORS = ['#2dd4bf', '#fb923c', '#a78bfa', '#fcd34d'];
 
-const TURN_SECONDS = 15;      // الوقت الافتراضي لكل دور
-const WARN_AT = 5;            // متى يبدأ التنبيه (آخر 5 ثوان)
+const TURN_SECONDS = 15;      // نمط perTurn: الوقت لكل دور
+const WARN_AT = 5;            // متى يبدأ التنبيه
+
+// 🏦 بنوك الوقت حسب حجم اللوحة (أولية — قابلة للضبط، مكان واحد تمهيداً للوحة التحكم)
+export const TIME_BANKS = { 3: 120, 4: 180, 5: 240, 6: 300 };
 
 let _enabled = false;
+let _mode = 'perTurn';        // 'perTurn' | 'bank'
+let _banks = {};              // بنك كل لاعب (نمط bank)
 let _remaining = TURN_SECONDS;
 let _intervalId = null;
-let _onTimeout = null;
+let _onTimeout = null;        // perTurn: انتهى وقت الدور
+let _onBankEmpty = null;      // bank: نفد بنك لاعب (يخسر)
 let _lastTick = -1;
 
 // تهيئة المؤقّت
-export function initTurnTimer({ enabled, onTimeout }) {
+export function initTurnTimer({ enabled, mode = 'perTurn', players = 2, bankSeconds = 180, onTimeout, onBankEmpty }) {
   _enabled = !!enabled;
+  _mode = mode;
   _onTimeout = onTimeout;
+  _onBankEmpty = onBankEmpty;
+  _banks = {};
+  if (mode === 'bank') {
+    for (let i = 1; i <= players; i++) _banks[i] = bankSeconds;
+  }
 }
 
 export function isTimerEnabled() { return _enabled; }
+export function getTimerMode()   { return _mode; }
+export function getBank(player)  { return _banks[player] ?? 0; }
 
-// بدء العدّ لدور جديد
+// بدء العدّ لدور (perTurn: تصفير لـ15 / bank: متابعة بنك صاحب الدور بلا تصفير)
 export function startTurnTimer() {
   if (!_enabled) return;
   stopTurnTimer();
-  _remaining = TURN_SECONDS;
 
-  // لو على اللاعب الحالي علامة "قصّ وقت" (من أداة الخصم) — نطبّقها مرة وحدة
-  const cut = getEffect(state.currentPlayer, 'time_cut');
-  if (cut) {
-    _remaining = Math.max(5, TURN_SECONDS - cut); // لا يقل عن 5 ثوان
-    clearEffect(state.currentPlayer, 'time_cut');
+  if (_mode === 'perTurn') {
+    _remaining = TURN_SECONDS;
+    // أداة "قصّ الوقت" (perTurn): تُطبَّق على الدور مرة واحدة
+    const cut = getEffect(state.currentPlayer, 'time_cut');
+    if (cut) {
+      _remaining = Math.max(5, TURN_SECONDS - cut);
+      clearEffect(state.currentPlayer, 'time_cut');
+    }
   }
+  // bank: لا تصفير — البنك مستمر من حيث توقف
 
   _lastTick = -1;
   renderTimer();
   _intervalId = setInterval(tick, 1000);
 }
 
-// إيقاف العدّ
+// إيقاف العدّ (تجميد — بالبنك لا يفقد شيئاً)
 export function stopTurnTimer() {
   if (_intervalId) { clearInterval(_intervalId); _intervalId = null; }
   hideTimer();
 }
 
 function tick() {
+  if (_mode === 'bank') {
+    const cp = state.currentPlayer;
+    _banks[cp] = (_banks[cp] ?? 0) - 1;
+    renderTimer();
+    const left = _banks[cp];
+    if (left <= WARN_AT && left > 0) { try { audioManager.playTick?.(); } catch {} }
+    if (left <= 0) {
+      stopTurnTimer();
+      try { audioManager.playTimeout?.(); } catch {}
+      _onBankEmpty?.(cp); // نفد بنك اللاعب — يخسر
+    }
+    return;
+  }
+  // perTurn
   _remaining--;
   renderTimer();
-
-  // تنبيه صوتي في آخر WARN_AT ثوان
-  if (_remaining <= WARN_AT && _remaining > 0) {
-    try { audioManager.playTick?.(); } catch {}
-  }
-
+  if (_remaining <= WARN_AT && _remaining > 0) { try { audioManager.playTick?.(); } catch {} }
   if (_remaining <= 0) {
     stopTurnTimer();
     try { audioManager.playTimeout?.(); } catch {}
@@ -65,12 +92,34 @@ function tick() {
   }
 }
 
-// إضافة ثوانٍ للوقت الحالي (أداة تمديد الوقت)
-export function extendTime(seconds = 5) {
-  if (!_enabled || !_intervalId) return false;
+// إضافة ثوانٍ (أداة تمديد الوقت) — بالبنك: تُضاف لبنك اللاعب (دائمة)
+export function extendTime(seconds = 5, player = null) {
+  if (!_enabled) return false;
+  if (_mode === 'bank') {
+    const p = player ?? state.currentPlayer;
+    _banks[p] = (_banks[p] ?? 0) + seconds;
+    renderTimer();
+    return true;
+  }
+  if (!_intervalId) return false;
   _remaining += seconds;
   renderTimer();
   return true;
+}
+
+// قصّ ثوانٍ من بنك لاعب (أداة تقليص الوقت — نمط bank، فورية)
+export function cutBank(player, seconds = 5) {
+  if (!_enabled || _mode !== 'bank') return false;
+  _banks[player] = Math.max(1, (_banks[player] ?? 0) - seconds);
+  renderTimer();
+  return true;
+}
+
+// تنسيق العرض: بنك = د:ثث / دور = رقم
+function fmt(sec) {
+  if (_mode !== 'bank') return `${sec}`;
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 // رسم العدّاد في الواجهة
@@ -84,15 +133,13 @@ function renderTimer() {
   }
   el.classList.remove('hidden');
 
-  const warn = _remaining <= WARN_AT;
+  const val = _mode === 'bank' ? (_banks[state.currentPlayer] ?? 0) : _remaining;
+  const warn = val <= WARN_AT;
   el.classList.toggle('warn', warn);
-  el.textContent = `⏱️ ${_remaining}`;
+  el.textContent = `⏱️ ${fmt(val)}`;
 
-  // لون المؤقّت حسب دور اللاعب (إلا في وضع التحذير = أحمر موحّد)
   if (warn) {
-    el.style.color = '';
-    el.style.borderColor = '';
-    el.style.background = '';
+    el.style.color = ''; el.style.borderColor = ''; el.style.background = '';
   } else {
     const col = PLAYER_COLORS[(state.currentPlayer - 1) % PLAYER_COLORS.length] || '#2dd4bf';
     el.style.color = col;
@@ -100,12 +147,11 @@ function renderTimer() {
     el.style.background = col + '1a';
   }
 
-  // نبضة عند كل ثانية في وضع التحذير
-  if (warn && _remaining !== _lastTick) {
+  if (warn && val !== _lastTick) {
     el.classList.remove('pulse');
-    void el.offsetWidth; // إعادة تشغيل الأنميشن
+    void el.offsetWidth;
     el.classList.add('pulse');
-    _lastTick = _remaining;
+    _lastTick = val;
   }
 }
 
