@@ -1049,11 +1049,11 @@ body {
 
 /* 🏦 بنك الوقت في بطاقة اللاعب */
 .npc-bank {
-  font-size: 0.72rem; font-weight: 800; letter-spacing: 0.5px;
-  color: var(--nat-text-dim); padding: 2px 7px; border-radius: 8px;
-  background: rgba(255,255,255,0.06); border: 1px solid var(--nat-border);
+  font-size: 0.74rem; font-weight: 800; letter-spacing: 0.5px;
+  color: #d1fae5; padding: 2px 7px; border-radius: 8px;
+  background: rgba(255,255,255,0.1); border: 1px solid var(--nat-border);
   white-space: nowrap; direction: ltr;
 }
 .npc-bank:empty { display: none; }
-.npc-bank.ticking { color: #5eead4; border-color: #2dd4bf66; background: rgba(45,212,191,0.12); }
-.npc-bank.low { color: #f87171 !important; border-color: #f8717166 !important; background: rgba(248,113,113,0.12) !important; }
+.npc-bank.ticking { color: #5eead4; border-color: #2dd4bf; background: rgba(45,212,191,0.2); font-weight: 900; }
+.npc-bank.low { color: #fca5a5 !important; border-color: #f87171 !important; background: rgba(248,113,113,0.18) !important; }
