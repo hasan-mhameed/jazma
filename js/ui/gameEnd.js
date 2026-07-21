@@ -1,22 +1,23 @@
 // 📄 gameEnd.js — v14.3
-import { audioManager } from "../audio/audioManager.js?v=1784674068";
+import { audioManager } from "../audio/audioManager.js?v=1784675463";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1784674068";
-import { saveMatch } from "../history.js?v=1784674068";
-import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1784674068";
-import { showNewAchievements } from "./achievementsUI.js?v=1784674068";
-import { calcXP, addXP } from "../xp.js?v=1784674068";
-import { showXPGain } from "./xpUI.js?v=1784674068";
-import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1784674068";
-import { commitMatchCoins } from "../core/wallet.js?v=1784674068";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1784675463";
+import { saveMatch } from "../history.js?v=1784675463";
+import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1784675463";
+import { showNewAchievements } from "./achievementsUI.js?v=1784675463";
+import { calcXP, addXP } from "../xp.js?v=1784675463";
+import { showXPGain } from "./xpUI.js?v=1784675463";
+import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1784675463";
+import { commitMatchCoins } from "../core/wallet.js?v=1784675463";
 
 export let _matchStartTime = Date.now();
 export function resetMatchTimer() { _matchStartTime = Date.now(); }
 
-export async function endGame(cfg, scores) {
+export async function endGame(cfg, scores, forced = false) {
   const totalSquares = (cfg.rows - 1) * (cfg.cols - 1);
   const filled = Object.values(scores).reduce((a, b) => (+a||0) + (+b||0), 0);
-  if (filled < totalSquares) return;
+  // النهاية الطبيعية تتطلب اكتمال اللوحة؛ الإجبارية (نفاد بنك الوقت) تتخطّاه
+  if (!forced && filled < totalSquares) return;
 
   const ranking = Object.entries(scores)
     .map(([player, score]) => ({ player: Number(player), score }))

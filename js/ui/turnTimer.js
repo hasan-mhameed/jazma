@@ -2,9 +2,9 @@
 // مؤقّت الدور — نمطان:
 //   perTurn: عدّاد ثابت لكل خطوة (15 ثانية)
 //   bank:    بنك وقت لكل لاعب (Chess Clock) — ينزل بدوره فقط، نفاده = خسارة
-import { audioManager } from "../audio/audioManager.js?v=1784674068";
-import { state } from "../core/state.js?v=1784674068";
-import { getEffect, clearEffect } from "../core/powers.js?v=1784674068";
+import { audioManager } from "../audio/audioManager.js?v=1784675463";
+import { state } from "../core/state.js?v=1784675463";
+import { getEffect, clearEffect } from "../core/powers.js?v=1784675463";
 
 // ألوان اللاعبين (تطابق ألوان اللوحة والبطاقات)
 const PLAYER_COLORS = ['#2dd4bf', '#fb923c', '#a78bfa', '#fcd34d'];

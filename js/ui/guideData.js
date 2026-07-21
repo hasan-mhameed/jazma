@@ -2,7 +2,7 @@
 // بيانات دليل الأدوات — كل عنصر وقدرة مع وصفه الكامل
 // تُعرض في دليل اللعبة (زر ؟ جنب المخزون)
 
-import { FISH_SVG, GEM_SVG, TIME_EXTEND_SVG, TIME_REDUCE_SVG } from "./powerIcons.js?v=1784674068";
+import { FISH_SVG, GEM_SVG, TIME_EXTEND_SVG, TIME_REDUCE_SVG } from "./powerIcons.js?v=1784675463";
 
 // قائمة كل العناصر/الأدوات في اللعبة
 export const GUIDE_ITEMS = [
