@@ -1046,3 +1046,14 @@ body {
 
 /* أسماء المنضمّين أثناء البحث العشوائي الجماعي */
 .search-names { color: var(--nat-p1-bright); font-weight: 700; line-height: 1.9; display: inline-block; margin: 6px 0; }
+
+/* 🏦 بنك الوقت في بطاقة اللاعب */
+.npc-bank {
+  font-size: 0.72rem; font-weight: 800; letter-spacing: 0.5px;
+  color: var(--nat-text-dim); padding: 2px 7px; border-radius: 8px;
+  background: rgba(255,255,255,0.06); border: 1px solid var(--nat-border);
+  white-space: nowrap; direction: ltr;
+}
+.npc-bank:empty { display: none; }
+.npc-bank.ticking { color: #5eead4; border-color: #2dd4bf66; background: rgba(45,212,191,0.12); }
+.npc-bank.low { color: #f87171 !important; border-color: #f8717166 !important; background: rgba(248,113,113,0.12) !important; }

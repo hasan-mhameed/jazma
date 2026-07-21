@@ -1,8 +1,8 @@
 // 📄 scoreboard.js — v16.0 (Nature cards + level badge)
-import { state }  from "../core/state.js?v=1784503058";
-import { config } from "../config/config.js?v=1784503058";
-import { getXP, getLevelFromXP } from "../xp.js?v=1784503058";
-import { getCurrentUser } from "../auth.js?v=1784503058";
+import { state }  from "../core/state.js?v=1784589600";
+import { config } from "../config/config.js?v=1784589600";
+import { getXP, getLevelFromXP } from "../xp.js?v=1784589600";
+import { getCurrentUser } from "../auth.js?v=1784589600";
 
 const AVATARS = ['🦊', '🤖', '🦅', '🐺'];
 const COLORS  = ['p1', 'p2', 'p3', 'p4'];
@@ -35,6 +35,7 @@ export function renderScoreboard(cfg) {
         </div>
         <div class="npc-turn-tag">دوره الآن</div>
       </div>
+      <span class="npc-bank" id="pbank${i}"></span>
       <div class="npc-score" id="p${i}">${scores[i] || 0}</div>`;
 
     // ضغط البطاقة → معلومات اللاعب

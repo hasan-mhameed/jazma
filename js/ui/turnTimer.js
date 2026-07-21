@@ -2,9 +2,9 @@
 // مؤقّت الدور — نمطان:
 //   perTurn: عدّاد ثابت لكل خطوة (15 ثانية)
 //   bank:    بنك وقت لكل لاعب (Chess Clock) — ينزل بدوره فقط، نفاده = خسارة
-import { audioManager } from "../audio/audioManager.js?v=1784503058";
-import { state } from "../core/state.js?v=1784503058";
-import { getEffect, clearEffect } from "../core/powers.js?v=1784503058";
+import { audioManager } from "../audio/audioManager.js?v=1784589600";
+import { state } from "../core/state.js?v=1784589600";
+import { getEffect, clearEffect } from "../core/powers.js?v=1784589600";
 
 // ألوان اللاعبين (تطابق ألوان اللوحة والبطاقات)
 const PLAYER_COLORS = ['#2dd4bf', '#fb923c', '#a78bfa', '#fcd34d'];
@@ -152,6 +152,19 @@ function renderTimer() {
     void el.offsetWidth;
     el.classList.add('pulse');
     _lastTick = val;
+  }
+
+  // 🏦 نمط البنك: عرض بنك كل لاعب في بطاقته (الحيّ لصاحب الدور، مجمّد للباقين)
+  if (_mode === 'bank') {
+    for (const p in _banks) {
+      const b = document.getElementById('pbank' + p);
+      if (!b) continue;
+      const sec = _banks[p] ?? 0;
+      const m = Math.floor(sec / 60), s = sec % 60;
+      b.textContent = `⏱ ${m}:${String(s).padStart(2, '0')}`;
+      b.classList.toggle('low', sec <= 30);
+      b.classList.toggle('ticking', Number(p) === state.currentPlayer);
+    }
   }
 }
 
