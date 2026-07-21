@@ -1,32 +1,42 @@
 // 📄 gameEnd.js — v14.3
-import { audioManager } from "../audio/audioManager.js?v=1784675463";
+import { audioManager } from "../audio/audioManager.js?v=1784676200";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1784675463";
-import { saveMatch } from "../history.js?v=1784675463";
-import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1784675463";
-import { showNewAchievements } from "./achievementsUI.js?v=1784675463";
-import { calcXP, addXP } from "../xp.js?v=1784675463";
-import { showXPGain } from "./xpUI.js?v=1784675463";
-import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1784675463";
-import { commitMatchCoins } from "../core/wallet.js?v=1784675463";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1784676200";
+import { saveMatch } from "../history.js?v=1784676200";
+import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1784676200";
+import { showNewAchievements } from "./achievementsUI.js?v=1784676200";
+import { calcXP, addXP } from "../xp.js?v=1784676200";
+import { showXPGain } from "./xpUI.js?v=1784676200";
+import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1784676200";
+import { commitMatchCoins } from "../core/wallet.js?v=1784676200";
 
 export let _matchStartTime = Date.now();
 export function resetMatchTimer() { _matchStartTime = Date.now(); }
 
-export async function endGame(cfg, scores, forced = false) {
+export async function endGame(cfg, scores, forced = false, loserPlayer = null) {
   const totalSquares = (cfg.rows - 1) * (cfg.cols - 1);
   const filled = Object.values(scores).reduce((a, b) => (+a||0) + (+b||0), 0);
   // النهاية الطبيعية تتطلب اكتمال اللوحة؛ الإجبارية (نفاد بنك الوقت) تتخطّاه
   if (!forced && filled < totalSquares) return;
 
-  const ranking = Object.entries(scores)
+  // ترتيب اللاعبين — مع استبعاد الخاسر بالوقت (نفاد البنك = خسارة مؤكّدة مهما كانت النقاط)
+  let ranking = Object.entries(scores)
     .map(([player, score]) => ({ player: Number(player), score }))
     .sort((a, b) => b.score - a.score);
+  if (loserPlayer != null) {
+    // الخاسر بالوقت يُنزَّل لأسفل الترتيب دائماً (لا يفوز ولا يتعادل)
+    ranking = ranking.filter(p => p.player !== Number(loserPlayer))
+              .concat(ranking.filter(p => p.player === Number(loserPlayer)));
+  }
 
-  const maxScore   = ranking[0].score;
-  const topPlayers = ranking.filter(p => p.score === maxScore);
+  // عند وجود خاسر بالوقت: يُستبعد من حساب الفوز/التعادل (خسر مؤكّداً)
+  const contenders = loserPlayer != null
+    ? ranking.filter(p => p.player !== Number(loserPlayer))
+    : ranking;
+  const maxScore   = contenders[0].score;
+  const topPlayers = contenders.filter(p => p.score === maxScore);
   const isDraw     = topPlayers.length > 1;
-  const winnerNum  = isDraw ? null : ranking[0].player;
+  const winnerNum  = isDraw ? null : contenders[0].player;
 
   function playerName(num) {
     if (cfg.aiMode === "online" && cfg.onlinePlayerNames)
