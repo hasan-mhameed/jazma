@@ -1,8 +1,8 @@
 // 📄 ui/xpUI.js
 // شريط XP في user-bar + popup ترقية المستوى
 
-import { getXP, getLevelFromXP, LEVELS } from "../xp.js?v=1784757639";
-import { getCurrentUser } from "../auth.js?v=1784757639";
+import { getXP, getLevelFromXP, LEVELS } from "../xp.js?v=1784759531";
+import { getCurrentUser } from "../auth.js?v=1784759531";
 
 // ── تحديث شريط XP ─────────────────────────────────────────────────
 export async function refreshXPBar() {

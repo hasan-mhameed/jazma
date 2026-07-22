@@ -1,6 +1,6 @@
 // 📄 ui/statsModal.js
 // عرض modal الإحصائيات مع فلتر زمني
-import { getAllStats } from "../auth.js?v=1784757639";
+import { getAllStats } from "../auth.js?v=1784759531";
 
 let _statsFilter = 'all';
 
