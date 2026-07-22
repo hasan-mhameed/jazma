@@ -1,42 +1,55 @@
 // 📄 gameEnd.js — v14.3
-import { audioManager } from "../audio/audioManager.js?v=1784676200";
+import { audioManager } from "../audio/audioManager.js?v=1784757639";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1784676200";
-import { saveMatch } from "../history.js?v=1784676200";
-import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1784676200";
-import { showNewAchievements } from "./achievementsUI.js?v=1784676200";
-import { calcXP, addXP } from "../xp.js?v=1784676200";
-import { showXPGain } from "./xpUI.js?v=1784676200";
-import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1784676200";
-import { commitMatchCoins } from "../core/wallet.js?v=1784676200";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1784757639";
+import { saveMatch } from "../history.js?v=1784757639";
+import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1784757639";
+import { showNewAchievements } from "./achievementsUI.js?v=1784757639";
+import { calcXP, addXP } from "../xp.js?v=1784757639";
+import { showXPGain } from "./xpUI.js?v=1784757639";
+import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1784757639";
+import { commitMatchCoins } from "../core/wallet.js?v=1784757639";
 
 export let _matchStartTime = Date.now();
 export function resetMatchTimer() { _matchStartTime = Date.now(); }
 
-export async function endGame(cfg, scores, forced = false, loserPlayer = null) {
+export async function endGame(cfg, scores, forced = false, loserPlayer = null, exitInfo = null) {
   const totalSquares = (cfg.rows - 1) * (cfg.cols - 1);
   const filled = Object.values(scores).reduce((a, b) => (+a||0) + (+b||0), 0);
   // النهاية الطبيعية تتطلب اكتمال اللوحة؛ الإجبارية (نفاد بنك الوقت) تتخطّاه
   if (!forced && filled < totalSquares) return;
 
-  // ترتيب اللاعبين — مع استبعاد الخاسر بالوقت (نفاد البنك = خسارة مؤكّدة مهما كانت النقاط)
+  // خريطة الخارجين وسبب خروجهم: { رقم اللاعب: "نفد وقته" | "انسحب" }
+  // نبنيها من exitInfo (المُمرّرة) + loserPlayer (توافق خلفي) + حالة multiPlayers
+  const exited = {};
+  if (exitInfo && typeof exitInfo === 'object') Object.assign(exited, exitInfo);
+  if (loserPlayer != null && !exited[loserPlayer]) exited[loserPlayer] = "نفد وقته";
+  if (cfg.multiPlayers) {
+    Object.values(cfg.multiPlayers).forEach(pl => {
+      if (pl.active === false && !exited[pl.num]) exited[pl.num] = "انسحب";
+    });
+  }
+  const exitedNums = Object.keys(exited).map(Number);
+
+  // ترتيب العرض: المتنافسون بالنقاط أولاً, ثم الخارجون بالأسفل
   let ranking = Object.entries(scores)
     .map(([player, score]) => ({ player: Number(player), score }))
-    .sort((a, b) => b.score - a.score);
-  if (loserPlayer != null) {
-    // الخاسر بالوقت يُنزَّل لأسفل الترتيب دائماً (لا يفوز ولا يتعادل)
-    ranking = ranking.filter(p => p.player !== Number(loserPlayer))
-              .concat(ranking.filter(p => p.player === Number(loserPlayer)));
-  }
+    .sort((a, b) => {
+      const aOut = exitedNums.includes(a.player) ? 1 : 0;
+      const bOut = exitedNums.includes(b.player) ? 1 : 0;
+      if (aOut !== bOut) return aOut - bOut;       // الخارجون للأسفل
+      return b.score - a.score;                      // ثم بالنقاط
+    });
 
-  // عند وجود خاسر بالوقت: يُستبعد من حساب الفوز/التعادل (خسر مؤكّداً)
-  const contenders = loserPlayer != null
-    ? ranking.filter(p => p.player !== Number(loserPlayer))
+  // عند وجود خارجين: يُستبعدون من حساب الفوز/التعادل (خسروا مؤكّداً)
+  const contenders = exitedNums.length
+    ? ranking.filter(p => !exitedNums.includes(p.player))
     : ranking;
-  const maxScore   = contenders[0].score;
-  const topPlayers = contenders.filter(p => p.score === maxScore);
+  const pool       = contenders.length ? contenders : ranking; // احتياط
+  const maxScore   = pool[0].score;
+  const topPlayers = pool.filter(p => p.score === maxScore);
   const isDraw     = topPlayers.length > 1;
-  const winnerNum  = isDraw ? null : contenders[0].player;
+  const winnerNum  = isDraw ? null : pool[0].player;
 
   function playerName(num) {
     if (cfg.aiMode === "online" && cfg.onlinePlayerNames)
@@ -236,11 +249,17 @@ export async function endGame(cfg, scores, forced = false, loserPlayer = null) {
     ranking.forEach((p, i) => {
       const color = cfg.colors[p.player - 1] || "#999";
       const row   = document.createElement("div");
+      const isExited = exited[p.player];
       row.style.color        = color;
       row.style.padding      = "6px 0";
       row.style.fontSize     = "1.05rem";
       row.style.borderBottom = "1px solid rgba(255,255,255,0.08)";
-      row.textContent = `${i + 1}. ${playerName(p.player)}: ${p.score} نقطة`;
+      row.style.opacity      = isExited ? "0.6" : "1";
+      // شارة توضّح خروج اللاعب (نفد وقته/انسحب) — النقاط تبقى ظاهرة لكن مؤطّرة
+      const badge = isExited
+        ? ` <span style="font-size:0.8rem;background:rgba(248,113,113,0.2);color:#fca5a5;padding:1px 7px;border-radius:8px;border:1px solid #f8717155;">${isExited}</span>`
+        : "";
+      row.innerHTML = `${i + 1}. ${playerName(p.player)}: ${p.score} نقطة${badge}`;
       winnerDetails.appendChild(row);
     });
 
