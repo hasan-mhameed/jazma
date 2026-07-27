@@ -1,20 +1,20 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1784759531";
-import { makeKey }                            from "../utils.js?v=1784759531";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1784759531";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1784759531";
-import { endGame }                            from "./gameEnd.js?v=1784759531";
-import { audioManager }                       from "../audio/audioManager.js?v=1784759531";
-import { checkSquaresAround }                 from "../core/logic.js?v=1784759531";
-import { onlineManager }                      from "../firebase.js?v=1784759531";
-import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1784759531";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1784759531";
-import { refreshInventory } from "./powersUI.js?v=1784759531";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1784759531";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer, cutBank, getTimerMode } from "./turnTimer.js?v=1784759531";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1784759531";
+import { state }                              from "../core/state.js?v=1785103705";
+import { makeKey }                            from "../utils.js?v=1785103705";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1785103705";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1785103705";
+import { endGame }                            from "./gameEnd.js?v=1785103705";
+import { audioManager }                       from "../audio/audioManager.js?v=1785103705";
+import { checkSquaresAround }                 from "../core/logic.js?v=1785103705";
+import { onlineManager }                      from "../firebase.js?v=1785103705";
+import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1785103705";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1785103705";
+import { refreshInventory } from "./powersUI.js?v=1785103705";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1785103705";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer, cutBank, getTimerMode, getBank, setBank } from "./turnTimer.js?v=1785103705";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1785103705";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -447,8 +447,9 @@ export function handleEdgeClick(obj, cfg, isOpponentMove=false, forcedPlayer=nul
   if ((state.squaresFilled || 0) >= total) {
     // إرسال الحركة الأخيرة بالقناة الصحيحة (الجماعي له سجل moves منفصل!)
     if (cfg.aiMode==='online' && !isOpponentMove) {
-      if (cfg.multiPlayers) onlineManager.pushMultiMove(obj.key, player, Date.now());
-      else onlineManager.pushMove(obj.key, Date.now());
+      const myBank = getTimerMode()==='bank' ? getBank(player) : null;
+      if (cfg.multiPlayers) onlineManager.pushMultiMove(obj.key, player, Date.now(), myBank);
+      else onlineManager.pushMove(obj.key, Date.now(), myBank);
     }
     state.gameFinished = true; // المباراة انتهت طبيعياً (الخروج بعدها ليس انسحاباً)
     if (isTimerEnabled()) stopTurnTimer();
@@ -487,12 +488,13 @@ export function handleEdgeClick(obj, cfg, isOpponentMove=false, forcedPlayer=nul
     refreshInventory(cfg);
   }
 
-  // إرسال الحركة أونلاين (المُرسِل فقط)
+  // إرسال الحركة أونلاين (المُرسِل فقط) — مع بنك صاحب الدور للتزامن
   if (cfg.aiMode==='online' && !isOpponentMove) {
+    const myBank = getTimerMode()==='bank' ? getBank(player) : null;
     if (cfg.multiPlayers) {
-      onlineManager.pushMultiMove(obj.key, nextPlayer, Date.now());
+      onlineManager.pushMultiMove(obj.key, nextPlayer, Date.now(), myBank);
     } else {
-      onlineManager.pushMove(obj.key, Date.now());
+      onlineManager.pushMove(obj.key, Date.now(), myBank);
     }
   }
   setTimeout(() => triggerAI(cfg), 100);
@@ -880,13 +882,17 @@ export function skipInactiveTurn(cfg) {
   updateTurn(cfg);
 }
 
-export function applyOnlineMove(lineKey, cfg, nextTurn, byPlayer) {
+export function applyOnlineMove(lineKey, cfg, nextTurn, byPlayer, bankLeft) {
   if (state.lines.has(lineKey)) return;
   const obj = edgeObjects.find(e => e.key === lineKey);
   // في التعدد: نمرّر صاحب الحركة صريحاً (byPlayer) حتى تُنسب للّاعب الصحيح
   if (obj && !obj.drawn) {
     const forced = (cfg.multiPlayers && typeof byPlayer === 'number') ? byPlayer : null;
     handleEdgeClick(obj, cfg, true, forced);
+  }
+  // تزامن البنك: نضبط بنك صاحب الحركة على قيمته الحقيقية المرسلة (يقتل الانحراف التراكمي)
+  if (getTimerMode() === 'bank' && typeof bankLeft === 'number' && typeof byPlayer === 'number') {
+    setBank(byPlayer, bankLeft);
   }
   // المباراة انتهت بهذه الحركة؟ لا دور جديد ولا مؤقّت (شاشة النتيجة ظاهرة)
   if (state.gameFinished) { stopTurnTimer(); return; }

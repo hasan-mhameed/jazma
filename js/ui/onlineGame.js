@@ -1,10 +1,10 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1784759531";
-import { onlineManager } from "../firebase.js?v=1784759531";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1784759531";
-import { state } from "../core/state.js?v=1784759531";
-import { getCurrentUser } from "../auth.js?v=1784759531";
+import { config } from "../config/config.js?v=1785103705";
+import { onlineManager } from "../firebase.js?v=1785103705";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1785103705";
+import { state } from "../core/state.js?v=1785103705";
+import { getCurrentUser } from "../auth.js?v=1785103705";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -443,8 +443,11 @@ export function launchOnlineGame(myPlayerNum, onlineTurnInd, onGameStart) {
     updateOnlineTurnIndicator(onlineTurnInd);
 
     requestAnimationFrame(() => {
-      onlineManager.onMove(lineKey => {
-        applyOnlineMove(lineKey, config);
+      onlineManager.onMove((lineKey, nextTurn, byPlayer, bankLeft) => {
+        // الثنائي: صاحب الحركة هو الخصم (byPlayer قد يكون undefined) — نستنتجه
+        const mover = (typeof byPlayer === 'number') ? byPlayer
+                    : (config.onlinePlayerNum === 1 ? 2 : 1);
+        applyOnlineMove(lineKey, config, nextTurn, mover, bankLeft);
         updateOnlineTurnIndicator(onlineTurnInd);
       });
     });
@@ -505,8 +508,8 @@ export function launchOnlineMultiGame(myPlayerNum, onlineTurnInd, onGameStart) {
 
     requestAnimationFrame(() => {
       // تطبيق حركات أي خصم (متعدد) مع رقم الدور التالي وصاحب الحركة
-      onlineManager.onMove((lineKey, nextTurn, byPlayer) => {
-        applyOnlineMove(lineKey, config, nextTurn, byPlayer);
+      onlineManager.onMove((lineKey, nextTurn, byPlayer, bankLeft) => {
+        applyOnlineMove(lineKey, config, nextTurn, byPlayer, bankLeft);
         updateOnlineTurnIndicator(onlineTurnInd);
       });
     });

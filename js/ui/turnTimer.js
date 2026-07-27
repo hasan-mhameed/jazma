@@ -2,9 +2,9 @@
 // مؤقّت الدور — نمطان:
 //   perTurn: عدّاد ثابت لكل خطوة (15 ثانية)
 //   bank:    بنك وقت لكل لاعب (Chess Clock) — ينزل بدوره فقط، نفاده = خسارة
-import { audioManager } from "../audio/audioManager.js?v=1784759531";
-import { state } from "../core/state.js?v=1784759531";
-import { getEffect, clearEffect } from "../core/powers.js?v=1784759531";
+import { audioManager } from "../audio/audioManager.js?v=1785103705";
+import { state } from "../core/state.js?v=1785103705";
+import { getEffect, clearEffect } from "../core/powers.js?v=1785103705";
 
 // ألوان اللاعبين (تطابق ألوان اللوحة والبطاقات)
 const PLAYER_COLORS = ['#2dd4bf', '#fb923c', '#a78bfa', '#fcd34d'];
@@ -39,6 +39,14 @@ export function initTurnTimer({ enabled, mode = 'perTurn', players = 2, bankSeco
 export function isTimerEnabled() { return _enabled; }
 export function getTimerMode()   { return _mode; }
 export function getBank(player)  { return _banks[player] ?? 0; }
+
+// ضبط بنك لاعب من مصدر خارجي (تزامن أونلاين — القيمة المستلمة من صاحب الدور عبر Firebase)
+// نصحّح فقط إذا اختلفت القيمة لتفادي وميض العرض
+export function setBank(player, seconds) {
+  if (_mode !== 'bank' || typeof seconds !== 'number') return;
+  _banks[player] = Math.max(0, Math.round(seconds));
+  renderTimer();
+}
 
 // بدء العدّ لدور (perTurn: تصفير لـ15 / bank: متابعة بنك صاحب الدور بلا تصفير)
 export function startTurnTimer() {

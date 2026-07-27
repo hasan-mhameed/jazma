@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1784759531";
+import { getCurrentUser }   from "./auth.js?v=1785103705";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -194,12 +194,13 @@ export class OnlineManager {
   }
 
   // ══ إرسال حركة ══════════════════════════════════════════════
-  async pushMove(lineKey, seq) {
+  async pushMove(lineKey, seq, bankLeft = null) {
     if (!this.roomCode) return;
     await update(ref(db, `rooms/${this.roomCode}/move`), {
       key: lineKey,
       by:  this.playerNum,
       seq: seq,  // رقم تسلسلي يضمن عدم تكرار نفس الحركة
+      ...(bankLeft != null ? { bank: bankLeft } : {}),
     });
   }
 
@@ -345,11 +346,12 @@ export class OnlineManager {
   }
 
   // إرسال حركة متعددة (مع رقم الدور التالي)
-  async pushMultiMove(lineKey, nextTurn, seq) {
+  async pushMultiMove(lineKey, nextTurn, seq, bankLeft = null) {
     if (!this.roomCode) return;
     // سجل حركات كامل (append) — لا حركة تمحو أخرى، والمتأخر يستلم الكل بالترتيب
     const mref = push(ref(db, `rooms/${this.roomCode}/moves`));
-    await set(mref, { key: lineKey, by: this.playerNum, seq: seq || Date.now(), nextTurn });
+    await set(mref, { key: lineKey, by: this.playerNum, seq: seq || Date.now(), nextTurn,
+      ...(bankLeft != null ? { bank: bankLeft } : {}) });
     await update(ref(db, `rooms/${this.roomCode}`), { turn: nextTurn });
   }
 
@@ -420,7 +422,7 @@ export class OnlineManager {
       if (!data || !data.by || !data.key) return;
       if (data.by === this.playerNum) return; // حركاتنا لا تُعاد علينا
       if (!this._cbMove) { this._pendingMoves.push(data); return; } // لسا نحمّل: نخزّن بالطابور
-      this._cbMove(data.key, data.nextTurn, data.by);
+      this._cbMove(data.key, data.nextTurn, data.by, data.bank);
     });
     this._unsubs.push(unsub);
   }
@@ -441,7 +443,7 @@ export class OnlineManager {
       // لو المستقبِل غير جاهز بعد (لسا يحمّل اللعبة): نخزّن الحركة معلّقة
       if (!this._cbMove) { this._pendingMove = data; this._lastApplied = null; return; }
       // للتعدد: نمرّر (مفتاح الخط، الدور التالي، صاحب الحركة)
-      this._cbMove(data.key, data.nextTurn, data.by);
+      this._cbMove(data.key, data.nextTurn, data.by, data.bank);
     });
     this._unsubs.push(unsub);
   }
@@ -518,7 +520,7 @@ export class OnlineManager {
     // تسليم طابور الحركات الجماعية المعلّقة (بالترتيب)
     if (this._pendingMoves && this._pendingMoves.length) {
       const q = this._pendingMoves; this._pendingMoves = [];
-      q.forEach(d => cb(d.key, d.nextTurn, d.by));
+      q.forEach(d => cb(d.key, d.nextTurn, d.by, d.bank));
     }
     // تسليم حركة معلّقة (الثنائي)
     if (this._pendingMove) {
@@ -526,7 +528,7 @@ export class OnlineManager {
       const moveId = `${d.key}_${d.seq}`;
       if (moveId !== this._lastApplied) {
         this._lastApplied = moveId;
-        cb(d.key, d.nextTurn, d.by);
+        cb(d.key, d.nextTurn, d.by, d.bank);
       }
     }
   }
