@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1785103705";
+import { getCurrentUser }   from "./auth.js?v=1785402127";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -52,6 +52,8 @@ export class OnlineManager {
     this._lastMoveKey = null;  // ✅ منع تطبيق نفس الحركة مرتين
     this._pendingMove = null;  // ✅ حركة وصلت قبل جاهزية المستقبِل (ثنائي)
     this._pendingMoves = [];   // ✅ طابور حركات معلّقة (جماعي — سجل كامل)
+    this._lastBankSeq = null;  // ✅ منع تكرار تحديث البنك الفوري
+    this._cbBankUpdate = null;
     // ── حالة التعدد (3-4 لاعبين) ──
     this._isMulti     = false;
     this._cbLobby     = null;  // تحديث قائمة اللاعبين في اللوبي
@@ -80,6 +82,7 @@ export class OnlineManager {
     onDisconnect(ref(db, `rooms/${code}`)).remove();
     this._listenForPlayer2(code);
     this._listenForMoves(code);
+    this._listenBankUpdate(code);
     this._listenForRestart(code);
     this._monitorConnection();
     return code;
@@ -104,6 +107,7 @@ export class OnlineManager {
 
     onDisconnect(ref(db, `rooms/${code}/status`)).set("finished");
     this._listenForMoves(code);
+    this._listenBankUpdate(code);
     this._listenForOpponentLeave(code);
     this._listenForRestart(code);
     this._monitorConnection();
@@ -165,6 +169,7 @@ export class OnlineManager {
     onDisconnect(ref(db, `rooms/${code}`)).remove();
     this._listenForPlayer2(code);
     this._listenForMoves(code);
+    this._listenBankUpdate(code);
     this._listenForOpponentLeave(code);
     this._listenForRestart(code);
     this._monitorConnection();
@@ -265,6 +270,7 @@ export class OnlineManager {
     onDisconnect(ref(db, `rooms/${code}`)).remove();
     this._listenLobby(code);
     this._listenForMultiMoves(code);
+    this._listenBankUpdate(code);
     this._monitorConnection();
     return { code };
   }
@@ -307,6 +313,7 @@ export class OnlineManager {
     onDisconnect(ref(db, `rooms/${code}/players/${myUid}/active`)).set(false);
     this._listenLobby(code);
     this._listenForMultiMoves(code);
+    this._listenBankUpdate(code);
     this._monitorConnection();
     return { code, myNum, cfg: room.cfg, maxPlayers: room.maxPlayers };
   }
@@ -414,6 +421,30 @@ export class OnlineManager {
       }
     } catch {}
   }
+
+  // بثّ فوري لتحديث بنك لاعب (عند شراء أداة وقت بين الحركات — لا ننتظر الحركة التالية)
+  async pushBankUpdate(player, bankLeft) {
+    if (!this.roomCode || typeof bankLeft !== 'number') return;
+    try {
+      await update(ref(db, `rooms/${this.roomCode}`), {
+        bankUpdate: { player, bank: bankLeft, seq: Date.now(), by: this.playerNum },
+      });
+    } catch {}
+  }
+
+  _listenBankUpdate(code) {
+    const unsub = onValue(ref(db, `rooms/${code}/bankUpdate`), (snap) => {
+      if (!snap.exists()) return;
+      const d = snap.val();
+      if (!d || typeof d.player !== 'number' || typeof d.bank !== 'number') return;
+      if (d.by === this.playerNum) return;         // تحديثاتنا لا تُعاد علينا
+      if (d.seq === this._lastBankSeq) return;      // منع التكرار
+      this._lastBankSeq = d.seq;
+      this._cbBankUpdate && this._cbBankUpdate(d.player, d.bank);
+    });
+    this._unsubs.push(unsub);
+  }
+  onBankUpdate(cb) { this._cbBankUpdate = cb; }
 
   // مستمع سجل الحركات الجماعي — onChildAdded يسلّم كل الحركات (حتى القديمة) بالترتيب
   _listenForMultiMoves(code) {

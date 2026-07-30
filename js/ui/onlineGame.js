@@ -1,10 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1785103705";
-import { onlineManager } from "../firebase.js?v=1785103705";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1785103705";
-import { state } from "../core/state.js?v=1785103705";
-import { getCurrentUser } from "../auth.js?v=1785103705";
+import { config } from "../config/config.js?v=1785402127";
+import { onlineManager } from "../firebase.js?v=1785402127";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1785402127";
+import { setBank } from "./turnTimer.js?v=1785402127";
+import { state } from "../core/state.js?v=1785402127";
+import { getCurrentUser } from "../auth.js?v=1785402127";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -450,6 +451,8 @@ export function launchOnlineGame(myPlayerNum, onlineTurnInd, onGameStart) {
         applyOnlineMove(lineKey, config, nextTurn, mover, bankLeft);
         updateOnlineTurnIndicator(onlineTurnInd);
       });
+      // تحديث بنك فوري (شراء أداة بين الحركات)
+      onlineManager.onBankUpdate((player, bank) => setBank(player, bank));
     });
 
     onlineManager.onOpponentLeft(() => { if (!state.gameFinished) showDisconnectAlert(); });
@@ -512,6 +515,8 @@ export function launchOnlineMultiGame(myPlayerNum, onlineTurnInd, onGameStart) {
         applyOnlineMove(lineKey, config, nextTurn, byPlayer, bankLeft);
         updateOnlineTurnIndicator(onlineTurnInd);
       });
+      // تحديث بنك فوري (شراء أداة بين الحركات)
+      onlineManager.onBankUpdate((player, bank) => setBank(player, bank));
     });
 
     // خروج لاعب أثناء اللعب — المباراة تكمّل بالباقين
