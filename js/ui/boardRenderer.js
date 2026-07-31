@@ -1,20 +1,20 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1785402127";
-import { makeKey }                            from "../utils.js?v=1785402127";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1785402127";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1785402127";
-import { endGame }                            from "./gameEnd.js?v=1785402127";
-import { audioManager }                       from "../audio/audioManager.js?v=1785402127";
-import { checkSquaresAround }                 from "../core/logic.js?v=1785402127";
-import { onlineManager }                      from "../firebase.js?v=1785402127";
-import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1785402127";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1785402127";
-import { refreshInventory } from "./powersUI.js?v=1785402127";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1785402127";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer, cutBank, getTimerMode, getBank, setBank } from "./turnTimer.js?v=1785402127";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1785402127";
+import { state }                              from "../core/state.js?v=1785411659";
+import { makeKey }                            from "../utils.js?v=1785411659";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1785411659";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1785411659";
+import { endGame }                            from "./gameEnd.js?v=1785411659";
+import { audioManager }                       from "../audio/audioManager.js?v=1785411659";
+import { checkSquaresAround }                 from "../core/logic.js?v=1785411659";
+import { onlineManager }                      from "../firebase.js?v=1785411659";
+import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1785411659";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1785411659";
+import { refreshInventory } from "./powersUI.js?v=1785411659";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1785411659";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer, cutBank, getTimerMode, getBank, setBank } from "./turnTimer.js?v=1785411659";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1785411659";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -470,31 +470,32 @@ export function handleEdgeClick(obj, cfg, isOpponentMove=false, forcedPlayer=nul
     nextPlayer = nextActivePlayer(player, cfg);
   }
 
-  // في التعدد + حركة خصم: لا نغيّر الدور هنا (يُضبط من nextTurn في applyOnlineMove)
-  const multiOpponent = cfg.multiPlayers && isOpponentMove;
+  // في الأونلاين + حركة خصم: لا نغيّر الدور هنا (يُضبط من nextTurn في applyOnlineMove)
+  const onlineOpponent = cfg.aiMode === 'online' && isOpponentMove;
 
   if (!completed) {
     if (hadFreeLine) {
       // الخط الإضافي: نفس اللاعب يكمل (لا نبدّل الدور)
-      if (!multiOpponent) restartTimerIfHuman(cfg);
-    } else if (!multiOpponent) {
+      if (!onlineOpponent) restartTimerIfHuman(cfg);
+    } else if (!onlineOpponent) {
       state.currentPlayer = nextPlayer;
       updateTurn(cfg);
     }
     refreshInventory(cfg);
   } else {
     // أكمل مربعاً — يلعب ثانيةً أصلاً، نعيد المؤقّت لنفس اللاعب
-    if (!multiOpponent) restartTimerIfHuman(cfg);
+    if (!onlineOpponent) restartTimerIfHuman(cfg);
     refreshInventory(cfg);
   }
 
-  // إرسال الحركة أونلاين (المُرسِل فقط) — مع بنك صاحب الدور للتزامن
+  // إرسال الحركة أونلاين (المُرسِل فقط) — مع بنك صاحب الدور والدور التالي للتزامن
   if (cfg.aiMode==='online' && !isOpponentMove) {
     const myBank = getTimerMode()==='bank' ? getBank(player) : null;
     if (cfg.multiPlayers) {
       onlineManager.pushMultiMove(obj.key, nextPlayer, Date.now(), myBank);
     } else {
-      onlineManager.pushMove(obj.key, Date.now(), myBank);
+      // الثنائي: نرسل الدور التالي صراحةً (يراعي السمكة/الخط الإضافي)
+      onlineManager.pushMove(obj.key, Date.now(), myBank, nextPlayer);
     }
   }
   setTimeout(() => triggerAI(cfg), 100);
@@ -900,9 +901,12 @@ export function applyOnlineMove(lineKey, cfg, nextTurn, byPlayer, bankLeft) {
   }
   // المباراة انتهت بهذه الحركة؟ لا دور جديد ولا مؤقّت (شاشة النتيجة ظاهرة)
   if (state.gameFinished) { stopTurnTimer(); return; }
-  // الثنائي: ضمانة إعادة تشغيل المؤقّت بعد تطبيق حركة الخصم
-  // (حماية من أي إيقاف لاحق — نفس الضمانة التي تحمي الجماعي أدناه)
+  // الثنائي: الدور يُضبط حصرياً من nextTurn المُرسل (يراعي السمكة/الخط الإضافي)
   if (!cfg.multiPlayers && cfg.aiMode === 'online') {
+    if (typeof nextTurn === 'number' && nextTurn > 0) {
+      state.currentPlayer = nextTurn;
+      updateTurn(cfg);
+    }
     setTimeout(() => {
       if (!state.gameFinished) { try { restartTimerIfHuman(cfg); } catch {} }
     }, 150);
@@ -910,7 +914,7 @@ export function applyOnlineMove(lineKey, cfg, nextTurn, byPlayer, bankLeft) {
   // في الغرفة الجماعية: الدور يُضبط حصرياً من nextTurn (مصدر الحقيقة الوحيد)
   if (cfg.multiPlayers && typeof nextTurn === 'number' && nextTurn > 0) {
     state.currentPlayer = nextTurn;
-    // حماية: لو الرقم المرسَل يخص لاعباً منسحباً → نتخطّاه (حساب متطابق عند الجميع)
+    // حماية: لو الرقم المرسَل يخص لاعباً منسحباً → نتخطّاه (حساب متطابق عند الជميع)
     skipInactiveTurn(cfg);
     updateTurn(cfg);
     // المؤقّت يُعاد للجميع (الكل يشاهد وقت صاحب الدور الجديد)

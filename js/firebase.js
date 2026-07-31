@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1785402127";
+import { getCurrentUser }   from "./auth.js?v=1785411659";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -199,13 +199,14 @@ export class OnlineManager {
   }
 
   // ══ إرسال حركة ══════════════════════════════════════════════
-  async pushMove(lineKey, seq, bankLeft = null) {
+  async pushMove(lineKey, seq, bankLeft = null, nextTurn = null) {
     if (!this.roomCode) return;
     await update(ref(db, `rooms/${this.roomCode}/move`), {
       key: lineKey,
       by:  this.playerNum,
       seq: seq,  // رقم تسلسلي يضمن عدم تكرار نفس الحركة
       ...(bankLeft != null ? { bank: bankLeft } : {}),
+      ...(nextTurn != null ? { nextTurn } : {}),
     });
   }
 
