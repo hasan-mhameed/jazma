@@ -1,20 +1,20 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1785411659";
-import { makeKey }                            from "../utils.js?v=1785411659";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1785411659";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1785411659";
-import { endGame }                            from "./gameEnd.js?v=1785411659";
-import { audioManager }                       from "../audio/audioManager.js?v=1785411659";
-import { checkSquaresAround }                 from "../core/logic.js?v=1785411659";
-import { onlineManager }                      from "../firebase.js?v=1785411659";
-import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1785411659";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1785411659";
-import { refreshInventory } from "./powersUI.js?v=1785411659";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1785411659";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer, cutBank, getTimerMode, getBank, setBank } from "./turnTimer.js?v=1785411659";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1785411659";
+import { state }                              from "../core/state.js?v=1785540675";
+import { makeKey }                            from "../utils.js?v=1785540675";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1785540675";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1785540675";
+import { endGame }                            from "./gameEnd.js?v=1785540675";
+import { audioManager }                       from "../audio/audioManager.js?v=1785540675";
+import { checkSquaresAround }                 from "../core/logic.js?v=1785540675";
+import { onlineManager }                      from "../firebase.js?v=1785540675";
+import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1785540675";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1785540675";
+import { refreshInventory } from "./powersUI.js?v=1785540675";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1785540675";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer, cutBank, getTimerMode, getBank, setBank } from "./turnTimer.js?v=1785540675";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1785540675";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -906,6 +906,7 @@ export function applyOnlineMove(lineKey, cfg, nextTurn, byPlayer, bankLeft) {
     if (typeof nextTurn === 'number' && nextTurn > 0) {
       state.currentPlayer = nextTurn;
       updateTurn(cfg);
+      refreshInventory(cfg); // تحديث أزرار الشراء لحالة الدور الجديد
     }
     setTimeout(() => {
       if (!state.gameFinished) { try { restartTimerIfHuman(cfg); } catch {} }
@@ -917,6 +918,7 @@ export function applyOnlineMove(lineKey, cfg, nextTurn, byPlayer, bankLeft) {
     // حماية: لو الرقم المرسَل يخص لاعباً منسحباً → نتخطّاه (حساب متطابق عند الជميع)
     skipInactiveTurn(cfg);
     updateTurn(cfg);
+    refreshInventory(cfg); // تحديث أزرار الشراء لحالة الدور الجديد
     // المؤقّت يُعاد للجميع (الكل يشاهد وقت صاحب الدور الجديد)
     try { restartTimerIfHuman(cfg); } catch {}
   }
