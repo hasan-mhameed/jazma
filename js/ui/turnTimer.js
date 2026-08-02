@@ -2,9 +2,9 @@
 // مؤقّت الدور — نمطان:
 //   perTurn: عدّاد ثابت لكل خطوة (15 ثانية)
 //   bank:    بنك وقت لكل لاعب (Chess Clock) — ينزل بدوره فقط، نفاده = خسارة
-import { audioManager } from "../audio/audioManager.js?v=1785622967";
-import { state } from "../core/state.js?v=1785622967";
-import { getEffect, clearEffect } from "../core/powers.js?v=1785622967";
+import { audioManager } from "../audio/audioManager.js?v=1785711246";
+import { state } from "../core/state.js?v=1785711246";
+import { getEffect, clearEffect } from "../core/powers.js?v=1785711246";
 
 // ألوان اللاعبين (تطابق ألوان اللوحة والبطاقات)
 const PLAYER_COLORS = ['#2dd4bf', '#fb923c', '#a78bfa', '#fcd34d'];
@@ -58,6 +58,8 @@ export function enableCentralClock(serverNowFn, onTimeout) {
   _clockMode = true;
   _serverNowFn = serverNowFn;
   _onClockTimeout = onTimeout;
+  // نبدأ العدّاد فوراً (يعمل عند الجميع — يحسب من المرجع المركزي)
+  if (_enabled && !_intervalId) _intervalId = setInterval(tick, 1000);
 }
 
 // استقبال حالة الساعة من Firebase (المرجع)
@@ -192,7 +194,15 @@ function renderTimer() {
   }
   el.classList.remove('hidden');
 
-  const val = _mode === 'bank' ? (_banks[state.currentPlayer] ?? 0) : _remaining;
+  // القيمة المعروضة: أونلاين ساعة مركزية = حساب حيّ من المرجع (مقرّب) / غير ذلك = البنك المحلي
+  let val;
+  if (_mode === 'bank' && _clockMode) {
+    val = Math.ceil(clockRemaining(state.currentPlayer));
+  } else if (_mode === 'bank') {
+    val = _banks[state.currentPlayer] ?? 0;
+  } else {
+    val = _remaining;
+  }
   const warn = val <= WARN_AT;
   el.classList.toggle('warn', warn);
   el.textContent = `⏱️ ${fmt(val)}`;
@@ -218,7 +228,13 @@ function renderTimer() {
     for (const p in _banks) {
       const b = document.getElementById('pbank' + p);
       if (!b) continue;
-      const sec = _banks[p] ?? 0;
+      // أونلاين: صاحب الدور يُحسب حياً من المرجع، الباقون من بنكهم المخزّن
+      let sec;
+      if (_clockMode && Number(p) === state.currentPlayer) {
+        sec = Math.ceil(clockRemaining(Number(p)));
+      } else {
+        sec = Math.round(_banks[p] ?? 0);
+      }
       const m = Math.floor(sec / 60), s = sec % 60;
       b.textContent = `⏱ ${m}:${String(s).padStart(2, '0')}`;
       b.classList.toggle('low', sec <= 30);
