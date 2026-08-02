@@ -236,3 +236,26 @@
 ### بعد إكمال أ+ب+ج → التعدد مكتمل 100%، ثم:
 - جولة الصقل النهائي (5 بنود موثّقة: إعدادات، جوهرة، إشعارات تعدد، منسحب بالسكوربورد، تلوين نص الدور).
 - المؤجّلات الكبيرة: توزيع الأدوات، AI الخارق (نظرية السلاسل)، الاقتصاد الكامل + لوحة التحكم.
+
+### 🕐 بنك الوقت أونلاين — إعادة معمارية للساعة المركزية (v25.4+) — قرار "الحل الصح"
+**لماذا:** نموذج "صاحب الدور يبثّ بنكه مع الحركة" (v25.0-25.3) حلّ الانحراف التراكمي جزئياً لكن بقيت مشاكل جوهرية: فرق البداية (اختلاف لحظة دخول الأجهزة = فرق دائم للحركة الأولى)، والأدوات لا تظهر فورياً إلا بعد حركة. المستخدم اختار الحل الجذري القابل للتطوير (تمهيداً للإطلاق).
+**النموذج (ساعة شطرنج مركزية عبر Firebase):**
+- rooms/{code}/clock/ = { turnStartAt: serverTimestamp, currentPlayer, banks:{n:secs} }
+- كل جهاز يحسب المتبقي لصاحب الدور = banks[cp] - (nowServer - turnStartAt). المرجع الزمني = توقيت Firebase (فرق يُحسب مرة عبر .info/serverTimeOffset) → صفر انحراف عند الجميع (بداية/أدوات/أثناء).
+- كل حركة: المُرسِل يحدّث clock (يخصم المستهلك من بنكه، يضبط turnStartAt الجديد، currentPlayer). الكل يقرأ التحديث الواحد.
+- أداة (±وقت): تحدّث clock/banks مباشرة → الكل يراها فوراً (مرجع واحد).
+- نفاد: أي جهاز يحسب ≤0، لكن صاحب الدور يعلن رسمياً (يكتب النتيجة) والباقون يتبعون.
+- الحساب المحلي (setInterval) للعرض السلس فقط، والتصحيح دائم من clock.
+
+### ⏸️ حالة بناء الساعة المركزية (متوقّف مؤقتاً — نصف مبني، آمن)
+**تم (طبقة تحتية جاهزة، غير مربوطة بعد فـ_clockMode=false والنظام القديم يعمل):**
+- firebase.js: serverTimestamp مستورد. دوال: _watchServerOffset/serverNow (فرق توقيت السيرفر), initClock(banks,firstPlayer), pushClock(prevPlayer,prevBankLeft,nextPlayer), updateClockBank(player,newBank), _listenClock/onClock. مستدعاة _listenClock+_watchServerOffset في كل الغرف (5 مواضع). constructor فيه _serverOffset/_cbClock.
+- turnTimer.js: enableCentralClock(serverNowFn,onTimeout), applyClockState(clock), clockRemaining(player) [=banks[cp]-(serverNow-turnStartAt)/1000], tick معدّل: بالأونلاين (_clockMode) يحسب من المرجع بدل العد المحلي وينادي _onClockTimeout.
+**متبقّي (الربط — جلسة قادمة، حسّاس):**
+1. main.js launchGame: بالأونلاين نمط bank → enableCentralClock(onlineManager.serverNow, handler) + المضيف/المنشئ ينادي initClock(البنوك الابتدائية, اللاعب الأول).
+2. boardRenderer applyOnlineMove + إرسال الحركة: بدل pushMove/pushMultiMove bankLeft القديم → pushClock(prevPlayer, myBankRemaining, nextPlayer). واستقبال onClock → applyClockState.
+3. onlineGame: تسجيل onClock((clk)=>applyClockState(clk)) للثنائي والجماعي.
+4. الأدوات: extendTime/cutBank → updateClockBank(player, newValue) بدل pushBankUpdate.
+5. نفاد الوقت: _onClockTimeout → نفس منطق handleBankEmpty (صاحب الدور يعلن، الباقون يتبعون).
+6. تنظيف: إزالة نظام pushBankUpdate/bank-with-move القديم (v25.0-25.3) بعد نجاح الساعة.
+**النسخة الحالية بالحاوية: 1785540675 (v25.3) + إضافات غير مربوطة. آخر ZIP سليم مُسلَّم للمستخدم: Jazam_v25.3.zip.**

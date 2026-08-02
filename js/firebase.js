@@ -1,8 +1,8 @@
 // 📄 firebase.js — v11.8
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push }
+import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1785540675";
+import { getCurrentUser }   from "./auth.js?v=1785622967";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -54,6 +54,8 @@ export class OnlineManager {
     this._pendingMoves = [];   // ✅ طابور حركات معلّقة (جماعي — سجل كامل)
     this._lastBankSeq = null;  // ✅ منع تكرار تحديث البنك الفوري
     this._cbBankUpdate = null;
+    this._serverOffset = 0;    // فرق توقيت الجهاز عن Firebase
+    this._cbClock = null;      // مستمع الساعة المركزية
     // ── حالة التعدد (3-4 لاعبين) ──
     this._isMulti     = false;
     this._cbLobby     = null;  // تحديث قائمة اللاعبين في اللوبي
@@ -83,6 +85,8 @@ export class OnlineManager {
     this._listenForPlayer2(code);
     this._listenForMoves(code);
     this._listenBankUpdate(code);
+    this._listenClock(code);
+    this._watchServerOffset();
     this._listenForRestart(code);
     this._monitorConnection();
     return code;
@@ -108,6 +112,8 @@ export class OnlineManager {
     onDisconnect(ref(db, `rooms/${code}/status`)).set("finished");
     this._listenForMoves(code);
     this._listenBankUpdate(code);
+    this._listenClock(code);
+    this._watchServerOffset();
     this._listenForOpponentLeave(code);
     this._listenForRestart(code);
     this._monitorConnection();
@@ -170,6 +176,8 @@ export class OnlineManager {
     this._listenForPlayer2(code);
     this._listenForMoves(code);
     this._listenBankUpdate(code);
+    this._listenClock(code);
+    this._watchServerOffset();
     this._listenForOpponentLeave(code);
     this._listenForRestart(code);
     this._monitorConnection();
@@ -272,6 +280,8 @@ export class OnlineManager {
     this._listenLobby(code);
     this._listenForMultiMoves(code);
     this._listenBankUpdate(code);
+    this._listenClock(code);
+    this._watchServerOffset();
     this._monitorConnection();
     return { code };
   }
@@ -315,6 +325,8 @@ export class OnlineManager {
     this._listenLobby(code);
     this._listenForMultiMoves(code);
     this._listenBankUpdate(code);
+    this._listenClock(code);
+    this._watchServerOffset();
     this._monitorConnection();
     return { code, myNum, cfg: room.cfg, maxPlayers: room.maxPlayers };
   }
@@ -446,6 +458,49 @@ export class OnlineManager {
     this._unsubs.push(unsub);
   }
   onBankUpdate(cb) { this._cbBankUpdate = cb; }
+
+  // ══ الساعة المركزية (بنك الوقت أونلاين — مرجع Firebase موحّد) ══
+  // فرق توقيت الجهاز عن سيرفر Firebase (يُحسب مرة، للتزامن الدقيق)
+  _watchServerOffset() {
+    const offRef = ref(db, ".info/serverTimeOffset");
+    const unsub = onValue(offRef, snap => { this._serverOffset = snap.val() || 0; });
+    this._unsubs.push(unsub);
+  }
+  serverNow() { return Date.now() + (this._serverOffset || 0); }
+
+  // تهيئة الساعة عند بدء المباراة (المضيف/المنشئ فقط)
+  async initClock(banks, firstPlayer) {
+    if (!this.roomCode) return;
+    await update(ref(db, `rooms/${this.roomCode}/clock`), {
+      banks, currentPlayer: firstPlayer, turnStartAt: serverTimestamp(),
+    });
+  }
+
+  // تحديث الساعة عند حركة: نخصم المستهلك من بنك اللاعب الحالي ونبدأ دور التالي
+  async pushClock(prevPlayer, prevBankLeft, nextPlayer) {
+    if (!this.roomCode) return;
+    const upd = { currentPlayer: nextPlayer, turnStartAt: serverTimestamp() };
+    if (typeof prevBankLeft === 'number') upd[`banks/${prevPlayer}`] = Math.max(0, Math.round(prevBankLeft));
+    await update(ref(db, `rooms/${this.roomCode}/clock`), upd);
+  }
+
+  // تعديل بنك لاعب مباشرة (أداة ±وقت) — مرجع واحد يراه الجميع فوراً
+  async updateClockBank(player, newBank) {
+    if (!this.roomCode || typeof newBank !== 'number') return;
+    await update(ref(db, `rooms/${this.roomCode}/clock`), {
+      [`banks/${player}`]: Math.max(0, Math.round(newBank)),
+    });
+  }
+
+  // الاستماع لحالة الساعة (كل الأجهزة)
+  _listenClock(code) {
+    const unsub = onValue(ref(db, `rooms/${code}/clock`), snap => {
+      if (!snap.exists()) return;
+      this._cbClock && this._cbClock(snap.val());
+    });
+    this._unsubs.push(unsub);
+  }
+  onClock(cb) { this._cbClock = cb; }
 
   // مستمع سجل الحركات الجماعي — onChildAdded يسلّم كل الحركات (حتى القديمة) بالترتيب
   _listenForMultiMoves(code) {
