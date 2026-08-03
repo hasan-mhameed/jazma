@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1785711246";
+import { getCurrentUser }   from "./auth.js?v=1785711949";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -56,6 +56,7 @@ export class OnlineManager {
     this._cbBankUpdate = null;
     this._serverOffset = 0;    // فرق توقيت الجهاز عن Firebase
     this._cbClock = null;      // مستمع الساعة المركزية
+    this._lastClock = null;    // آخر حالة ساعة (تفادي فقدان الأولى)
     // ── حالة التعدد (3-4 لاعبين) ──
     this._isMulti     = false;
     this._cbLobby     = null;  // تحديث قائمة اللاعبين في اللوبي
@@ -496,11 +497,17 @@ export class OnlineManager {
   _listenClock(code) {
     const unsub = onValue(ref(db, `rooms/${code}/clock`), snap => {
       if (!snap.exists()) return;
-      this._cbClock && this._cbClock(snap.val());
+      const clk = snap.val();
+      this._lastClock = clk; // نخزّن آخر حالة (قد تصل قبل تسجيل الـ callback)
+      this._cbClock && this._cbClock(clk);
     });
     this._unsubs.push(unsub);
   }
-  onClock(cb) { this._cbClock = cb; }
+  onClock(cb) {
+    this._cbClock = cb;
+    // تسليم آخر حالة ساعة وصلت قبل التسجيل (تفادي فقدان الحالة الأولى)
+    if (this._lastClock) cb(this._lastClock);
+  }
 
   // مستمع سجل الحركات الجماعي — onChildAdded يسلّم كل الحركات (حتى القديمة) بالترتيب
   _listenForMultiMoves(code) {
