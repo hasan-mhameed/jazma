@@ -1,6 +1,6 @@
 // 📄 logic.js — v11.8
-import { makeKey } from "../utils.js?v=1785770097";
-import { state }   from "./state.js?v=1785770097";
+import { makeKey } from "../utils.js?v=1785793508";
+import { state }   from "./state.js?v=1785793508";
 
 // التحقق من اكتمال مربع واحد
 export function checkForSquare(r, c) {
