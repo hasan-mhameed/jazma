@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1785794447";
+import { getCurrentUser }   from "./auth.js?v=1785796691";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -491,9 +491,16 @@ export class OnlineManager {
   // تعديل بنك لاعب مباشرة (أداة ±وقت) — مرجع واحد يراه الجميع فوراً
   async updateClockBank(player, newBank) {
     if (!this.roomCode || typeof newBank !== 'number') return;
-    await update(ref(db, `rooms/${this.roomCode}/clock`), {
-      [`banks/${player}`]: Math.max(0, Math.round(newBank)),
-    });
+    // إذا كان اللاعب صاحب الدور الحالي: نعيد ضبط turnStartAt أيضاً
+    // (وإلا يُطرح الزمن المنقضي من القيمة الجديدة فتظهر أقل)
+    const upd = { [`banks/${player}`]: Math.max(0, Math.round(newBank)) };
+    try {
+      const snap = await get(ref(db, `rooms/${this.roomCode}/clock/currentPlayer`));
+      if (snap.exists() && Number(snap.val()) === Number(player)) {
+        upd.turnStartAt = serverTimestamp();
+      }
+    } catch {}
+    await update(ref(db, `rooms/${this.roomCode}/clock`), upd);
   }
 
   // الاستماع لحالة الساعة (كل الأجهزة)

@@ -2,9 +2,9 @@
 // مؤقّت الدور — نمطان:
 //   perTurn: عدّاد ثابت لكل خطوة (15 ثانية)
 //   bank:    بنك وقت لكل لاعب (Chess Clock) — ينزل بدوره فقط، نفاده = خسارة
-import { audioManager } from "../audio/audioManager.js?v=1785794447";
-import { state } from "../core/state.js?v=1785794447";
-import { getEffect, clearEffect } from "../core/powers.js?v=1785794447";
+import { audioManager } from "../audio/audioManager.js?v=1785796691";
+import { state } from "../core/state.js?v=1785796691";
+import { getEffect, clearEffect } from "../core/powers.js?v=1785796691";
 
 // ألوان اللاعبين (تطابق ألوان اللوحة والبطاقات)
 const PLAYER_COLORS = ['#2dd4bf', '#fb923c', '#a78bfa', '#fcd34d'];
@@ -165,6 +165,13 @@ export function extendTime(seconds = 5, player = null) {
   if (!_enabled) return false;
   if (_mode === 'bank') {
     const p = player ?? state.currentPlayer;
+    // الساعة المركزية: القيمة الجديدة = المتبقي الحيّ + الإضافة (تُكتب للمرجع عبر updateClockBank)
+    if (_clockMode) {
+      const newVal = Math.ceil(clockRemaining(p)) + seconds;
+      _banks[p] = newVal; // مؤقت للعرض حتى يصل المرجع
+      renderTimer();
+      return newVal; // نُرجع القيمة ليكتبها المستدعي في المرجع
+    }
     _banks[p] = (_banks[p] ?? 0) + seconds;
     renderTimer();
     return true;
@@ -178,6 +185,12 @@ export function extendTime(seconds = 5, player = null) {
 // قصّ ثوانٍ من بنك لاعب (أداة تقليص الوقت — نمط bank، فورية)
 export function cutBank(player, seconds = 5) {
   if (!_enabled || _mode !== 'bank') return false;
+  if (_clockMode) {
+    const newVal = Math.max(1, Math.ceil(clockRemaining(player)) - seconds);
+    _banks[player] = newVal; // مؤقت للعرض
+    renderTimer();
+    return newVal; // نُرجع القيمة ليكتبها المستدعي في المرجع
+  }
   _banks[player] = Math.max(1, (_banks[player] ?? 0) - seconds);
   renderTimer();
   return true;

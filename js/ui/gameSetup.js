@@ -1,10 +1,10 @@
 // 📄 ui/gameSetup.js
 // شاشة إعداد اللعبة + بدء اللعبة المحلية
 // تصميم مرن: الأحجام/اللاعبين/الأوضاع تُبنى من مصفوفات (سهلة التعديل)
-import { config } from "../config/config.js?v=1785794447";
-import { AIPlayer } from "../ai/aiPlayer.js?v=1785794447";
-import { getCurrentUser } from "../auth.js?v=1785794447";
-import { state } from "../core/state.js?v=1785794447";
+import { config } from "../config/config.js?v=1785796691";
+import { AIPlayer } from "../ai/aiPlayer.js?v=1785796691";
+import { getCurrentUser } from "../auth.js?v=1785796691";
+import { state } from "../core/state.js?v=1785796691";
 
 export let aiPlayer = null;
 
