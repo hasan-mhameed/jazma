@@ -2,9 +2,9 @@
 // مؤقّت الدور — نمطان:
 //   perTurn: عدّاد ثابت لكل خطوة (15 ثانية)
 //   bank:    بنك وقت لكل لاعب (Chess Clock) — ينزل بدوره فقط، نفاده = خسارة
-import { audioManager } from "../audio/audioManager.js?v=1785711949";
-import { state } from "../core/state.js?v=1785711949";
-import { getEffect, clearEffect } from "../core/powers.js?v=1785711949";
+import { audioManager } from "../audio/audioManager.js?v=1785770097";
+import { state } from "../core/state.js?v=1785770097";
+import { getEffect, clearEffect } from "../core/powers.js?v=1785770097";
 
 // ألوان اللاعبين (تطابق ألوان اللوحة والبطاقات)
 const PLAYER_COLORS = ['#2dd4bf', '#fb923c', '#a78bfa', '#fcd34d'];
@@ -60,10 +60,12 @@ export function enableCentralClock(serverNowFn, onTimeout) {
   _onClockTimeout = onTimeout;
   // نبدأ العدّاد فوراً (يعمل عند الجميع — يحسب من المرجع المركزي)
   if (_enabled && !_intervalId) _intervalId = setInterval(tick, 1000);
+  console.log('🕐[CLOCK] enableCentralClock: _enabled=', _enabled, 'interval=', !!_intervalId, 'mode=', _mode);
 }
 
 // استقبال حالة الساعة من Firebase (المرجع)
 export function applyClockState(clock) {
+  console.log('🕐[CLOCK] applyClockState وصل:', JSON.stringify(clock), '_clockMode=', _clockMode);
   if (!clock || !_clockMode) return;
   _clockState = clock;
   if (clock.banks) {
@@ -73,18 +75,21 @@ export function applyClockState(clock) {
   // نضمن أن العدّاد يعمل (الكل يشاهد وقت صاحب الدور ينزل حياً من المرجع)
   if (_enabled && !_intervalId && !state.gameFinished) {
     _intervalId = setInterval(tick, 1000);
+    console.log('🕐[CLOCK] بدأ الـinterval من applyClockState');
   }
 }
 
 // حساب المتبقي لصاحب الدور من المرجع المركزي (بنكه ناقص المنقضي منذ بدء دوره)
 function clockRemaining(player) {
-  if (!_clockState || !_clockState.banks) return _banks[player] ?? 0;
+  if (!_clockState || !_clockState.banks) { console.log('🕐[REMAIN] لا clockState بعد'); return _banks[player] ?? 0; }
   const base = _clockState.banks[player] ?? 0;
   if (player !== _clockState.currentPlayer) return base; // ليس دوره: بنكه ثابت
   const started = _clockState.turnStartAt;
-  if (typeof started !== 'number' || !_serverNowFn) return base;
+  if (typeof started !== 'number' || !_serverNowFn) { console.log('🕐[REMAIN] started ليس رقم:', started, typeof started); return base; }
   const elapsed = Math.max(0, (_serverNowFn() - started) / 1000);
-  return Math.max(0, base - elapsed);
+  const r = Math.max(0, base - elapsed);
+  console.log('🕐[REMAIN] p=', player, 'base=', base, 'elapsed=', elapsed.toFixed(1), 'left=', r.toFixed(1));
+  return r;
 }
 
 // بدء العدّ لدور (perTurn: تصفير لـ15 / bank: متابعة بنك صاحب الدور بلا تصفير)
