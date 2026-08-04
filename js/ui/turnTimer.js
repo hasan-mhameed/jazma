@@ -2,9 +2,9 @@
 // مؤقّت الدور — نمطان:
 //   perTurn: عدّاد ثابت لكل خطوة (15 ثانية)
 //   bank:    بنك وقت لكل لاعب (Chess Clock) — ينزل بدوره فقط، نفاده = خسارة
-import { audioManager } from "../audio/audioManager.js?v=1785881736";
-import { state } from "../core/state.js?v=1785881736";
-import { getEffect, clearEffect } from "../core/powers.js?v=1785881736";
+import { audioManager } from "../audio/audioManager.js?v=1785883287";
+import { state } from "../core/state.js?v=1785883287";
+import { getEffect, clearEffect } from "../core/powers.js?v=1785883287";
 
 // ألوان اللاعبين (تطابق ألوان اللوحة والبطاقات)
 const PLAYER_COLORS = ['#2dd4bf', '#fb923c', '#a78bfa', '#fcd34d'];
@@ -23,6 +23,7 @@ let _intervalId = null;
 let _onTimeout = null;        // perTurn: انتهى وقت الدور
 let _onBankEmpty = null;      // bank: نفد بنك لاعب (يخسر)
 let _lastTick = -1;
+let _lastWarnSec = -1;  // آخر ثانية شُغّل فيها صوت التنبيه (منع التكرار مع الفحص السريع)
 
 // تهيئة المؤقّت
 export function initTurnTimer({ enabled, mode = 'perTurn', players = 2, bankSeconds = 180, onTimeout, onBankEmpty }) {
@@ -54,12 +55,19 @@ let _clockState = null;        // { banks, currentPlayer, turnStartAt }
 let _serverNowFn = null;       // دالة توقيت السيرفر
 let _onClockTimeout = null;    // نفاد بنك (أونلاين)
 
+// معدّل الفحص: الساعة المركزية تحسب من المرجع (آمن نسرّعه للنعومة)،
+// أما العدّ المحلي فينقص عدّاداً كل نبضة فيجب أن يبقى ثانية كاملة
+const TICK_MS_CLOCK = 250;   // أونلاين (مركزية): 4 مرات/ثانية — يمنع القفزات البصرية
+const TICK_MS_LOCAL = 1000;  // محلي: نبضة كل ثانية
+
+function tickInterval() { return _clockMode ? TICK_MS_CLOCK : TICK_MS_LOCAL; }
+
 export function enableCentralClock(serverNowFn, onTimeout) {
   _clockMode = true;
   _serverNowFn = serverNowFn;
   _onClockTimeout = onTimeout;
   // نبدأ العدّاد فوراً (يعمل عند الجميع — يحسب من المرجع المركزي)
-  if (_enabled && !_intervalId) _intervalId = setInterval(tick, 1000);
+  if (_enabled && !_intervalId) _intervalId = setInterval(tick, tickInterval());
 }
 
 // استقبال حالة الساعة من Firebase (المرجع)
@@ -72,7 +80,7 @@ export function applyClockState(clock) {
   renderTimer();
   // نضمن أن العدّاد يعمل (الكل يشاهد وقت صاحب الدور ينزل حياً من المرجع)
   if (_enabled && !_intervalId && !state.gameFinished) {
-    _intervalId = setInterval(tick, 1000);
+    _intervalId = setInterval(tick, tickInterval());
   }
 }
 
@@ -112,7 +120,7 @@ export function startTurnTimer() {
 
   _lastTick = -1;
   renderTimer();
-  _intervalId = setInterval(tick, 1000);
+  _intervalId = setInterval(tick, tickInterval());
 }
 
 // إيقاف العدّ (تجميد — بالبنك لا يفقد شيئاً)
@@ -129,7 +137,12 @@ function tick() {
       const left = clockRemaining(cp);
       _banks[cp] = left; // للعرض
       renderTimer();
-      if (left <= WARN_AT && left > 0) { try { audioManager.playTick?.(); } catch {} }
+      // التنبيه الصوتي مرة واحدة لكل ثانية (الفحص أسرع للنعومة البصرية فقط)
+      const sec = Math.ceil(left);
+      if (sec <= WARN_AT && sec > 0 && sec !== _lastWarnSec) {
+        _lastWarnSec = sec;
+        try { audioManager.playTick?.(); } catch {}
+      }
       if (left <= 0) {
         stopTurnTimer();
         try { audioManager.playTimeout?.(); } catch {}
@@ -138,6 +151,7 @@ function tick() {
       return;
     }
     // محلي: عدّ تنازلي عادي
+    const cp = state.currentPlayer;
     _banks[cp] = (_banks[cp] ?? 0) - 1;
     renderTimer();
     const left = _banks[cp];

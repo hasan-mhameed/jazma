@@ -1,7 +1,7 @@
 // 📄 dailyChallenge.js
 import { getDatabase, ref, get, set }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1785881736";
+import { currentUser } from "./auth.js?v=1785883287";
 
 const db = getDatabase();
 
