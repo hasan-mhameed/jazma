@@ -1,14 +1,14 @@
 // 📄 gameEnd.js — v14.3
-import { audioManager } from "../audio/audioManager.js?v=1785796691";
+import { audioManager } from "../audio/audioManager.js?v=1785881736";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1785796691";
-import { saveMatch } from "../history.js?v=1785796691";
-import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1785796691";
-import { showNewAchievements } from "./achievementsUI.js?v=1785796691";
-import { calcXP, addXP } from "../xp.js?v=1785796691";
-import { showXPGain } from "./xpUI.js?v=1785796691";
-import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1785796691";
-import { commitMatchCoins } from "../core/wallet.js?v=1785796691";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1785881736";
+import { saveMatch } from "../history.js?v=1785881736";
+import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1785881736";
+import { showNewAchievements } from "./achievementsUI.js?v=1785881736";
+import { calcXP, addXP } from "../xp.js?v=1785881736";
+import { showXPGain } from "./xpUI.js?v=1785881736";
+import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1785881736";
+import { commitMatchCoins } from "../core/wallet.js?v=1785881736";
 
 export let _matchStartTime = Date.now();
 export function resetMatchTimer() { _matchStartTime = Date.now(); }
