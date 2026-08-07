@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1786138417";
+import { getCurrentUser }   from "./auth.js?v=1786143098";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -521,6 +521,24 @@ export class OnlineManager {
     this._cbClock = cb;
     // تسليم آخر حالة ساعة وصلت قبل التسجيل (تفادي فقدان الحالة الأولى)
     if (this._lastClock) cb(this._lastClock);
+  }
+
+  // ختم زمني مشترك لبدء عدّاد الانتظار (يوحّد العدّ عند الجميع)
+  async markWaitStart() {
+    if (!this.roomCode) return;
+    try {
+      const snap = await get(ref(db, `rooms/${this.roomCode}/waitStartedAt`));
+      if (snap.exists() && snap.val()) return; // مضبوط مسبقاً — لا نعيده
+      await update(ref(db, `rooms/${this.roomCode}`), { waitStartedAt: serverTimestamp() });
+    } catch {}
+  }
+
+  // تنظيف حالة الموافقة والانتظار (عند بدء المباراة أو المغادرة)
+  async clearApprovalState() {
+    if (!this.roomCode) return;
+    try {
+      await update(ref(db, `rooms/${this.roomCode}`), { approval: null, waitStartedAt: null });
+    } catch {}
   }
 
   // ══ جولة الموافقة (المطابقة العشوائية الجماعية بعدد ناقص) ══

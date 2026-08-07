@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1786138417";
-import { onlineManager } from "../firebase.js?v=1786138417";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786138417";
-import { setBank } from "./turnTimer.js?v=1786138417";
-import { state } from "../core/state.js?v=1786138417";
-import { getCurrentUser } from "../auth.js?v=1786138417";
+import { config } from "../config/config.js?v=1786143098";
+import { onlineManager } from "../firebase.js?v=1786143098";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786143098";
+import { setBank } from "./turnTimer.js?v=1786143098";
+import { state } from "../core/state.js?v=1786143098";
+import { getCurrentUser } from "../auth.js?v=1786143098";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -45,7 +45,7 @@ export function initOnlineGame({ onGameStart }) {
   const approvalNote      = document.getElementById("approval-note");
   const startCountdownEl  = document.getElementById("start-countdown");
   const startCountdownNum = document.getElementById("start-countdown-num");
-  let _lastLobbyCount = 0, _lobbyNames = {};
+  let _lastLobbyCount = 0, _lobbyNames = {}, _waitStartedAt = null;
 
   function showStep(step) {
     stepName.classList.add("hidden");
@@ -235,16 +235,17 @@ export function initOnlineGame({ onGameStart }) {
     searchCountdownEl?.classList.add("hidden");
   }
 
-  // عدّاد الانتظار: يبدأ عند توفّر لاعبَين فأكثر؛ عند انتهائه بعدد ناقص → المنشئ يفتح الموافقة
-  function startSearchCountdown(wanted) {
+  // عدّاد الانتظار: يُحسب من ختم زمني مشترك (waitStartedAt) فيكون موحّداً عند الجميع
+  function startSearchCountdown(wanted, startedAt) {
     if (_searchTimerId) return;
-    _searchLeft = SEARCH_WAIT_SEC;
     searchCountdownEl?.classList.remove("hidden");
-    if (searchCountdownEl) searchCountdownEl.textContent = `⏳ ${_searchLeft}`;
-    _searchTimerId = setInterval(async () => {
-      _searchLeft--;
-      if (searchCountdownEl) searchCountdownEl.textContent = `⏳ ${_searchLeft}`;
-      if (_searchLeft <= 0) {
+    const tickFn = async () => {
+      const started = _waitStartedAt;
+      if (typeof started !== 'number') { if (searchCountdownEl) searchCountdownEl.textContent = `⏳ ${SEARCH_WAIT_SEC}`; return; }
+      const elapsed = Math.max(0, (onlineManager.serverNow() - started) / 1000);
+      const left = Math.max(0, Math.ceil(SEARCH_WAIT_SEC - elapsed));
+      if (searchCountdownEl) searchCountdownEl.textContent = `⏳ ${left}`;
+      if (left <= 0) {
         stopSearchCountdown();
         // المنشئ فقط يفتح جولة الموافقة (بعدد الحاضرين)
         if (onlineManager.playerNum === 1 && !_approvalOpen) {
@@ -254,12 +255,15 @@ export function initOnlineGame({ onGameStart }) {
           }
         }
       }
-    }, 1000);
+    };
+    tickFn();
+    _searchTimerId = setInterval(tickFn, 500);
   }
 
   // ── نافذة الموافقة المتزامنة ───────────────────────────────
   function renderApproval(a) {
     if (!a || !approvalModal) return;
+    if (!_isMultiSearch) return; // لسنا في بحث — نتجاهل أي حالة قديمة
     if (a.state === "asking") {
       _approvalOpen = true;
       stopSearchCountdown();
@@ -287,6 +291,11 @@ export function initOnlineGame({ onGameStart }) {
     } else if (a.state === "cancelled") {
       closeApproval();
       showLeaveToast("↩️ لم يكتمل التوافق — عدنا للبحث");
+      // ختم انتظار جديد (عدّاد نظيف موحّد للباقين)
+      _waitStartedAt = null;
+      if (onlineManager.playerNum === 1) {
+        onlineManager.clearApprovalState().then(() => onlineManager.markWaitStart());
+      }
       startSearchCountdown(_randomWanted);
     }
   }
@@ -363,6 +372,9 @@ export function initOnlineGame({ onGameStart }) {
   async function startMultiRandomSearch(wanted) {
     const name = getPlayerName(); if (!name) return;
     _isMultiSearch = true;
+    // تصفير حالة الموافقة/الانتظار المحلية (بحث جديد نظيف)
+    _approvalOpen = false; _waitStartedAt = null; _lastLobbyCount = 0; _lobbyNames = {};
+    stopSearchCountdown(); closeApproval();
     try {
       const gridSize = +document.getElementById("grid-size").value || 4;
       config.rows = config.cols = gridSize;
@@ -376,6 +388,7 @@ export function initOnlineGame({ onGameStart }) {
         const count = list.length;
         const max = room?.maxPlayers || wanted;
         _lastLobbyCount = count;
+        _waitStartedAt = (typeof room?.waitStartedAt === 'number') ? room.waitStartedAt : null;
         _lobbyNames = {};
         list.forEach(p => { _lobbyNames[p.num] = p.name; });
         if (!_approvalOpen) {
@@ -383,12 +396,18 @@ export function initOnlineGame({ onGameStart }) {
           searchingText.innerHTML =
             `👥 انضم ${count} من ${max}<br><span class="search-names">${names}</span><br>بانتظار البقية...`;
         }
-        // اكتمل العدد → بدء مباشر (لا حاجة لموافقة)
-        if (onlineManager.playerNum === 1 && count >= max && room?.status === "lobby") {
+        // اكتمل العدد → بدء مباشر (حتى لو كانت نافذة الموافقة مفتوحة نلغيها)
+        if (count >= max && room?.status === "lobby") {
           stopSearchCountdown();
-          onlineManager.startMultiGame();
+          if (_approvalOpen) closeApproval();
+          if (onlineManager.playerNum === 1) {
+            onlineManager.clearApprovalState();
+            onlineManager.startMultiGame();
+          }
         } else if (count >= 2 && !_approvalOpen) {
-          startSearchCountdown(max); // عدّاد الانتظار يبدأ من لاعبَين
+          // المنشئ يثبّت ختم بدء الانتظار (مرّة واحدة) ليكون العدّ موحّداً
+          if (onlineManager.playerNum === 1) onlineManager.markWaitStart();
+          startSearchCountdown(max);
         }
       });
       // استقبال حالة جولة الموافقة (الجميع)
@@ -397,6 +416,9 @@ export function initOnlineGame({ onGameStart }) {
       onlineManager.onMultiStart((room) => {
         _isMultiSearch = false;
         stopSearchCountdown(); closeApproval();
+        _waitStartedAt = null;
+        // تنظيف حالة الموافقة حتى لا تظهر نافذة قديمة في بحث لاحق
+        if (onlineManager.playerNum === 1) onlineManager.clearApprovalState();
         runStartCountdown(() => startMultiMatch(room));
       });
       // المنشئ غادر قبل البدء
