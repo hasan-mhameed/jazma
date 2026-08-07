@@ -13,7 +13,7 @@
     <title>جزمة — Dots & Boxes v11.7</title>
     <link rel="stylesheet" href="css/style.css" />
     <link rel="stylesheet" href="./css/animations.css" />
-    <link rel="stylesheet" href="./css/nature-theme.css?v=58" />
+    <link rel="stylesheet" href="./css/nature-theme.css?v=59" />
 
     <!-- 🆕 حل مشكلة favicon.ico -->
     <link rel="icon" href="data:," />
@@ -412,8 +412,26 @@
               <div class="radar"></div>
             </div>
             <p id="searching-text" class="online-hint">جارٍ البحث عن لاعب متاح...</p>
+            <p id="search-countdown" class="search-countdown hidden"></p>
             <button id="cancel-search-btn" class="btn-back">✕ إلغاء</button>
           </div>
+
+          <!-- نافذة الموافقة المتزامنة (بدء بعدد ناقص) -->
+          <div id="approval-modal" class="approval-modal hidden">
+            <div class="approval-box">
+              <h3 id="approval-title">👥 توفّر 3 من 4 — تلعب؟</h3>
+              <div id="approval-players" class="approval-players"></div>
+              <p id="approval-timer" class="approval-timer">⏳ 15</p>
+              <div class="approval-actions">
+                <button id="approval-accept" class="btn-primary btn-online">✅ موافق</button>
+                <button id="approval-reject" class="btn-back">❌ خروج</button>
+              </div>
+              <p id="approval-note" class="online-hint"></p>
+            </div>
+          </div>
+
+          <!-- عدّ تنازلي قبل بدء المباراة -->
+          <div id="start-countdown" class="start-countdown hidden"><span id="start-countdown-num">3</span></div>
 
           <!-- اختيار عدد اللاعبين للعشوائي -->
           <div id="online-step-random-count" class="hidden">
@@ -454,6 +472,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.1.0/dist/pixi.min.js"></script>
-    <script type="module" src="js/main.js?v=1785883287" defer></script>
+    <script type="module" src="js/main.js?v=1786138417" defer></script>
   </body>
 </html>

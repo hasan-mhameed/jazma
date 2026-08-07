@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1785883287";
+import { getCurrentUser }   from "./auth.js?v=1786138417";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -57,6 +57,8 @@ export class OnlineManager {
     this._serverOffset = 0;    // فرق توقيت الجهاز عن Firebase
     this._cbClock = null;      // مستمع الساعة المركزية
     this._lastClock = null;    // آخر حالة ساعة (تفادي فقدان الأولى)
+    this._cbApproval = null;   // مستمع جولة الموافقة
+    this._lastApproval = null;
     // ── حالة التعدد (3-4 لاعبين) ──
     this._isMulti     = false;
     this._cbLobby     = null;  // تحديث قائمة اللاعبين في اللوبي
@@ -285,6 +287,7 @@ export class OnlineManager {
     this._listenForMultiMoves(code);
     this._listenBankUpdate(code);
     this._listenClock(code);
+    this._listenApproval(code);
     this._watchServerOffset();
     this._monitorConnection();
     return { code };
@@ -330,6 +333,7 @@ export class OnlineManager {
     this._listenForMultiMoves(code);
     this._listenBankUpdate(code);
     this._listenClock(code);
+    this._listenApproval(code);
     this._watchServerOffset();
     this._monitorConnection();
     return { code, myNum, cfg: room.cfg, maxPlayers: room.maxPlayers };
@@ -517,6 +521,54 @@ export class OnlineManager {
     this._cbClock = cb;
     // تسليم آخر حالة ساعة وصلت قبل التسجيل (تفادي فقدان الحالة الأولى)
     if (this._lastClock) cb(this._lastClock);
+  }
+
+  // ══ جولة الموافقة (المطابقة العشوائية الجماعية بعدد ناقص) ══
+  // المنشئ يفتح الجولة: كل اللاعبين الحاضرين "pending" حتى يقرّروا
+  async startApprovalRound(availableCount, wantedCount) {
+    if (!this.roomCode) return;
+    try {
+      const snap = await get(ref(db, `rooms/${this.roomCode}/players`));
+      if (!snap.exists()) return;
+      const decisions = {};
+      Object.values(snap.val()).forEach(p => { decisions[p.num] = "pending"; });
+      await update(ref(db, `rooms/${this.roomCode}/approval`), {
+        state: "asking", available: availableCount, wanted: wantedCount,
+        startedAt: serverTimestamp(), decisions,
+      });
+    } catch {}
+  }
+
+  // تسجيل قرار لاعب (accepted | rejected)
+  async setApprovalDecision(decision) {
+    if (!this.roomCode || !this.playerNum) return;
+    try {
+      await update(ref(db, `rooms/${this.roomCode}/approval/decisions`), {
+        [this.playerNum]: decision,
+      });
+    } catch {}
+  }
+
+  // إنهاء الجولة (المنشئ): "confirmed" تبدأ المباراة، "cancelled" عودة للبحث
+  async closeApprovalRound(result) {
+    if (!this.roomCode) return;
+    try {
+      await update(ref(db, `rooms/${this.roomCode}/approval`), { state: result });
+    } catch {}
+  }
+
+  _listenApproval(code) {
+    const unsub = onValue(ref(db, `rooms/${code}/approval`), snap => {
+      if (!snap.exists()) return;
+      const a = snap.val();
+      this._lastApproval = a;
+      this._cbApproval && this._cbApproval(a);
+    });
+    this._unsubs.push(unsub);
+  }
+  onApproval(cb) {
+    this._cbApproval = cb;
+    if (this._lastApproval) cb(this._lastApproval);
   }
 
   // مستمع سجل الحركات الجماعي — onChildAdded يسلّم كل الحركات (حتى القديمة) بالترتيب

@@ -1060,3 +1060,48 @@ body {
   font-weight: 900; opacity: 1; box-shadow: 0 0 12px rgba(45,212,191,0.5);
 }
 .npc-bank.low { color: #fff !important; border-color: #f87171 !important; background: #dc2626 !important; opacity: 1 !important; }
+
+/* ═══ عدّاد البحث + نافذة الموافقة المتزامنة ═══ */
+.search-countdown {
+  font-size: 1.1rem; font-weight: 800; color: #5eead4;
+  background: rgba(45,212,191,0.12); border: 1px solid #2dd4bf55;
+  border-radius: 10px; padding: 6px 14px; display: inline-block; margin: 8px auto; direction: ltr;
+}
+.approval-modal {
+  position: fixed; inset: 0; background: rgba(4,19,13,0.82);
+  display: flex; align-items: center; justify-content: center; z-index: 10000; padding: 16px;
+}
+.approval-modal.hidden { display: none !important; }
+.approval-box {
+  background: linear-gradient(160deg, #0f2a22, #0a1815);
+  border: 1.5px solid #2dd4bf55; border-radius: 18px;
+  padding: 20px 18px; max-width: 380px; width: 100%; text-align: center;
+  box-shadow: 0 12px 44px rgba(0,0,0,.55);
+}
+.approval-box h3 { color: #e8fff8; font-size: 1.12rem; margin: 0 0 12px; font-weight: 800; }
+.approval-players { display: flex; flex-direction: column; gap: 7px; margin: 12px 0; }
+.approval-player {
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(255,255,255,0.06); border: 1px solid var(--nat-border);
+  border-radius: 10px; padding: 8px 12px; font-weight: 700; color: #d7f5ec; font-size: 0.95rem;
+}
+.approval-player .ap-state { font-size: 1rem; }
+.approval-player.accepted { border-color: #4ade8066; background: rgba(74,222,128,0.14); }
+.approval-player.rejected { border-color: #f8717166; background: rgba(248,113,113,0.14); opacity: .75; }
+.approval-timer {
+  font-size: 1.25rem; font-weight: 900; color: #fcd34d; margin: 10px 0 4px; direction: ltr;
+}
+.approval-timer.low { color: #f87171; }
+.approval-actions { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
+.approval-actions button { flex: 1; max-width: 150px; }
+/* عدّ تنازلي قبل البدء */
+.start-countdown {
+  position: fixed; inset: 0; background: rgba(4,19,13,0.88);
+  display: flex; align-items: center; justify-content: center; z-index: 10001;
+}
+.start-countdown.hidden { display: none !important; }
+#start-countdown-num {
+  font-size: 6rem; font-weight: 900; color: #2dd4bf;
+  text-shadow: 0 0 40px rgba(45,212,191,.6); animation: cdPop .9s ease-out;
+}
+@keyframes cdPop { 0% { transform: scale(.4); opacity: 0; } 40% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }

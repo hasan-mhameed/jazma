@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1785883287";
-import { onlineManager } from "../firebase.js?v=1785883287";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1785883287";
-import { setBank } from "./turnTimer.js?v=1785883287";
-import { state } from "../core/state.js?v=1785883287";
-import { getCurrentUser } from "../auth.js?v=1785883287";
+import { config } from "../config/config.js?v=1786138417";
+import { onlineManager } from "../firebase.js?v=1786138417";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786138417";
+import { setBank } from "./turnTimer.js?v=1786138417";
+import { state } from "../core/state.js?v=1786138417";
+import { getCurrentUser } from "../auth.js?v=1786138417";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -34,6 +34,18 @@ export function initOnlineGame({ onGameStart }) {
   const stepMultiCount  = document.getElementById("online-step-multi-count");
   const stepMultiLobby  = document.getElementById("online-step-multi-lobby");
   const stepRandCount   = document.getElementById("online-step-random-count");
+  // عناصر عدّاد البحث ونافذة الموافقة والعدّ التنازلي
+  const searchCountdownEl = document.getElementById("search-countdown");
+  const approvalModal     = document.getElementById("approval-modal");
+  const approvalTitle     = document.getElementById("approval-title");
+  const approvalPlayers   = document.getElementById("approval-players");
+  const approvalTimer     = document.getElementById("approval-timer");
+  const approvalAccept    = document.getElementById("approval-accept");
+  const approvalReject    = document.getElementById("approval-reject");
+  const approvalNote      = document.getElementById("approval-note");
+  const startCountdownEl  = document.getElementById("start-countdown");
+  const startCountdownNum = document.getElementById("start-countdown-num");
+  let _lastLobbyCount = 0, _lobbyNames = {};
 
   function showStep(step) {
     stepName.classList.add("hidden");
@@ -214,6 +226,140 @@ export function initOnlineGame({ onGameStart }) {
   }
 
   // ── البحث الجماعي العشوائي (3-4) ─────────────────────────────
+  const SEARCH_WAIT_SEC = 20;   // مهلة الانتظار قبل عرض الموافقة بعدد ناقص (قابلة للضبط)
+  const APPROVAL_SEC    = 15;   // مهلة الرد على نافذة الموافقة
+  let _searchTimerId = null, _searchLeft = 0, _approvalTimerId = null, _approvalOpen = false;
+
+  function stopSearchCountdown() {
+    if (_searchTimerId) { clearInterval(_searchTimerId); _searchTimerId = null; }
+    searchCountdownEl?.classList.add("hidden");
+  }
+
+  // عدّاد الانتظار: يبدأ عند توفّر لاعبَين فأكثر؛ عند انتهائه بعدد ناقص → المنشئ يفتح الموافقة
+  function startSearchCountdown(wanted) {
+    if (_searchTimerId) return;
+    _searchLeft = SEARCH_WAIT_SEC;
+    searchCountdownEl?.classList.remove("hidden");
+    if (searchCountdownEl) searchCountdownEl.textContent = `⏳ ${_searchLeft}`;
+    _searchTimerId = setInterval(async () => {
+      _searchLeft--;
+      if (searchCountdownEl) searchCountdownEl.textContent = `⏳ ${_searchLeft}`;
+      if (_searchLeft <= 0) {
+        stopSearchCountdown();
+        // المنشئ فقط يفتح جولة الموافقة (بعدد الحاضرين)
+        if (onlineManager.playerNum === 1 && !_approvalOpen) {
+          const cnt = _lastLobbyCount || 2;
+          if (cnt >= 2 && cnt < wanted) {
+            await onlineManager.startApprovalRound(cnt, wanted);
+          }
+        }
+      }
+    }, 1000);
+  }
+
+  // ── نافذة الموافقة المتزامنة ───────────────────────────────
+  function renderApproval(a) {
+    if (!a || !approvalModal) return;
+    if (a.state === "asking") {
+      _approvalOpen = true;
+      stopSearchCountdown();
+      approvalModal.classList.remove("hidden");
+      if (approvalTitle) approvalTitle.textContent = `👥 توفّر ${a.available} من ${a.wanted} — تلعب؟`;
+      // قائمة اللاعبين بحالاتهم الحيّة
+      const names = config.onlinePlayerNames || {};
+      const decisions = a.decisions || {};
+      if (approvalPlayers) {
+        approvalPlayers.innerHTML = Object.keys(decisions).sort().map(num => {
+          const d = decisions[num];
+          const icon = d === "accepted" ? "✅" : d === "rejected" ? "❌" : "⏳";
+          const cls  = d === "accepted" ? "accepted" : d === "rejected" ? "rejected" : "";
+          const nm   = _lobbyNames[num] || names[num] || `لاعب ${num}`;
+          return `<div class="approval-player ${cls}"><span>${nm}</span><span class="ap-state">${icon}</span></div>`;
+        }).join("");
+      }
+      startApprovalTimer();
+      // المنشئ يقيّم النتيجة
+      if (onlineManager.playerNum === 1) evaluateApproval(a);
+    } else if (a.state === "confirmed") {
+      closeApproval();
+      // المنشئ يبدأ المباراة فعلياً
+      if (onlineManager.playerNum === 1) onlineManager.startMultiGame();
+    } else if (a.state === "cancelled") {
+      closeApproval();
+      showLeaveToast("↩️ لم يكتمل التوافق — عدنا للبحث");
+      startSearchCountdown(_randomWanted);
+    }
+  }
+
+  function startApprovalTimer() {
+    if (_approvalTimerId) return;
+    let left = APPROVAL_SEC;
+    if (approvalTimer) { approvalTimer.textContent = `⏳ ${left}`; approvalTimer.classList.remove("low"); }
+    _approvalTimerId = setInterval(() => {
+      left--;
+      if (approvalTimer) {
+        approvalTimer.textContent = `⏳ ${left}`;
+        approvalTimer.classList.toggle("low", left <= 5);
+      }
+      if (left <= 0) {
+        clearInterval(_approvalTimerId); _approvalTimerId = null;
+        // لم نرد في الوقت = رفض
+        onlineManager.setApprovalDecision("rejected");
+      }
+    }, 1000);
+  }
+
+  function closeApproval() {
+    _approvalOpen = false;
+    if (_approvalTimerId) { clearInterval(_approvalTimerId); _approvalTimerId = null; }
+    approvalModal?.classList.add("hidden");
+  }
+
+  // المنشئ: هل وافق الجميع؟ أو رفض أحدهم؟
+  async function evaluateApproval(a) {
+    const d = Object.values(a.decisions || {});
+    if (!d.length) return;
+    if (d.some(x => x === "rejected")) {
+      await onlineManager.closeApprovalRound("cancelled");
+    } else if (d.every(x => x === "accepted")) {
+      await onlineManager.closeApprovalRound("confirmed");
+    }
+  }
+
+  // عدّ تنازلي قصير قبل بدء المباراة (تشويق)
+  function runStartCountdown(cb) {
+    if (!startCountdownEl || !startCountdownNum) { cb(); return; }
+    let n = 3;
+    startCountdownEl.classList.remove("hidden");
+    startCountdownNum.textContent = n;
+    const id = setInterval(() => {
+      n--;
+      if (n > 0) {
+        startCountdownNum.textContent = n;
+        startCountdownNum.style.animation = 'none'; void startCountdownNum.offsetWidth;
+        startCountdownNum.style.animation = '';
+      } else {
+        clearInterval(id);
+        startCountdownEl.classList.add("hidden");
+        cb();
+      }
+    }, 900);
+  }
+
+  approvalAccept?.addEventListener("click", (e) => {
+    e.currentTarget.blur();
+    onlineManager.setApprovalDecision("accepted");
+    if (approvalNote) approvalNote.textContent = "بانتظار قرار البقية...";
+  });
+  approvalReject?.addEventListener("click", async (e) => {
+    e.currentTarget.blur();
+    await onlineManager.setApprovalDecision("rejected");
+    closeApproval();
+    _isMultiSearch = false;
+    await onlineManager.leaveRoom();
+    showStep("randomCount");
+  });
+
   async function startMultiRandomSearch(wanted) {
     const name = getPlayerName(); if (!name) return;
     _isMultiSearch = true;
@@ -229,23 +375,35 @@ export function initOnlineGame({ onGameStart }) {
         const list = Object.values(players || {}).sort((a, b) => a.num - b.num);
         const count = list.length;
         const max = room?.maxPlayers || wanted;
-        const names = list.map(p => `✓ ${p.name}`).join("<br>");
-        searchingText.innerHTML =
-          `👥 انضم ${count} من ${max}<br><span class="search-names">${names}</span><br>بانتظار البقية...`;
-        // المنشئ (رقم 1) يبدأ تلقائياً عند اكتمال العدد
+        _lastLobbyCount = count;
+        _lobbyNames = {};
+        list.forEach(p => { _lobbyNames[p.num] = p.name; });
+        if (!_approvalOpen) {
+          const names = list.map(p => `✓ ${p.name}`).join("<br>");
+          searchingText.innerHTML =
+            `👥 انضم ${count} من ${max}<br><span class="search-names">${names}</span><br>بانتظار البقية...`;
+        }
+        // اكتمل العدد → بدء مباشر (لا حاجة لموافقة)
         if (onlineManager.playerNum === 1 && count >= max && room?.status === "lobby") {
+          stopSearchCountdown();
           onlineManager.startMultiGame();
+        } else if (count >= 2 && !_approvalOpen) {
+          startSearchCountdown(max); // عدّاد الانتظار يبدأ من لاعبَين
         }
       });
-      // بدء المباراة (للجميع) — نفس مسار الغرف الجماعية
+      // استقبال حالة جولة الموافقة (الجميع)
+      onlineManager.onApproval((a) => renderApproval(a));
+      // بدء المباراة (للجميع) — مع عدّ تنازلي قصير
       onlineManager.onMultiStart((room) => {
         _isMultiSearch = false;
-        startMultiMatch(room);
+        stopSearchCountdown(); closeApproval();
+        runStartCountdown(() => startMultiMatch(room));
       });
       // المنشئ غادر قبل البدء
       onlineManager.onPlayerLeft((reason) => {
         if (reason === "host_left" && _isMultiSearch) {
           _isMultiSearch = false;
+          stopSearchCountdown(); closeApproval();
           showLeaveToast("🚪 غادر منشئ الغرفة — ابحث من جديد");
           showStep("randomCount");
         }
@@ -261,6 +419,8 @@ export function initOnlineGame({ onGameStart }) {
 
   // ── إلغاء البحث العشوائي ────────────────────────────────────
   cancelSearchBtn?.addEventListener("click", async () => {
+    stopSearchCountdown();
+    closeApproval();
     if (_isMultiSearch) {
       _isMultiSearch = false;
       await onlineManager.leaveRoom(); // لوبي جماعي: منشئ يمسح / منضم يزيل نفسه
