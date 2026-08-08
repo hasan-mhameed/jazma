@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1786143098";
+import { getCurrentUser }   from "./auth.js?v=1786217372";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -328,7 +328,7 @@ export class OnlineManager {
     this._myUid = myUid;
 
     // عند انقطاع اللاعب: نعلّمه غير نشط
-    onDisconnect(ref(db, `rooms/${code}/players/${myUid}/active`)).set(false);
+    onDisconnect(ref(db, `rooms/${code}/players/${myUid}/disconnectedAt`)).set(serverTimestamp());
     this._listenLobby(code);
     this._listenForMultiMoves(code);
     this._listenBankUpdate(code);
@@ -360,7 +360,7 @@ export class OnlineManager {
         if (this.playerNum === 1) {
           try {
             onDisconnect(ref(db, `rooms/${code}`)).cancel();
-            onDisconnect(ref(db, `rooms/${code}/players/${this._myUid}/active`)).set(false);
+            onDisconnect(ref(db, `rooms/${code}/players/${this._myUid}/disconnectedAt`)).set(serverTimestamp());
           } catch {}
         }
         this._cbMultiStart && this._cbMultiStart(room);
@@ -538,6 +538,30 @@ export class OnlineManager {
     if (!this.roomCode) return;
     try {
       await update(ref(db, `rooms/${this.roomCode}`), { approval: null, waitStartedAt: null });
+    } catch {}
+  }
+
+  // ══ مهلة السماح عند الانقطاع (Grace Period) ══
+  // عند عودة الاتصال: نمسح ختم الانقطاع (اللاعب رجع ضمن المهلة)
+  async clearMyDisconnectMark() {
+    if (!this.roomCode || !this._myUid) return;
+    try {
+      await update(ref(db, `rooms/${this.roomCode}/players/${this._myUid}`), { disconnectedAt: null });
+    } catch {}
+  }
+
+  // إخراج لاعب تجاوز مهلة السماح (يُنفّذها أي جهاز متصل — الحساب حتمي فالتكرار غير ضار)
+  async expirePlayerByNum(num) {
+    if (!this.roomCode) return;
+    try {
+      const snap = await get(ref(db, `rooms/${this.roomCode}/players`));
+      if (!snap.exists()) return;
+      for (const [uid, p] of Object.entries(snap.val())) {
+        if (p && p.num === num && p.active !== false) {
+          await update(ref(db, `rooms/${this.roomCode}/players/${uid}`), { active: false, disconnectedAt: null });
+          return;
+        }
+      }
     } catch {}
   }
 

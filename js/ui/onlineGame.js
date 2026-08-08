@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1786143098";
-import { onlineManager } from "../firebase.js?v=1786143098";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786143098";
-import { setBank } from "./turnTimer.js?v=1786143098";
-import { state } from "../core/state.js?v=1786143098";
-import { getCurrentUser } from "../auth.js?v=1786143098";
+import { config } from "../config/config.js?v=1786217372";
+import { onlineManager } from "../firebase.js?v=1786217372";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786217372";
+import { setBank } from "./turnTimer.js?v=1786217372";
+import { state } from "../core/state.js?v=1786217372";
+import { getCurrentUser } from "../auth.js?v=1786217372";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -46,6 +46,7 @@ export function initOnlineGame({ onGameStart }) {
   const startCountdownEl  = document.getElementById("start-countdown");
   const startCountdownNum = document.getElementById("start-countdown-num");
   let _lastLobbyCount = 0, _lobbyNames = {}, _waitStartedAt = null;
+  let _searchStartedAt = null; // ختم بدء البحث الحالي (لتجاهل جولات موافقة أقدم)
 
   function showStep(step) {
     stepName.classList.add("hidden");
@@ -264,6 +265,8 @@ export function initOnlineGame({ onGameStart }) {
   function renderApproval(a) {
     if (!a || !approvalModal) return;
     if (!_isMultiSearch) return; // لسنا في بحث — نتجاهل أي حالة قديمة
+    // نتجاهل جولة موافقة بدأت قبل بحثنا الحالي (بقايا جولة سابقة → وميض نافذة قديمة)
+    if (typeof a.startedAt === 'number' && _searchStartedAt && a.startedAt < _searchStartedAt) return;
     if (a.state === "asking") {
       _approvalOpen = true;
       stopSearchCountdown();
@@ -374,6 +377,7 @@ export function initOnlineGame({ onGameStart }) {
     _isMultiSearch = true;
     // تصفير حالة الموافقة/الانتظار المحلية (بحث جديد نظيف)
     _approvalOpen = false; _waitStartedAt = null; _lastLobbyCount = 0; _lobbyNames = {};
+    _searchStartedAt = onlineManager.serverNow ? onlineManager.serverNow() : Date.now();
     stopSearchCountdown(); closeApproval();
     try {
       const gridSize = +document.getElementById("grid-size").value || 4;
@@ -710,6 +714,8 @@ export function launchOnlineMultiGame(myPlayerNum, onlineTurnInd, onGameStart) {
 
     onlineManager.onConnectionChange(connected => {
       if (onlineTurnInd && connected) updateOnlineTurnIndicator(onlineTurnInd);
+      // عدنا للاتصال ضمن مهلة السماح → نمسح ختم الانقطاع لنبقى في المباراة
+      if (connected) onlineManager.clearMyDisconnectMark();
     });
   }, 800);
 }
@@ -724,15 +730,53 @@ function showLeaveToast(text) {
   setTimeout(() => t.remove(), 2800);
 }
 
+const _graceNotified = {}; // منع تكرار إشعار الانقطاع لكل لاعب
 function handleMultiPlayerLeft(players, onlineTurnInd) {
   // المباراة انتهت طبيعياً؟ مغادرة الآخرين بعدها ليست انسحاباً — نتجاهل بصمت
   if (state.gameFinished) { config.multiPlayers = players; return; }
+
+  // ══ مهلة السماح: من عنده disconnectedAt ولم يخرج بعد = منقطع مؤقتاً ══
+  const GRACE_MS = 10000; // 10 ثوانٍ للعودة قبل الخروج النهائي
+  const nowSrv = onlineManager.serverNow ? onlineManager.serverNow() : Date.now();
+  Object.values(players || {}).forEach(p => {
+    if (p.active !== false && typeof p.disconnectedAt === 'number') {
+      const gone = nowSrv - p.disconnectedAt;
+      if (gone >= GRACE_MS) {
+        // تجاوز المهلة → خروج نهائي (أي جهاز متصل ينفّذها؛ الحساب حتمي)
+        onlineManager.expirePlayerByNum(p.num);
+      } else if (!_graceNotified[p.num]) {
+        _graceNotified[p.num] = true;
+        if (p.num !== config.onlinePlayerNum) {
+          showLeaveToast(`⏳ ${p.name} يعاني انقطاعاً — بانتظار عودته...`);
+        }
+        // فحص متأخر: لو لم يعد خلال المهلة نُخرجه
+        setTimeout(() => {
+          const cur = (config.multiPlayers || {});
+          const still = Object.values(cur).find(q => q.num === p.num);
+          if (still && still.active !== false && typeof still.disconnectedAt === 'number' && !state.gameFinished) {
+            onlineManager.expirePlayerByNum(p.num);
+          }
+        }, GRACE_MS + 500);
+      }
+    }
+    // عاد قبل انتهاء المهلة → نظّف علامة الإشعار
+    if (typeof p.disconnectedAt !== 'number' && _graceNotified[p.num]) {
+      _graceNotified[p.num] = false;
+      if (p.num !== config.onlinePlayerNum) showLeaveToast(`✅ ${p.name} عاد للمباراة`);
+    }
+  });
   // إشعار "اللاعب X انسحب" — نكتشف من تحوّل لغير نشط (مقارنة بالحالة السابقة)
   const prev = config.multiPlayers || {};
+  const me = config.onlinePlayerNum;
   Object.values(players || {}).forEach(p => {
     const was = Object.values(prev).find(q => q.num === p.num);
     if (was && was.active !== false && p.active === false) {
-      showLeaveToast(`🚪 ${p.name} انسحب من المباراة`);
+      if (p.num === me) {
+        // أنا الذي خرجت (غالباً بانقطاع الشبكة) — نوضّح وضعي بدل الغموض
+        showLeaveToast("😔 انقطع اتصالك — خرجت من المباراة (يمكنك المشاهدة فقط)");
+      } else {
+        showLeaveToast(`🚪 ${p.name} انسحب من المباراة`);
+      }
     }
   });
   // نحدّث حالة اللاعبين النشطين (المنسحب active:false)
@@ -742,8 +786,17 @@ function handleMultiPlayerLeft(players, onlineTurnInd) {
   try { skipInactiveTurn(config); } catch {}
   updateOnlineTurnIndicator(onlineTurnInd);
   // لو بقي لاعب واحد فقط نشط → فوز بانسحاب الخصوم
+  // فوز بانسحاب الخصوم: فقط إذا كنتُ أنا اللاعب النشط المتبقّي
+  // (الخارج/المنقطع لا يفوز لو خرج خصومه بعده — هو خارج المنافسة أصلاً)
   if (active.length <= 1) {
-    showAlert("#4ade80", "🏆 فزت بالمباراة! انسحب جميع خصومك", "🏠 العودة للقائمة");
+    const me = config.onlinePlayerNum;
+    const iAmActive = Object.values(players || {}).some(p => p.num === me && p.active !== false);
+    if (iAmActive) {
+      showAlert("#4ade80", "🏆 فزت بالمباراة! انسحب جميع خصومك", "🏠 العودة للقائمة");
+    } else {
+      // أنا خارج: المباراة انتهت ولا فوز لي
+      showAlert("#f87171", "انتهت المباراة — كنت خارجها بعد انقطاعك", "🏠 العودة للقائمة");
+    }
   }
   // (تخطّي أدوار المنسحب يُدار في منطق الدور)
 }
