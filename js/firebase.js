@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1786217372";
+import { getCurrentUser }   from "./auth.js?v=1786221195";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -547,6 +547,8 @@ export class OnlineManager {
     if (!this.roomCode || !this._myUid) return;
     try {
       await update(ref(db, `rooms/${this.roomCode}/players/${this._myUid}`), { disconnectedAt: null });
+      // مهم: onDisconnect يُستهلك بعد انطلاقه — نعيد تسجيله ليعمل في الانقطاعات التالية
+      onDisconnect(ref(db, `rooms/${this.roomCode}/players/${this._myUid}/disconnectedAt`)).set(serverTimestamp());
     } catch {}
   }
 

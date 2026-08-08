@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1786217372";
-import { onlineManager } from "../firebase.js?v=1786217372";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786217372";
-import { setBank } from "./turnTimer.js?v=1786217372";
-import { state } from "../core/state.js?v=1786217372";
-import { getCurrentUser } from "../auth.js?v=1786217372";
+import { config } from "../config/config.js?v=1786221195";
+import { onlineManager } from "../firebase.js?v=1786221195";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786221195";
+import { setBank } from "./turnTimer.js?v=1786221195";
+import { state } from "../core/state.js?v=1786221195";
+import { getCurrentUser } from "../auth.js?v=1786221195";
 
 export function initOnlineGame({ onGameStart }) {
   const stepName        = document.getElementById("online-step-name");
@@ -744,24 +744,26 @@ function handleMultiPlayerLeft(players, onlineTurnInd) {
       if (gone >= GRACE_MS) {
         // تجاوز المهلة → خروج نهائي (أي جهاز متصل ينفّذها؛ الحساب حتمي)
         onlineManager.expirePlayerByNum(p.num);
-      } else if (!_graceNotified[p.num]) {
-        _graceNotified[p.num] = true;
+      } else if (_graceNotified[p.num] !== p.disconnectedAt) {
+        // ختم انقطاع جديد (يعمل لكل مرّة انقطاع، لا الأولى فقط)
+        _graceNotified[p.num] = p.disconnectedAt;
         if (p.num !== config.onlinePlayerNum) {
           showLeaveToast(`⏳ ${p.name} يعاني انقطاعاً — بانتظار عودته...`);
         }
         // فحص متأخر: لو لم يعد خلال المهلة نُخرجه
+        const stamp = p.disconnectedAt;
         setTimeout(() => {
           const cur = (config.multiPlayers || {});
           const still = Object.values(cur).find(q => q.num === p.num);
-          if (still && still.active !== false && typeof still.disconnectedAt === 'number' && !state.gameFinished) {
+          if (still && still.active !== false && still.disconnectedAt === stamp && !state.gameFinished) {
             onlineManager.expirePlayerByNum(p.num);
           }
         }, GRACE_MS + 500);
       }
     }
-    // عاد قبل انتهاء المهلة → نظّف علامة الإشعار
-    if (typeof p.disconnectedAt !== 'number' && _graceNotified[p.num]) {
-      _graceNotified[p.num] = false;
+    // عاد قبل انتهاء المهلة → نصفّر التتبّع ليعمل عند الانقطاع التالي
+    if (typeof p.disconnectedAt !== 'number' && _graceNotified[p.num] != null) {
+      _graceNotified[p.num] = null;
       if (p.num !== config.onlinePlayerNum) showLeaveToast(`✅ ${p.name} عاد للمباراة`);
     }
   });
