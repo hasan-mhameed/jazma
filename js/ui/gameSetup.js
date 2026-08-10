@@ -1,10 +1,10 @@
 // 📄 ui/gameSetup.js
 // شاشة إعداد اللعبة + بدء اللعبة المحلية
 // تصميم مرن: الأحجام/اللاعبين/الأوضاع تُبنى من مصفوفات (سهلة التعديل)
-import { config } from "../config/config.js?v=1786221195";
-import { AIPlayer } from "../ai/aiPlayer.js?v=1786221195";
-import { getCurrentUser } from "../auth.js?v=1786221195";
-import { state } from "../core/state.js?v=1786221195";
+import { config } from "../config/config.js?v=1786382003";
+import { AIPlayer } from "../ai/aiPlayer.js?v=1786382003";
+import { getCurrentUser } from "../auth.js?v=1786382003";
+import { state } from "../core/state.js?v=1786382003";
 
 export let aiPlayer = null;
 
@@ -243,5 +243,21 @@ export function initGameSetup({ onGameStart, onOnlineRequested }) {
       aiPlayer = null;
     },
     getAiPlayer() { return aiPlayer; },
+    // بدء لعبة ضد الكمبيوتر مباشرة (يُستخدم عند اقتراحها في شاشات الأونلاين)
+    startAIGame(size, difficulty) {
+      const diff = difficulty || _difficulty || 'medium';
+      config.rows = config.cols = size || _size;
+      config.players = 2;
+      config.aiMode = "ai";
+      config.aiDifficulty = diff;
+      config.online = false;
+      config.multiPlayers = null;
+      config.onlinePlayerNames = null;
+      config.turnTimer = _timerOn;
+      config.timerMode = 'perTurn';
+      config.localPlayerNames = { 1: getCurrentUser()?.displayName || "أنت", 2: "الكمبيوتر" };
+      aiPlayer = new AIPlayer(diff);
+      onGameStart?.();
+    },
   };
 }

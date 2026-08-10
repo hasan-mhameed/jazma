@@ -13,7 +13,7 @@
     <title>جزمة — Dots & Boxes v11.7</title>
     <link rel="stylesheet" href="css/style.css" />
     <link rel="stylesheet" href="./css/animations.css" />
-    <link rel="stylesheet" href="./css/nature-theme.css?v=59" />
+    <link rel="stylesheet" href="./css/nature-theme.css?v=61" />
 
     <!-- 🆕 حل مشكلة favicon.ico -->
     <link rel="icon" href="data:," />
@@ -413,6 +413,16 @@
             </div>
             <p id="searching-text" class="online-hint">جارٍ البحث عن لاعب متاح...</p>
             <p id="search-countdown" class="search-countdown hidden"></p>
+            <div id="ai-suggest-box" class="ai-suggest hidden">
+              <p>🤖 ما في لاعبين متاحين حالياً</p>
+              <span class="ai-suggest-label">العب ضد الكمبيوتر:</span>
+              <div class="ai-diff-row">
+                <button class="ai-diff-btn" data-diff="easy">😊 سهل</button>
+                <button class="ai-diff-btn" data-diff="medium">⚔️ متوسط</button>
+                <button class="ai-diff-btn" data-diff="hard">🔥 صعب</button>
+              </div>
+              <button id="ai-suggest-dismiss" class="btn-link">أكمل الانتظار</button>
+            </div>
             <button id="cancel-search-btn" class="btn-back">✕ إلغاء</button>
           </div>
 
@@ -423,8 +433,16 @@
               <div id="approval-players" class="approval-players"></div>
               <p id="approval-timer" class="approval-timer">⏳ 15</p>
               <div class="approval-actions">
-                <button id="approval-accept" class="btn-primary btn-online">✅ موافق</button>
+                <button id="approval-accept" class="btn-primary btn-online">✅ العب بالعدد الموجود</button>
                 <button id="approval-reject" class="btn-back">❌ خروج</button>
+              </div>
+              <div class="approval-ai">
+                <span class="ai-suggest-label">أو العب ضد الكمبيوتر:</span>
+                <div class="ai-diff-row">
+                  <button class="ai-diff-btn small" data-diff="easy">😊 سهل</button>
+                  <button class="ai-diff-btn small" data-diff="medium">⚔️ متوسط</button>
+                  <button class="ai-diff-btn small" data-diff="hard">🔥 صعب</button>
+                </div>
               </div>
               <p id="approval-note" class="online-hint"></p>
             </div>
@@ -472,6 +490,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.1.0/dist/pixi.min.js"></script>
-    <script type="module" src="js/main.js?v=1786221195" defer></script>
+    <script type="module" src="js/main.js?v=1786382003" defer></script>
   </body>
 </html>

@@ -1105,3 +1105,36 @@ body {
   text-shadow: 0 0 40px rgba(45,212,191,.6); animation: cdPop .9s ease-out;
 }
 @keyframes cdPop { 0% { transform: scale(.4); opacity: 0; } 40% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+
+/* اقتراح اللعب ضد الكمبيوتر أثناء انتظار طويل */
+.ai-suggest {
+  margin: 14px auto; padding: 14px 16px; max-width: 320px;
+  background: rgba(45,212,191,0.08); border: 1.5px solid #2dd4bf44;
+  border-radius: 14px; animation: fadeInUp .4s ease-out;
+}
+.ai-suggest.hidden { display: none !important; }
+.ai-suggest p { color: #d7f5ec; font-weight: 700; margin: 0 0 10px; font-size: 0.95rem; }
+.ai-suggest .btn-online { width: 100%; margin-bottom: 6px; }
+.btn-link {
+  background: none; border: none; color: var(--nat-text-dim);
+  font-size: 0.85rem; text-decoration: underline; cursor: pointer; padding: 4px;
+}
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* أزرار صعوبة الكمبيوتر (نقرة واحدة = اختيار + بدء) */
+.ai-suggest-label { display:block; color: var(--nat-text-dim); font-size: 0.82rem; margin: 6px 0 6px; }
+.ai-diff-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.ai-diff-btn {
+  flex: 1; min-width: 84px; padding: 9px 6px; border-radius: 10px;
+  background: rgba(45,212,191,0.14); border: 1.5px solid #2dd4bf55;
+  color: #d7f5ec; font-weight: 800; font-size: 0.88rem; cursor: pointer;
+  transition: transform .12s, background .15s;
+}
+.ai-diff-btn:active { transform: scale(0.96); }
+@media (hover: hover) { .ai-diff-btn:hover { background: rgba(45,212,191,0.26); } }
+.ai-diff-btn.small { padding: 7px 4px; font-size: 0.8rem; min-width: 70px; }
+/* قسم الكمبيوتر داخل نافذة الموافقة — ثانوي بصرياً */
+.approval-ai {
+  margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--nat-border); opacity: 0.85;
+}

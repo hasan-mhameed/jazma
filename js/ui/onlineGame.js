@@ -1,13 +1,13 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1786221195";
-import { onlineManager } from "../firebase.js?v=1786221195";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786221195";
-import { setBank } from "./turnTimer.js?v=1786221195";
-import { state } from "../core/state.js?v=1786221195";
-import { getCurrentUser } from "../auth.js?v=1786221195";
+import { config } from "../config/config.js?v=1786382003";
+import { onlineManager } from "../firebase.js?v=1786382003";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786382003";
+import { setBank } from "./turnTimer.js?v=1786382003";
+import { state } from "../core/state.js?v=1786382003";
+import { getCurrentUser } from "../auth.js?v=1786382003";
 
-export function initOnlineGame({ onGameStart }) {
+export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
   const stepLobby       = document.getElementById("online-step-lobby");
   const stepPlaying     = document.getElementById("online-step-playing");
@@ -45,6 +45,53 @@ export function initOnlineGame({ onGameStart }) {
   const approvalNote      = document.getElementById("approval-note");
   const startCountdownEl  = document.getElementById("start-countdown");
   const startCountdownNum = document.getElementById("start-countdown-num");
+  // اقتراح اللعب ضد الكمبيوتر عند الانتظار وحيداً طويلاً
+  const aiSuggestBox      = document.getElementById("ai-suggest-box");
+  const aiSuggestDismiss  = document.getElementById("ai-suggest-dismiss");
+  const LONE_WAIT_SEC     = 45;   // مدة الانتظار وحيداً قبل اقتراح الكمبيوتر
+  let _loneTimerId = null, _aiSuggestDismissed = false;
+
+  function startLoneWaitTimer() {
+    if (_loneTimerId || _aiSuggestDismissed) return;
+    _loneTimerId = setTimeout(() => {
+      _loneTimerId = null;
+      // نعرضه فقط لو ما زلنا نبحث ووحدنا
+      if ((_lastLobbyCount <= 1) && !_aiSuggestDismissed) {
+        aiSuggestBox?.classList.remove("hidden");
+      }
+    }, LONE_WAIT_SEC * 1000);
+  }
+  function stopLoneWaitTimer() {
+    if (_loneTimerId) { clearTimeout(_loneTimerId); _loneTimerId = null; }
+    aiSuggestBox?.classList.add("hidden");
+  }
+
+  // بدء لعبة ضد الكمبيوتر بصعوبة مختارة (من صندوق الانتظار أو نافذة الموافقة)
+  async function goPlayAI(difficulty) {
+    stopLoneWaitTimer(); stopSearchCountdown();
+    // إن كنا داخل جولة موافقة: نُعلم الباقين برفضنا (نحن نغادر فعلاً)
+    if (_approvalOpen) { try { await onlineManager.setApprovalDecision("rejected"); } catch {} }
+    closeApproval();
+    _isMultiSearch = false;
+    try { await onlineManager.leaveRoom(); } catch {}
+    try { await onlineManager.cancelRandomMatch(); } catch {}
+    onlineScreen.classList.add("hidden");
+    const size = +document.getElementById("grid-size").value || 4;
+    gameSetupApi?.startAIGame(size, difficulty);
+  }
+
+  // كل أزرار الصعوبة (في الصندوق والنافذة) — نقرة واحدة = اختيار + بدء
+  document.querySelectorAll('.ai-diff-btn').forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.currentTarget.blur();
+      goPlayAI(e.currentTarget.dataset.diff || 'medium');
+    });
+  });
+  aiSuggestDismiss?.addEventListener("click", (e) => {
+    e.currentTarget.blur();
+    _aiSuggestDismissed = true;
+    aiSuggestBox?.classList.add("hidden");
+  });
   let _lastLobbyCount = 0, _lobbyNames = {}, _waitStartedAt = null;
   let _searchStartedAt = null; // ختم بدء البحث الحالي (لتجاهل جولات موافقة أقدم)
 
@@ -63,6 +110,7 @@ export function initOnlineGame({ onGameStart }) {
     if (step === "name")        stepName.classList.remove("hidden");
     if (step === "lobby")       stepLobby.classList.remove("hidden");
     if (step === "playing")     stepPlaying.classList.remove("hidden");
+    if (step === "playing") { try { stopLoneWaitTimer(); } catch {} }
     if (step === "searching")   stepSearching?.classList.remove("hidden");
     if (step === "multiCount")  stepMultiCount?.classList.remove("hidden");
     if (step === "multiLobby")  stepMultiLobby?.classList.remove("hidden");
@@ -203,6 +251,7 @@ export function initOnlineGame({ onGameStart }) {
 
       showStep("searching");
       searchingText.textContent = `جارٍ البحث عن خصم بلوحة ${gridSize}×${gridSize}...`;
+      _aiSuggestDismissed = false; _lastLobbyCount = 1; stopLoneWaitTimer(); startLoneWaitTimer();
 
       const result = await onlineManager.findRandomMatch(config, name);
 
@@ -293,13 +342,9 @@ export function initOnlineGame({ onGameStart }) {
       if (onlineManager.playerNum === 1) onlineManager.startMultiGame();
     } else if (a.state === "cancelled") {
       closeApproval();
-      showLeaveToast("↩️ لم يكتمل التوافق — عدنا للبحث");
-      // ختم انتظار جديد (عدّاد نظيف موحّد للباقين)
+      showLeaveToast("↩️ تغيّر العدد — سؤال جديد بعد لحظة");
+      // لا نعيد عدّاد 20 ثانية: المنشئ يفتح جولة جديدة فوراً بالعدد الحالي
       _waitStartedAt = null;
-      if (onlineManager.playerNum === 1) {
-        onlineManager.clearApprovalState().then(() => onlineManager.markWaitStart());
-      }
-      startSearchCountdown(_randomWanted);
     }
   }
 
@@ -333,7 +378,27 @@ export function initOnlineGame({ onGameStart }) {
     if (!d.length) return;
     if (d.some(x => x === "rejected")) {
       await onlineManager.closeApprovalRound("cancelled");
+      // إعادة السؤال فوراً بالعدد الجديد (بلا انتظار عدّاد) إن بقي ≥2
+      setTimeout(async () => {
+        if (!_isMultiSearch) return;
+        const cnt = _lastLobbyCount || 0;
+        if (cnt >= 2 && cnt < _randomWanted) {
+          await onlineManager.startApprovalRound(cnt, _randomWanted);
+        }
+      }, 600);
     } else if (d.every(x => x === "accepted")) {
+      // تحقّق نهائي: قد يكون أحدهم غادر بنفس اللحظة (سباق) → نتأكد من العدد الحاضر
+      const nowCount = _lastLobbyCount || 0;
+      if (nowCount < (a.available || 0)) {
+        // نقص العدد → جولة جديدة فوراً بالعدد الفعلي بدل بدء مباراة بمقعد شبح
+        await onlineManager.closeApprovalRound("cancelled");
+        setTimeout(async () => {
+          if (_isMultiSearch && nowCount >= 2) {
+            await onlineManager.startApprovalRound(nowCount, _randomWanted);
+          }
+        }, 600);
+        return;
+      }
       await onlineManager.closeApprovalRound("confirmed");
     }
   }
@@ -378,6 +443,7 @@ export function initOnlineGame({ onGameStart }) {
     // تصفير حالة الموافقة/الانتظار المحلية (بحث جديد نظيف)
     _approvalOpen = false; _waitStartedAt = null; _lastLobbyCount = 0; _lobbyNames = {};
     _searchStartedAt = onlineManager.serverNow ? onlineManager.serverNow() : Date.now();
+    _aiSuggestDismissed = false; stopLoneWaitTimer(); startLoneWaitTimer();
     stopSearchCountdown(); closeApproval();
     try {
       const gridSize = +document.getElementById("grid-size").value || 4;
@@ -392,6 +458,7 @@ export function initOnlineGame({ onGameStart }) {
         const count = list.length;
         const max = room?.maxPlayers || wanted;
         _lastLobbyCount = count;
+        if (count > 1) stopLoneWaitTimer(); else startLoneWaitTimer();
         _waitStartedAt = (typeof room?.waitStartedAt === 'number') ? room.waitStartedAt : null;
         _lobbyNames = {};
         list.forEach(p => { _lobbyNames[p.num] = p.name; });
@@ -419,7 +486,7 @@ export function initOnlineGame({ onGameStart }) {
       // بدء المباراة (للجميع) — مع عدّ تنازلي قصير
       onlineManager.onMultiStart((room) => {
         _isMultiSearch = false;
-        stopSearchCountdown(); closeApproval();
+        stopSearchCountdown(); closeApproval(); stopLoneWaitTimer();
         _waitStartedAt = null;
         // تنظيف حالة الموافقة حتى لا تظهر نافذة قديمة في بحث لاحق
         if (onlineManager.playerNum === 1) onlineManager.clearApprovalState();
@@ -446,6 +513,7 @@ export function initOnlineGame({ onGameStart }) {
   // ── إلغاء البحث العشوائي ────────────────────────────────────
   cancelSearchBtn?.addEventListener("click", async () => {
     stopSearchCountdown();
+    stopLoneWaitTimer();
     closeApproval();
     if (_isMultiSearch) {
       _isMultiSearch = false;
