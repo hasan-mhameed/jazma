@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1786382003";
-import { onlineManager } from "../firebase.js?v=1786382003";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786382003";
-import { setBank } from "./turnTimer.js?v=1786382003";
-import { state } from "../core/state.js?v=1786382003";
-import { getCurrentUser } from "../auth.js?v=1786382003";
+import { config } from "../config/config.js?v=1786488907";
+import { onlineManager } from "../firebase.js?v=1786488907";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786488907";
+import { setBank } from "./turnTimer.js?v=1786488907";
+import { state } from "../core/state.js?v=1786488907";
+import { getCurrentUser } from "../auth.js?v=1786488907";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -48,13 +48,26 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   // اقتراح اللعب ضد الكمبيوتر عند الانتظار وحيداً طويلاً
   const aiSuggestBox      = document.getElementById("ai-suggest-box");
   const aiSuggestDismiss  = document.getElementById("ai-suggest-dismiss");
-  const LONE_WAIT_SEC     = 45;   // مدة الانتظار وحيداً قبل اقتراح الكمبيوتر
-  let _loneTimerId = null, _aiSuggestDismissed = false;
+  const LONE_WAIT_SEC     = 20;   // موحّدة مع مهلة البحث الجماعي (قابلة للضبط)
+  let _loneTimerId = null, _loneTickId = null, _aiSuggestDismissed = false;
 
   function startLoneWaitTimer() {
     if (_loneTimerId || _aiSuggestDismissed) return;
+    let left = LONE_WAIT_SEC;
+    // عدّاد مرئي أثناء الانتظار وحيداً (اللاعب يعرف متى يظهر البديل)
+    if (searchCountdownEl) {
+      searchCountdownEl.classList.remove("hidden");
+      searchCountdownEl.textContent = `⏳ ${left}`;
+    }
+    _loneTickId = setInterval(() => {
+      left--;
+      if (searchCountdownEl && left >= 0) searchCountdownEl.textContent = `⏳ ${left}`;
+      if (left <= 0) { clearInterval(_loneTickId); _loneTickId = null; }
+    }, 1000);
     _loneTimerId = setTimeout(() => {
       _loneTimerId = null;
+      if (_loneTickId) { clearInterval(_loneTickId); _loneTickId = null; }
+      searchCountdownEl?.classList.add("hidden");
       // نعرضه فقط لو ما زلنا نبحث ووحدنا
       if ((_lastLobbyCount <= 1) && !_aiSuggestDismissed) {
         aiSuggestBox?.classList.remove("hidden");
@@ -63,7 +76,17 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   }
   function stopLoneWaitTimer() {
     if (_loneTimerId) { clearTimeout(_loneTimerId); _loneTimerId = null; }
+    if (_loneTickId) { clearInterval(_loneTickId); _loneTickId = null; }
     aiSuggestBox?.classList.add("hidden");
+  }
+
+  // إظهار بديل الكمبيوتر فوراً (عند بقاء اللاعب وحيداً بعد مغادرة الآخرين)
+  function showAISuggestNow(msg) {
+    if (_aiSuggestDismissed) return;
+    stopLoneWaitTimer();
+    searchCountdownEl?.classList.add("hidden");
+    if (msg && searchingText) searchingText.innerHTML = msg;
+    aiSuggestBox?.classList.remove("hidden");
   }
 
   // بدء لعبة ضد الكمبيوتر بصعوبة مختارة (من صندوق الانتظار أو نافذة الموافقة)
@@ -93,6 +116,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     aiSuggestBox?.classList.add("hidden");
   });
   let _lastLobbyCount = 0, _lobbyNames = {}, _waitStartedAt = null;
+  let _lobbyPlayers = {}; // قائمة اللاعبين الحاضرين فعلياً (لحساب المسؤول عن الجولة)
   let _searchStartedAt = null; // ختم بدء البحث الحالي (لتجاهل جولات موافقة أقدم)
 
   function showStep(step) {
@@ -372,31 +396,33 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     approvalModal?.classList.add("hidden");
   }
 
+  // فتح جولة موافقة جديدة بالعدد الفعلي — يقوم بها المنشئ، أو أصغر رقم حاضر لو غادر المنشئ
+  async function reopenApprovalIfNeeded() {
+    if (!_isMultiSearch) return;
+    const players = _lobbyPlayers || {};
+    const nums = Object.values(players).map(p => p.num).sort((a, b) => a - b);
+    const cnt = nums.length;
+    if (cnt < 2 || cnt >= _randomWanted) return;
+    // المسؤول: المنشئ إن كان حاضراً، وإلا أصغر رقم حاضر (حساب متطابق عند الجميع)
+    const owner = nums.includes(1) ? 1 : nums[0];
+    if (onlineManager.playerNum !== owner) return;
+    await onlineManager.startApprovalRound(cnt, _randomWanted);
+  }
+
   // المنشئ: هل وافق الجميع؟ أو رفض أحدهم؟
   async function evaluateApproval(a) {
     const d = Object.values(a.decisions || {});
     if (!d.length) return;
     if (d.some(x => x === "rejected")) {
       await onlineManager.closeApprovalRound("cancelled");
-      // إعادة السؤال فوراً بالعدد الجديد (بلا انتظار عدّاد) إن بقي ≥2
-      setTimeout(async () => {
-        if (!_isMultiSearch) return;
-        const cnt = _lastLobbyCount || 0;
-        if (cnt >= 2 && cnt < _randomWanted) {
-          await onlineManager.startApprovalRound(cnt, _randomWanted);
-        }
-      }, 600);
+      // إعادة السؤال فوراً بالعدد الفعلي الحاضر (بلا انتظار عدّاد)
+      setTimeout(() => reopenApprovalIfNeeded(), 600);
     } else if (d.every(x => x === "accepted")) {
       // تحقّق نهائي: قد يكون أحدهم غادر بنفس اللحظة (سباق) → نتأكد من العدد الحاضر
       const nowCount = _lastLobbyCount || 0;
       if (nowCount < (a.available || 0)) {
-        // نقص العدد → جولة جديدة فوراً بالعدد الفعلي بدل بدء مباراة بمقعد شبح
         await onlineManager.closeApprovalRound("cancelled");
-        setTimeout(async () => {
-          if (_isMultiSearch && nowCount >= 2) {
-            await onlineManager.startApprovalRound(nowCount, _randomWanted);
-          }
-        }, 600);
+        setTimeout(() => reopenApprovalIfNeeded(), 600);
         return;
       }
       await onlineManager.closeApprovalRound("confirmed");
@@ -458,6 +484,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         const count = list.length;
         const max = room?.maxPlayers || wanted;
         _lastLobbyCount = count;
+        _lobbyPlayers = players || {};
         if (count > 1) stopLoneWaitTimer(); else startLoneWaitTimer();
         _waitStartedAt = (typeof room?.waitStartedAt === 'number') ? room.waitStartedAt : null;
         _lobbyNames = {};
@@ -467,6 +494,13 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
           searchingText.innerHTML =
             `👥 انضم ${count} من ${max}<br><span class="search-names">${names}</span><br>بانتظار البقية...`;
         }
+        // بقيتُ وحيداً بعد مغادرة الآخرين → نواصل البحث + بديل الكمبيوتر فوراً
+        if (count <= 1 && _approvalOpen) {
+          closeApproval();
+          if (onlineManager.playerNum === 1) onlineManager.clearApprovalState();
+          showAISuggestNow(`↩️ غادر بقية اللاعبين — نواصل البحث لك<br><span class="search-names">👥 ${count} من ${max}</span>`);
+        }
+        if (_approvalOpen && count >= 2 && count < max) { setTimeout(() => reopenApprovalIfNeeded(), 400); }
         // اكتمل العدد → بدء مباشر (حتى لو كانت نافذة الموافقة مفتوحة نلغيها)
         if (count >= max && room?.status === "lobby") {
           stopSearchCountdown();

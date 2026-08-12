@@ -2,7 +2,7 @@
 // قائمة الأصدقاء + البحث + الإجراءات
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend,
-         listenFriendRequests, listenFriends } from "../friends.js?v=1786382003";
+         listenFriendRequests, listenFriends } from "../friends.js?v=1786488907";
 
 function asText(v, fallback = "") { return String(v ?? fallback); }
 function firstInitial(name) { return asText(name, "?").trim().charAt(0).toUpperCase() || "?"; }
