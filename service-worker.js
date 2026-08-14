@@ -1,5 +1,5 @@
 // 📄 service-worker.js — v14.2
-const CACHE_NAME = "jazma-v1786746959";
+const CACHE_NAME = "jazma-v1786748579";
 
 // نكاش الـ static assets فقط — JS بيتحمل من الشبكة دايماً عشان الـ ?v= يشتغل
 const STATIC_ASSETS = [

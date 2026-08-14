@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1786746959";
-import { onlineManager } from "../firebase.js?v=1786746959";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786746959";
-import { setBank } from "./turnTimer.js?v=1786746959";
-import { state } from "../core/state.js?v=1786746959";
-import { getCurrentUser } from "../auth.js?v=1786746959";
+import { config } from "../config/config.js?v=1786748579";
+import { onlineManager } from "../firebase.js?v=1786748579";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786748579";
+import { setBank } from "./turnTimer.js?v=1786748579";
+import { state } from "../core/state.js?v=1786748579";
+import { getCurrentUser } from "../auth.js?v=1786748579";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -303,6 +303,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const SEARCH_WAIT_SEC = 20;   // مهلة الانتظار قبل عرض الموافقة بعدد ناقص (قابلة للضبط)
   const APPROVAL_SEC    = 15;   // مهلة الرد على نافذة الموافقة
   let _searchTimerId = null, _searchLeft = 0, _approvalTimerId = null, _approvalOpen = false;
+  let _myApprovalDecision = null; // قرارنا في الجولة الحالية
 
   function stopSearchCountdown() {
     if (_searchTimerId) { clearInterval(_searchTimerId); _searchTimerId = null; }
@@ -315,7 +316,9 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     searchCountdownEl?.classList.remove("hidden");
     const tickFn = async () => {
       const started = _waitStartedAt;
-      if (typeof started !== 'number') { if (searchCountdownEl) searchCountdownEl.textContent = `⏳ ${SEARCH_WAIT_SEC}`; return; }
+      // لم يصل الختم المشترك بعد → نخفي العدّاد بدل عرض رقم مضلّل يُعيد من 20
+      if (typeof started !== 'number') { searchCountdownEl?.classList.add("hidden"); return; }
+      searchCountdownEl?.classList.remove("hidden");
       const elapsed = Math.max(0, (onlineManager.serverNow() - started) / 1000);
       const left = Math.max(0, Math.ceil(SEARCH_WAIT_SEC - elapsed));
       if (searchCountdownEl) searchCountdownEl.textContent = `⏳ ${left}`;
@@ -344,6 +347,8 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       _approvalOpen = true;
       stopSearchCountdown();
       approvalModal.classList.remove("hidden");
+      if (approvalAccept) { approvalAccept.disabled = false; approvalAccept.textContent = "✅ العب بالعدد الموجود"; }
+      if (approvalNote) approvalNote.textContent = "";
       if (approvalTitle) approvalTitle.textContent = `👥 توفّر ${a.available} من ${a.wanted} — تلعب؟`;
       // قائمة اللاعبين بحالاتهم الحيّة
       const names = config.onlinePlayerNames || {};
@@ -375,6 +380,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   function startApprovalTimer() {
     if (_approvalTimerId) return;
     let left = APPROVAL_SEC;
+    _myApprovalDecision = null; // قرارنا في هذه الجولة (لا نسمح للمهلة بدهسه)
     if (approvalTimer) { approvalTimer.textContent = `⏳ ${left}`; approvalTimer.classList.remove("low"); }
     _approvalTimerId = setInterval(() => {
       left--;
@@ -384,8 +390,8 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       }
       if (left <= 0) {
         clearInterval(_approvalTimerId); _approvalTimerId = null;
-        // لم نرد في الوقت = رفض
-        onlineManager.setApprovalDecision("rejected");
+        // لم نرد في الوقت = رفض — إلا إذا كنّا قد قرّرنا فعلاً (لا ندهس الموافقة)
+        if (!_myApprovalDecision) onlineManager.setApprovalDecision("rejected");
       }
     }, 1000);
   }
@@ -459,7 +465,10 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   approvalAccept?.addEventListener("click", (e) => {
     e.currentTarget.blur();
+    _myApprovalDecision = "accepted";
     onlineManager.setApprovalDecision("accepted");
+    e.currentTarget.disabled = true;
+    e.currentTarget.textContent = "✅ وافقت";
     if (approvalNote) approvalNote.textContent = "بانتظار قرار البقية...";
   });
   approvalReject?.addEventListener("click", async (e) => {
