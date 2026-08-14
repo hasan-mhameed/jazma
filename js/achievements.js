@@ -3,7 +3,7 @@
 
 import { getDatabase, ref, get, set }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1786577075";
+import { currentUser } from "./auth.js?v=1786746959";
 
 const db = getDatabase();
 

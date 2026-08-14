@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1786577075";
-import { onlineManager } from "../firebase.js?v=1786577075";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786577075";
-import { setBank } from "./turnTimer.js?v=1786577075";
-import { state } from "../core/state.js?v=1786577075";
-import { getCurrentUser } from "../auth.js?v=1786577075";
+import { config } from "../config/config.js?v=1786746959";
+import { onlineManager } from "../firebase.js?v=1786746959";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786746959";
+import { setBank } from "./turnTimer.js?v=1786746959";
+import { state } from "../core/state.js?v=1786746959";
+import { getCurrentUser } from "../auth.js?v=1786746959";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -322,7 +322,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       if (left <= 0) {
         stopSearchCountdown();
         // المنشئ فقط يفتح جولة الموافقة (بعدد الحاضرين)
-        if (onlineManager.playerNum === 1 && !_approvalOpen) {
+        if (isRoomOwner() && !_approvalOpen) {
           const cnt = _lastLobbyCount || 2;
           if (cnt >= 2 && cnt < wanted) {
             await onlineManager.startApprovalRound(cnt, wanted);
@@ -359,11 +359,11 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       }
       startApprovalTimer();
       // المنشئ يقيّم النتيجة
-      if (onlineManager.playerNum === 1) evaluateApproval(a);
+      if (isRoomOwner()) evaluateApproval(a);
     } else if (a.state === "confirmed") {
       closeApproval();
       // المنشئ يبدأ المباراة فعلياً
-      if (onlineManager.playerNum === 1) onlineManager.startMultiGame();
+      if (isRoomOwner()) onlineManager.startMultiGame();
     } else if (a.state === "cancelled") {
       closeApproval();
       showLeaveToast("↩️ تغيّر العدد — سؤال جديد بعد لحظة");
@@ -397,6 +397,14 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   }
 
   // فتح جولة موافقة جديدة بالعدد الفعلي — يقوم بها المنشئ، أو أصغر رقم حاضر لو غادر المنشئ
+  // المسؤول عن قرارات الغرفة (بدء/موافقة/ختم الانتظار): أصغر رقم حاضر
+  // ديناميكي — يضمن استمرار المسؤولية بعد مغادرة المنشئ (نقل الملكية)
+  function isRoomOwner() {
+    const nums = Object.values(_lobbyPlayers || {}).map(p => p.num);
+    if (!nums.length) return onlineManager.playerNum === 1;
+    return onlineManager.playerNum === Math.min(...nums);
+  }
+
   async function reopenApprovalIfNeeded() {
     if (!_isMultiSearch) return;
     const players = _lobbyPlayers || {};
@@ -486,7 +494,8 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         _lastLobbyCount = count;
         _lobbyPlayers = players || {};
         if (count > 1) stopLoneWaitTimer(); else startLoneWaitTimer();
-        _waitStartedAt = (typeof room?.waitStartedAt === 'number') ? room.waitStartedAt : null;
+        // نحتفظ بالختم السابق إن لم يصل ختم من الغرفة بعد (العدّاد يكمل ولا يعيد من 20)
+        if (typeof room?.waitStartedAt === 'number') _waitStartedAt = room.waitStartedAt;
         _lobbyNames = {};
         list.forEach(p => { _lobbyNames[p.num] = p.name; });
         if (!_approvalOpen) {
@@ -497,7 +506,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         // بقيتُ وحيداً بعد مغادرة الآخرين → نواصل البحث + بديل الكمبيوتر فوراً
         if (count <= 1 && _approvalOpen) {
           closeApproval();
-          if (onlineManager.playerNum === 1) onlineManager.clearApprovalState();
+          if (isRoomOwner()) onlineManager.clearApprovalState();
           showAISuggestNow(`↩️ غادر بقية اللاعبين — نواصل البحث لك<br><span class="search-names">👥 ${count} من ${max}</span>`);
         }
         if (_approvalOpen && count >= 2 && count < max) { setTimeout(() => reopenApprovalIfNeeded(), 400); }
@@ -505,13 +514,13 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         if (count >= max && room?.status === "lobby") {
           stopSearchCountdown();
           if (_approvalOpen) closeApproval();
-          if (onlineManager.playerNum === 1) {
+          if (isRoomOwner()) {
             onlineManager.clearApprovalState();
             onlineManager.startMultiGame();
           }
         } else if (count >= 2 && !_approvalOpen) {
           // المنشئ يثبّت ختم بدء الانتظار (مرّة واحدة) ليكون العدّ موحّداً
-          if (onlineManager.playerNum === 1) onlineManager.markWaitStart();
+          if (isRoomOwner()) onlineManager.markWaitStart();
           startSearchCountdown(max);
         }
       });
@@ -523,7 +532,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         stopSearchCountdown(); closeApproval(); stopLoneWaitTimer();
         _waitStartedAt = null;
         // تنظيف حالة الموافقة حتى لا تظهر نافذة قديمة في بحث لاحق
-        if (onlineManager.playerNum === 1) onlineManager.clearApprovalState();
+        if (isRoomOwner()) onlineManager.clearApprovalState();
         runStartCountdown(() => startMultiMatch(room));
       });
       // المنشئ غادر قبل البدء
