@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1786488907";
-import { onlineManager } from "../firebase.js?v=1786488907";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786488907";
-import { setBank } from "./turnTimer.js?v=1786488907";
-import { state } from "../core/state.js?v=1786488907";
-import { getCurrentUser } from "../auth.js?v=1786488907";
+import { config } from "../config/config.js?v=1786577075";
+import { onlineManager } from "../firebase.js?v=1786577075";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786577075";
+import { setBank } from "./turnTimer.js?v=1786577075";
+import { state } from "../core/state.js?v=1786577075";
+import { getCurrentUser } from "../auth.js?v=1786577075";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -469,8 +469,8 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     // تصفير حالة الموافقة/الانتظار المحلية (بحث جديد نظيف)
     _approvalOpen = false; _waitStartedAt = null; _lastLobbyCount = 0; _lobbyNames = {};
     _searchStartedAt = onlineManager.serverNow ? onlineManager.serverNow() : Date.now();
-    _aiSuggestDismissed = false; stopLoneWaitTimer(); startLoneWaitTimer();
     stopSearchCountdown(); closeApproval();
+    _aiSuggestDismissed = false; stopLoneWaitTimer(); startLoneWaitTimer();
     try {
       const gridSize = +document.getElementById("grid-size").value || 4;
       config.rows = config.cols = gridSize;

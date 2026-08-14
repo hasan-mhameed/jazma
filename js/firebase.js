@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1786488907";
+import { getCurrentUser }   from "./auth.js?v=1786577075";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -669,12 +669,22 @@ export class OnlineManager {
         // غرفة جماعية أثناء اللعب: نعلّم أنفسنا منسحبين فقط — المباراة تكمل للباقين
         try { await update(ref(db, `rooms/${this.roomCode}/players/${this._myUid}`), { active: false }); } catch {}
       } else if (this._isMulti && !this._gameStarted) {
-        // في اللوبي الجماعي: المضيف يمسح الغرفة، الضيف يزيل نفسه
+        // في اللوبي الجماعي: نزيل أنفسنا فقط. لو كنا المنشئ وبقي آخرون → الغرفة تستمر لهم
+        // (نقل الملكية: أصغر رقم حاضر يتولّى المسؤولية — يُحسب عند العملاء)
         try {
-          if (this.playerNum === 1) {
+          await remove(ref(db, `rooms/${this.roomCode}/players/${this._myUid}`));
+          const snap = await get(ref(db, `rooms/${this.roomCode}/players`));
+          const rest = snap.exists() ? Object.values(snap.val()) : [];
+          if (rest.length === 0) {
+            // لم يبقَ أحد → نحذف الغرفة كاملة
             await remove(ref(db, `rooms/${this.roomCode}`));
           } else {
-            await remove(ref(db, `rooms/${this.roomCode}/players/${this._myUid}`));
+            // تحديث العدّاد ونقل الملكية لأصغر رقم حاضر
+            const nums = rest.map(p => p.num).sort((a, b) => a - b);
+            await update(ref(db, `rooms/${this.roomCode}`), {
+              playerCount: rest.length,
+              hostNum: nums[0],
+            });
           }
         } catch {}
       } else {
