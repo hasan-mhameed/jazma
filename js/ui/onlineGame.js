@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1786748579";
-import { onlineManager } from "../firebase.js?v=1786748579";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786748579";
-import { setBank } from "./turnTimer.js?v=1786748579";
-import { state } from "../core/state.js?v=1786748579";
-import { getCurrentUser } from "../auth.js?v=1786748579";
+import { config } from "../config/config.js?v=1786749718";
+import { onlineManager } from "../firebase.js?v=1786749718";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786749718";
+import { setBank } from "./turnTimer.js?v=1786749718";
+import { state } from "../core/state.js?v=1786749718";
+import { getCurrentUser } from "../auth.js?v=1786749718";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -339,6 +339,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   // ── نافذة الموافقة المتزامنة ───────────────────────────────
   function renderApproval(a) {
+    console.log("🔎[APPROVAL] حالة واردة:", JSON.stringify(a), "| _isMultiSearch=", _isMultiSearch, "| _searchStartedAt=", _searchStartedAt);
     if (!a || !approvalModal) return;
     if (!_isMultiSearch) return; // لسنا في بحث — نتجاهل أي حالة قديمة
     // نتجاهل جولة موافقة بدأت قبل بحثنا الحالي (بقايا جولة سابقة → وميض نافذة قديمة)
@@ -463,7 +464,9 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     }, 900);
   }
 
+  console.log("🔎[APPROVAL] تسجيل معالج الزر:", !!approvalAccept, "| مهلة:", APPROVAL_SEC);
   approvalAccept?.addEventListener("click", (e) => {
+    console.log("🔎[APPROVAL] نُقر على موافق! roomCode=", onlineManager.roomCode, "playerNum=", onlineManager.playerNum);
     e.currentTarget.blur();
     _myApprovalDecision = "accepted";
     onlineManager.setApprovalDecision("accepted");
