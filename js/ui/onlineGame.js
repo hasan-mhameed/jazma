@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1786749718";
-import { onlineManager } from "../firebase.js?v=1786749718";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786749718";
-import { setBank } from "./turnTimer.js?v=1786749718";
-import { state } from "../core/state.js?v=1786749718";
-import { getCurrentUser } from "../auth.js?v=1786749718";
+import { config } from "../config/config.js?v=1786829165";
+import { onlineManager } from "../firebase.js?v=1786829165";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786829165";
+import { setBank } from "./turnTimer.js?v=1786829165";
+import { state } from "../core/state.js?v=1786829165";
+import { getCurrentUser } from "../auth.js?v=1786829165";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -339,7 +339,6 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   // ── نافذة الموافقة المتزامنة ───────────────────────────────
   function renderApproval(a) {
-    console.log("🔎[APPROVAL] حالة واردة:", JSON.stringify(a), "| _isMultiSearch=", _isMultiSearch, "| _searchStartedAt=", _searchStartedAt);
     if (!a || !approvalModal) return;
     if (!_isMultiSearch) return; // لسنا في بحث — نتجاهل أي حالة قديمة
     // نتجاهل جولة موافقة بدأت قبل بحثنا الحالي (بقايا جولة سابقة → وميض نافذة قديمة)
@@ -355,7 +354,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       const names = config.onlinePlayerNames || {};
       const decisions = a.decisions || {};
       if (approvalPlayers) {
-        approvalPlayers.innerHTML = Object.keys(decisions).sort().map(num => {
+        approvalPlayers.innerHTML = Object.keys(decisions).filter(k => decisions[k] != null).sort((x,y)=>Number(x)-Number(y)).map(num => {
           const d = decisions[num];
           const icon = d === "accepted" ? "✅" : d === "rejected" ? "❌" : "⏳";
           const cls  = d === "accepted" ? "accepted" : d === "rejected" ? "rejected" : "";
@@ -365,7 +364,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       }
       startApprovalTimer();
       // المنشئ يقيّم النتيجة
-      if (isRoomOwner()) evaluateApproval(a);
+      if (isApprovalOwner(a)) evaluateApproval(a);
     } else if (a.state === "confirmed") {
       closeApproval();
       // المنشئ يبدأ المباراة فعلياً
@@ -404,11 +403,23 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   }
 
   // فتح جولة موافقة جديدة بالعدد الفعلي — يقوم بها المنشئ، أو أصغر رقم حاضر لو غادر المنشئ
-  // المسؤول عن قرارات الغرفة (بدء/موافقة/ختم الانتظار): أصغر رقم حاضر
-  // ديناميكي — يضمن استمرار المسؤولية بعد مغادرة المنشئ (نقل الملكية)
+  // المسؤول عن قرارات الغرفة: أصغر رقم حاضر (من قائمة اللوبي)
   function isRoomOwner() {
-    const nums = Object.values(_lobbyPlayers || {}).map(p => p.num);
+    const nums = Object.values(_lobbyPlayers || {}).map(p => p.num).filter(n => typeof n === 'number');
     if (!nums.length) return onlineManager.playerNum === 1;
+    return onlineManager.playerNum === Math.min(...nums);
+  }
+
+  // المسؤول عن تقييم جولة موافقة بعينها: أصغر رقم ضمن قرارات الجولة
+  // (مصدر موثوق دائماً — يعمل حتى لو تأخّرت قائمة اللوبي محلياً، ويتعامل مع تحويل Firebase للكائن إلى مصفوفة)
+  function isApprovalOwner(a) {
+    const d = a?.decisions;
+    if (!d) return false;
+    const nums = Object.keys(d)
+      .filter(k => d[k] != null)
+      .map(Number)
+      .filter(n => !isNaN(n));
+    if (!nums.length) return false;
     return onlineManager.playerNum === Math.min(...nums);
   }
 
@@ -426,7 +437,8 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   // المنشئ: هل وافق الجميع؟ أو رفض أحدهم؟
   async function evaluateApproval(a) {
-    const d = Object.values(a.decisions || {});
+    // ملاحظة: Firebase قد يحوّل decisions إلى مصفوفة بفجوات null — نتجاهل الفجوات
+    const d = Object.values(a.decisions || {}).filter(x => x != null);
     if (!d.length) return;
     if (d.some(x => x === "rejected")) {
       await onlineManager.closeApprovalRound("cancelled");
@@ -464,9 +476,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     }, 900);
   }
 
-  console.log("🔎[APPROVAL] تسجيل معالج الزر:", !!approvalAccept, "| مهلة:", APPROVAL_SEC);
   approvalAccept?.addEventListener("click", (e) => {
-    console.log("🔎[APPROVAL] نُقر على موافق! roomCode=", onlineManager.roomCode, "playerNum=", onlineManager.playerNum);
     e.currentTarget.blur();
     _myApprovalDecision = "accepted";
     onlineManager.setApprovalDecision("accepted");

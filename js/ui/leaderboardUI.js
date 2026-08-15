@@ -1,6 +1,6 @@
 // 📄 ui/leaderboardUI.js
 // لوحة المتصدرين
-import { getLeaderboard } from "../leaderboard.js?v=1786749718";
+import { getLeaderboard } from "../leaderboard.js?v=1786829165";
 
 function asText(v, fallback = "") { return String(v ?? fallback); }
 function firstInitial(name) { return asText(name, "?").trim().charAt(0).toUpperCase() || "?"; }
