@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1786829165";
+import { getCurrentUser }   from "./auth.js?v=1786830324";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -572,6 +572,9 @@ export class OnlineManager {
   async startApprovalRound(availableCount, wantedCount) {
     if (!this.roomCode) return;
     try {
+      // حماية: لا نعيد بناء جولة قائمة (وإلا تُمحى قرارات اللاعبين المسجّلة)
+      const cur = await get(ref(db, `rooms/${this.roomCode}/approval`));
+      if (cur.exists() && cur.val()?.state === "asking") return;
       const snap = await get(ref(db, `rooms/${this.roomCode}/players`));
       if (!snap.exists()) return;
       const decisions = {};

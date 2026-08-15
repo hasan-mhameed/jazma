@@ -1,7 +1,7 @@
 // 📄 ui/guideUI.js
 // دليل الأدوات — نافذة تعرض كل العناصر والقدرات ووظائفها
 
-import { GUIDE_ITEMS } from "./guideData.js?v=1786829165";
+import { GUIDE_ITEMS } from "./guideData.js?v=1786830324";
 
 let _built = false;
 

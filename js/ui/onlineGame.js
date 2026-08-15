@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1786829165";
-import { onlineManager } from "../firebase.js?v=1786829165";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786829165";
-import { setBank } from "./turnTimer.js?v=1786829165";
-import { state } from "../core/state.js?v=1786829165";
-import { getCurrentUser } from "../auth.js?v=1786829165";
+import { config } from "../config/config.js?v=1786830324";
+import { onlineManager } from "../firebase.js?v=1786830324";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786830324";
+import { setBank } from "./turnTimer.js?v=1786830324";
+import { state } from "../core/state.js?v=1786830324";
+import { getCurrentUser } from "../auth.js?v=1786830324";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -304,6 +304,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const APPROVAL_SEC    = 15;   // مهلة الرد على نافذة الموافقة
   let _searchTimerId = null, _searchLeft = 0, _approvalTimerId = null, _approvalOpen = false;
   let _myApprovalDecision = null; // قرارنا في الجولة الحالية
+  let _approvalRequested = false;  // حارس: طلبنا فتح جولة ولم تصل الحالة بعد
 
   function stopSearchCountdown() {
     if (_searchTimerId) { clearInterval(_searchTimerId); _searchTimerId = null; }
@@ -324,10 +325,11 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       if (searchCountdownEl) searchCountdownEl.textContent = `⏳ ${left}`;
       if (left <= 0) {
         stopSearchCountdown();
-        // المنشئ فقط يفتح جولة الموافقة (بعدد الحاضرين)
-        if (isRoomOwner() && !_approvalOpen) {
+        // فتح جولة الموافقة مرة واحدة فقط (حارس محلي يمنع إعادة الفتح قبل وصول الحالة من الشبكة)
+        if (isRoomOwner() && !_approvalOpen && !_approvalRequested) {
           const cnt = _lastLobbyCount || 2;
           if (cnt >= 2 && cnt < wanted) {
+            _approvalRequested = true;
             await onlineManager.startApprovalRound(cnt, wanted);
           }
         }
@@ -346,6 +348,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     if (a.state === "asking") {
       _approvalOpen = true;
       stopSearchCountdown();
+      _approvalRequested = false;
       approvalModal.classList.remove("hidden");
       if (approvalAccept) { approvalAccept.disabled = false; approvalAccept.textContent = "✅ العب بالعدد الموجود"; }
       if (approvalNote) approvalNote.textContent = "";
@@ -398,6 +401,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   function closeApproval() {
     _approvalOpen = false;
+    _approvalRequested = false;
     if (_approvalTimerId) { clearInterval(_approvalTimerId); _approvalTimerId = null; }
     approvalModal?.classList.add("hidden");
   }
@@ -432,6 +436,8 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     // المسؤول: المنشئ إن كان حاضراً، وإلا أصغر رقم حاضر (حساب متطابق عند الجميع)
     const owner = nums.includes(1) ? 1 : nums[0];
     if (onlineManager.playerNum !== owner) return;
+    if (_approvalRequested) return;
+    _approvalRequested = true;
     await onlineManager.startApprovalRound(cnt, _randomWanted);
   }
 
