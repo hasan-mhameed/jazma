@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1786830324";
-import { onlineManager } from "../firebase.js?v=1786830324";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786830324";
-import { setBank } from "./turnTimer.js?v=1786830324";
-import { state } from "../core/state.js?v=1786830324";
-import { getCurrentUser } from "../auth.js?v=1786830324";
+import { config } from "../config/config.js?v=1786831547";
+import { onlineManager } from "../firebase.js?v=1786831547";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786831547";
+import { setBank } from "./turnTimer.js?v=1786831547";
+import { state } from "../core/state.js?v=1786831547";
+import { getCurrentUser } from "../auth.js?v=1786831547";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -357,7 +357,12 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       const names = config.onlinePlayerNames || {};
       const decisions = a.decisions || {};
       if (approvalPlayers) {
-        approvalPlayers.innerHTML = Object.keys(decisions).filter(k => decisions[k] != null).sort((x,y)=>Number(x)-Number(y)).map(num => {
+        const presentInLobby = Object.values(_lobbyPlayers || {})
+          .map(p => p.num).filter(n => typeof n === 'number');
+        approvalPlayers.innerHTML = Object.keys(decisions)
+          .filter(k => decisions[k] != null)
+          .filter(k => !presentInLobby.length || presentInLobby.includes(Number(k)))
+          .sort((x,y)=>Number(x)-Number(y)).map(num => {
           const d = decisions[num];
           const icon = d === "accepted" ? "✅" : d === "rejected" ? "❌" : "⏳";
           const cls  = d === "accepted" ? "accepted" : d === "rejected" ? "rejected" : "";
@@ -443,8 +448,14 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   // المنشئ: هل وافق الجميع؟ أو رفض أحدهم؟
   async function evaluateApproval(a) {
-    // ملاحظة: Firebase قد يحوّل decisions إلى مصفوفة بفجوات null — نتجاهل الفجوات
-    const d = Object.values(a.decisions || {}).filter(x => x != null);
+    // نتجاهل: الفجوات (تحويل Firebase لمصفوفة) + قرارات لاعبين غادروا فعلاً
+    const presentNums = Object.values(_lobbyPlayers || {})
+      .map(p => p.num).filter(n => typeof n === 'number');
+    const raw = a.decisions || {};
+    const d = Object.keys(raw)
+      .filter(k => raw[k] != null)
+      .filter(k => !presentNums.length || presentNums.includes(Number(k)))
+      .map(k => raw[k]);
     if (!d.length) return;
     if (d.some(x => x === "rejected")) {
       await onlineManager.closeApprovalRound("cancelled");
@@ -702,12 +713,17 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     const names = {};
     Object.values(players).forEach(p => { names[p.num] = p.name; });
     config.rows = room.cfg.rows; config.cols = room.cfg.cols;
-    config.players = room.playerCount || Object.keys(players).length;
+    // مهم: نطاق أرقام اللاعبين قد لا يبدأ من 1 (بعد مغادرات) —
+    // منطق التناوب يعتمد على (رقم % players)+1 فيجب أن يغطي أعلى رقم موجود
+    const nums = Object.values(players).map(p => p.num).filter(n => typeof n === 'number');
+    config.players = nums.length ? Math.max(...nums) : (room.playerCount || 2);
     config.online = true;
     config.aiMode = "online";
     config.onlinePlayerNum = myNum;
     config.onlinePlayerNames = names;
     config.multiPlayers = players;
+    // الدور يبدأ عند أصغر رقم حاضر فعلاً
+    state.currentPlayer = nums.length ? Math.min(...nums) : 1;
     showStep("playing");
     // نستخدم مسار اللعب الأونلاين المتعدد
     launchOnlineMultiGame(myNum, onlineTurnInd, onGameStart);

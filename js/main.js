@@ -1,37 +1,37 @@
 // 📄 main.js — v13.9
 // Bootstrap فقط — يربط كل الـ modules
 
-import { config }                              from "./config/config.js?v=1786830324";
-import { state }                               from "./core/state.js?v=1786830324";
-import { startBoard, updateScoreboard, resetState } from "./board.js?v=1786830324";
-import { updateTurnUI }                        from "./ui/turnManager.js?v=1786830324";
-import { audioManager }                        from "./audio/audioManager.js?v=1786830324";
-import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1786830324";
-import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1786830324";
+import { config }                              from "./config/config.js?v=1786831547";
+import { state }                               from "./core/state.js?v=1786831547";
+import { startBoard, updateScoreboard, resetState } from "./board.js?v=1786831547";
+import { updateTurnUI }                        from "./ui/turnManager.js?v=1786831547";
+import { audioManager }                        from "./audio/audioManager.js?v=1786831547";
+import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1786831547";
+import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1786831547";
 
-import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1786830324";
-import { initGameSetup }       from "./ui/gameSetup.js?v=1786830324";
-import { initTurnTimer, stopTurnTimer, startTurnTimer, TIME_BANKS, enableCentralClock, applyClockState } from "./ui/turnTimer.js?v=1786830324";
-import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1786830324";
-import { initFriendsUI }       from "./ui/friendsUI.js?v=1786830324";
-import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1786830324";
-import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1786830324";
-import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1786830324";
-import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1786830324";
-import { renderStatsModal }    from "./ui/statsModal.js?v=1786830324";
-import { initHistoryUI }       from "./ui/historyUI.js?v=1786830324";
-import { resetMatchTimer, endGame } from "./ui/gameEnd.js?v=1786830324";
-import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1786830324";
-import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1786830324";
-import { refreshCoinsBadge } from "./core/wallet.js?v=1786830324";
-import { loadLearnedPowers } from "./ui/powerTutorial.js?v=1786830324";
-import { initPowersUI, refreshInventory } from "./ui/powersUI.js?v=1786830324";
-import { POWERS, addPower } from "./core/powers.js?v=1786830324";
-import { spendCoins } from "./core/wallet.js?v=1786830324";
-import { extendTime, cutBank, getTimerMode, getBank } from "./ui/turnTimer.js?v=1786830324";
-import { activatePower, triggerAI, nextActivePlayer } from "./ui/boardRenderer.js?v=1786830324";
-import { initNavMenu }            from "./ui/navMenu.js?v=1786830324";
-import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1786830324";
+import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1786831547";
+import { initGameSetup }       from "./ui/gameSetup.js?v=1786831547";
+import { initTurnTimer, stopTurnTimer, startTurnTimer, TIME_BANKS, enableCentralClock, applyClockState } from "./ui/turnTimer.js?v=1786831547";
+import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1786831547";
+import { initFriendsUI }       from "./ui/friendsUI.js?v=1786831547";
+import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1786831547";
+import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1786831547";
+import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1786831547";
+import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1786831547";
+import { renderStatsModal }    from "./ui/statsModal.js?v=1786831547";
+import { initHistoryUI }       from "./ui/historyUI.js?v=1786831547";
+import { resetMatchTimer, endGame } from "./ui/gameEnd.js?v=1786831547";
+import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1786831547";
+import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1786831547";
+import { refreshCoinsBadge } from "./core/wallet.js?v=1786831547";
+import { loadLearnedPowers } from "./ui/powerTutorial.js?v=1786831547";
+import { initPowersUI, refreshInventory } from "./ui/powersUI.js?v=1786831547";
+import { POWERS, addPower } from "./core/powers.js?v=1786831547";
+import { spendCoins } from "./core/wallet.js?v=1786831547";
+import { extendTime, cutBank, getTimerMode, getBank } from "./ui/turnTimer.js?v=1786831547";
+import { activatePower, triggerAI, nextActivePlayer } from "./ui/boardRenderer.js?v=1786831547";
+import { initNavMenu }            from "./ui/navMenu.js?v=1786831547";
+import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1786831547";
 
 // ── PWA ─────────────────────────────────────────────────────────
 let _deferredInstallPrompt = null;
@@ -108,12 +108,22 @@ document.addEventListener("DOMContentLoaded", () => {
         () => onlineManager.serverNow(),
         (p) => handleBankEmpty(p)
       );
-      // المضيف/المنشئ (اللاعب 1) يهيّئ الساعة: بنوك متساوية + اللاعب الأول
-      if (config.onlinePlayerNum === 1) {
-        const bankSec = TIME_BANKS[config.rows] || 180;
-        const banks = {};
-        for (let i = 1; i <= config.players; i++) banks[i] = bankSec;
-        onlineManager.initClock(banks, 1);
+      // تهيئة الساعة: يقوم بها أصغر رقم لاعب حاضر (وليس "1" ثابتاً — قد يكون غادر)
+      // والبنوك تُبنى لأرقام اللاعبين الفعليين، والدور الأول لأصغر رقم
+      {
+        const nums = config.multiPlayers
+          ? Object.values(config.multiPlayers).map(p => p.num).filter(n => typeof n === 'number')
+          : [1, 2];
+        const sorted = nums.length ? nums.slice().sort((a, b) => a - b) : [1, 2];
+        const firstPlayer = sorted[0];
+        if (config.onlinePlayerNum === firstPlayer) {
+          const bankSec = TIME_BANKS[config.rows] || 180;
+          const banks = {};
+          sorted.forEach(n => { banks[n] = bankSec; });
+          onlineManager.initClock(banks, firstPlayer);
+        }
+        // نضمن أن الدور يبدأ عند لاعب موجود فعلاً
+        if (!sorted.includes(state.currentPlayer)) state.currentPlayer = firstPlayer;
       }
       // استقبال حالة الساعة من Firebase (المرجع)
       onlineManager.onClock((clk) => applyClockState(clk));
