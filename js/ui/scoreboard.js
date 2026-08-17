@@ -1,8 +1,8 @@
 // 📄 scoreboard.js — v16.0 (Nature cards + level badge)
-import { state }  from "../core/state.js?v=1786920203";
-import { config } from "../config/config.js?v=1786920203";
-import { getXP, getLevelFromXP } from "../xp.js?v=1786920203";
-import { getCurrentUser } from "../auth.js?v=1786920203";
+import { state }  from "../core/state.js?v=1787005544";
+import { config } from "../config/config.js?v=1787005544";
+import { getXP, getLevelFromXP } from "../xp.js?v=1787005544";
+import { getCurrentUser } from "../auth.js?v=1787005544";
 
 const AVATARS = ['🦊', '🤖', '🦅', '🐺'];
 const COLORS  = ['p1', 'p2', 'p3', 'p4'];
@@ -22,6 +22,12 @@ export function renderScoreboard(cfg) {
   const scores = state.scores || {};
 
   for (let i = 1; i <= cfg.players; i++) {
+    // في الأونلاين الجماعي قد لا يبدأ ترقيم اللاعبين من 1 (بعد مغادرات)
+    // فنتخطّى الأرقام التي لا يقابلها لاعب فعلي حتى لا تظهر بطاقة "لاعب N" وهمية
+    if (cfg.multiPlayers) {
+      const exists = Object.values(cfg.multiPlayers).some(p => p && p.num === i);
+      if (!exists) continue;
+    }
     const card = document.createElement("div");
     card.id = `pcard${i}`;
     card.className = `nat-player-card ${COLORS[i-1] || 'p1'}`;
