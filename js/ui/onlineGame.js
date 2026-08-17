@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1786831547";
-import { onlineManager } from "../firebase.js?v=1786831547";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786831547";
-import { setBank } from "./turnTimer.js?v=1786831547";
-import { state } from "../core/state.js?v=1786831547";
-import { getCurrentUser } from "../auth.js?v=1786831547";
+import { config } from "../config/config.js?v=1786920203";
+import { onlineManager } from "../firebase.js?v=1786920203";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1786920203";
+import { setBank } from "./turnTimer.js?v=1786920203";
+import { state } from "../core/state.js?v=1786920203";
+import { getCurrentUser } from "../auth.js?v=1786920203";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -305,6 +305,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   let _searchTimerId = null, _searchLeft = 0, _approvalTimerId = null, _approvalOpen = false;
   let _myApprovalDecision = null; // قرارنا في الجولة الحالية
   let _approvalRequested = false;  // حارس: طلبنا فتح جولة ولم تصل الحالة بعد
+  let _lastApprovalState = null;   // آخر حالة جولة (لحسم المهلة)
 
   function stopSearchCountdown() {
     if (_searchTimerId) { clearInterval(_searchTimerId); _searchTimerId = null; }
@@ -341,6 +342,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   // ── نافذة الموافقة المتزامنة ───────────────────────────────
   function renderApproval(a) {
+    _lastApprovalState = a;
     if (!a || !approvalModal) return;
     if (!_isMultiSearch) return; // لسنا في بحث — نتجاهل أي حالة قديمة
     // نتجاهل جولة موافقة بدأت قبل بحثنا الحالي (بقايا جولة سابقة → وميض نافذة قديمة)
@@ -400,8 +402,28 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         clearInterval(_approvalTimerId); _approvalTimerId = null;
         // لم نرد في الوقت = رفض — إلا إذا كنّا قد قرّرنا فعلاً (لا ندهس الموافقة)
         if (!_myApprovalDecision) onlineManager.setApprovalDecision("rejected");
+        // حسم زمني مضمون: المسؤول ينهي الجولة بمن ردّ فعلاً بعد مهلة قصيرة
+        // (من لم يردّ — بما فيهم من غادر — يُعتبر رافضاً حكماً، فلا انتظار لقرار لن يأتي)
+        setTimeout(() => resolveApprovalDeadline(), 1200);
       }
     }, 1000);
+  }
+
+  // حسم الجولة عند انتهاء المهلة (يقوم به مسؤول الجولة)
+  async function resolveApprovalDeadline() {
+    if (!_approvalOpen || !_lastApprovalState) return;
+    const a = _lastApprovalState;
+    if (a.state !== "asking") return;
+    if (!isApprovalOwner(a)) return;
+    const raw = a.decisions || {};
+    const accepted = Object.keys(raw).filter(k => raw[k] === "accepted").map(Number);
+    // نحتاج ≥2 موافقين فعليين لبدء المباراة، وإلا نلغي ونعيد السؤال بالحاضرين
+    if (accepted.length >= 2) {
+      await onlineManager.closeApprovalRound("confirmed");
+    } else {
+      await onlineManager.closeApprovalRound("cancelled");
+      setTimeout(() => reopenApprovalIfNeeded(), 600);
+    }
   }
 
   function closeApproval() {
@@ -708,7 +730,12 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   // بدء المباراة الجماعية (للجميع)
   function startMultiMatch(room) {
-    const players = room.players || {};
+    const allPlayers = room.players || {};
+    // نستبعد من غادر فعلياً (قد تحمل اللقطة لاعباً خرج للتوّ) — لا يظهر اسمه فوق اللوحة
+    const players = {};
+    Object.entries(allPlayers).forEach(([uid, p]) => {
+      if (p && p.active !== false) players[uid] = p;
+    });
     const myNum = onlineManager.playerNum;
     const names = {};
     Object.values(players).forEach(p => { names[p.num] = p.name; });
@@ -939,6 +966,10 @@ function handleMultiPlayerLeft(players, onlineTurnInd) {
   // نحدّث حالة اللاعبين النشطين (المنسحب active:false)
   const active = Object.values(players || {}).filter(p => p.active !== false);
   config.multiPlayers = players;
+  // نزامن الأسماء المعروضة مع القائمة الحيّة (لا يبقى اسم لاعب غادر فوق اللوحة)
+  const liveNames = {};
+  Object.values(players || {}).forEach(p => { if (p && p.num) liveNames[p.num] = p.name; });
+  if (Object.keys(liveNames).length) config.onlinePlayerNames = liveNames;
   // لو الدور الحالي عند لاعب منسحب → ننقله لأول نشط (حساب متطابق عند الجميع)
   try { skipInactiveTurn(config); } catch {}
   updateOnlineTurnIndicator(onlineTurnInd);
