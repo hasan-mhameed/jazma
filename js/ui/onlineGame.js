@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1787496961";
-import { onlineManager } from "../firebase.js?v=1787496961";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787496961";
-import { setBank } from "./turnTimer.js?v=1787496961";
-import { state } from "../core/state.js?v=1787496961";
-import { getCurrentUser } from "../auth.js?v=1787496961";
+import { config } from "../config/config.js?v=1787497427";
+import { onlineManager } from "../firebase.js?v=1787497427";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787497427";
+import { setBank } from "./turnTimer.js?v=1787497427";
+import { state } from "../core/state.js?v=1787497427";
+import { getCurrentUser } from "../auth.js?v=1787497427";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -62,18 +62,28 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       }
       return null;
     };
-    let left = remainingNow() ?? LONE_WAIT_SEC;
-    // عدّاد مرئي أثناء الانتظار وحيداً (اللاعب يعرف متى يظهر البديل)
+    let left = remainingNow();
+    const hasStamp = left !== null;
+    if (left === null) left = LONE_WAIT_SEC;
+    // لا نعرض رقماً قبل وصول الختم الحقيقي (وإلا يومض "20" ثم يتصحّح)
     if (searchCountdownEl) {
-      searchCountdownEl.classList.remove("hidden");
-      searchCountdownEl.textContent = `⏳ ${left}`;
+      if (hasStamp) {
+        searchCountdownEl.classList.remove("hidden");
+        searchCountdownEl.textContent = `⏳ ${left}`;
+      } else {
+        searchCountdownEl.classList.add("hidden");
+      }
     }
     _loneTickId = setInterval(() => {
       const sync = remainingNow();
-      left = (sync !== null) ? sync : (left - 1);
-      if (searchCountdownEl && left >= 0) searchCountdownEl.textContent = `⏳ ${left}`;
+      if (sync === null) return; // ما زال الختم لم يصل — نبقى مخفيين بلا عدّ وهمي
+      left = sync;
+      if (searchCountdownEl) {
+        searchCountdownEl.classList.remove("hidden");
+        if (left >= 0) searchCountdownEl.textContent = `⏳ ${left}`;
+      }
       if (left <= 0) { clearInterval(_loneTickId); _loneTickId = null; }
-    }, 1000);
+    }, 250);
     _loneTimerId = setTimeout(() => {
       _loneTimerId = null;
       if (_loneTickId) { clearInterval(_loneTickId); _loneTickId = null; }
