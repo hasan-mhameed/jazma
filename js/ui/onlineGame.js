@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1787498297";
-import { onlineManager } from "../firebase.js?v=1787498297";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787498297";
-import { setBank } from "./turnTimer.js?v=1787498297";
-import { state } from "../core/state.js?v=1787498297";
-import { getCurrentUser } from "../auth.js?v=1787498297";
+import { config } from "../config/config.js?v=1787518236";
+import { onlineManager } from "../firebase.js?v=1787518236";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787518236";
+import { setBank } from "./turnTimer.js?v=1787518236";
+import { state } from "../core/state.js?v=1787518236";
+import { getCurrentUser } from "../auth.js?v=1787518236";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -402,8 +402,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     } else if (a.state === "cancelled") {
       closeApproval();
       showLeaveToast("↩️ تغيّر العدد — سؤال جديد بعد لحظة");
-      // لا نعيد عدّاد 20 ثانية: المنشئ يفتح جولة جديدة فوراً بالعدد الحالي
-      _waitStartedAt = null;
+      // نُبقي ختم الانتظار كما هو (لا نعيد العدّاد) — الجولة الجديدة تُفتح فوراً
     }
   }
 
@@ -598,7 +597,15 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
           if (isRoomOwner()) onlineManager.clearApprovalState();
           showAISuggestNow(`↩️ غادر بقية اللاعبين — نواصل البحث لك<br><span class="search-names">👥 ${count} من ${max}</span>`);
         }
-        if (_approvalOpen && count >= 2 && count < max) { setTimeout(() => reopenApprovalIfNeeded(), 400); }
+        // تغيّر عدد اللاعبين أثناء جولة مفتوحة (انضمام أو مغادرة) وما زال أقل من المطلوب؟
+        // نلغي الجولة ونفتح واحدة جديدة بالعدد الفعلي — فلا يدخل أحد مباراة لم يوافق عليها
+        if (_approvalOpen && count >= 2 && count < max && _lastApprovalState?.state === "asking") {
+          const roundCount = Number(_lastApprovalState.available || 0);
+          if (roundCount !== count && isApprovalOwner(_lastApprovalState)) {
+            onlineManager.closeApprovalRound("cancelled");
+            setTimeout(() => reopenApprovalIfNeeded(), 500);
+          }
+        }
         // جولة مفتوحة ونقص العدد؟ نزيل قرارات من غادر فوراً (لا ننتظر قراراً لن يأتي)
         if (_approvalOpen && _lastApprovalState?.decisions && isApprovalOwner(_lastApprovalState)) {
           const presentNums = list.map(p => p.num);
