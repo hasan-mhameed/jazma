@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1787497427";
+import { getCurrentUser }   from "./auth.js?v=1787498297";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -328,7 +328,9 @@ export class OnlineManager {
     this._myUid = myUid;
 
     // عند انقطاع اللاعب: نعلّمه غير نشط
-    onDisconnect(ref(db, `rooms/${code}/players/${myUid}/disconnectedAt`)).set(serverTimestamp());
+    // أثناء اللوبي/البحث: الانقطاع (تحديث الصفحة/إغلاقها) = خروج فوري
+    // لا مهلة سماح هنا — وإلا يبقى اسمه في القائمة فتعلق جولة الموافقة بانتظار غائب
+    onDisconnect(ref(db, `rooms/${code}/players/${myUid}`)).remove();
     this._listenLobby(code);
     this._listenForMultiMoves(code);
     this._listenBankUpdate(code);
@@ -356,13 +358,16 @@ export class OnlineManager {
       // بدء المباراة
       if (room.status === "playing" && !this._gameStarted) {
         this._gameStarted = true;
-        // عند بدء اللعب: المضيف يبدّل onDisconnect لعدم مسح الغرفة
-        if (this.playerNum === 1) {
-          try {
-            onDisconnect(ref(db, `rooms/${code}`)).cancel();
+        // عند بدء اللعب: نبدّل سلوك الانقطاع من "إزالة فورية" (المناسب للوبي)
+        // إلى "ختم انقطاع" (مهلة السماح) — لكل اللاعبين، لا المضيف وحده
+        try {
+          if (this._myUid) {
+            onDisconnect(ref(db, `rooms/${code}/players/${this._myUid}`)).cancel();
             onDisconnect(ref(db, `rooms/${code}/players/${this._myUid}/disconnectedAt`)).set(serverTimestamp());
-          } catch {}
-        }
+          }
+          // المنشئ يلغي مسح الغرفة كاملة عند انقطاعه
+          if (this.playerNum === 1) onDisconnect(ref(db, `rooms/${code}`)).cancel();
+        } catch {}
         this._cbMultiStart && this._cbMultiStart(room);
       }
       // خروج لاعب أثناء اللعب (صار غير نشط)
@@ -590,7 +595,9 @@ export class OnlineManager {
       // (وإلا تُفتح الجولة باسم لاعب خرج فتُهدر جولة كاملة قبل أن تعمل)
       const snap = await get(ref(db, `rooms/${this.roomCode}/players`));
       if (!snap.exists()) return;
-      const present = Object.values(snap.val()).filter(p => p && p.active !== false && typeof p.num === 'number');
+      const present = Object.values(snap.val()).filter(p =>
+        p && p.active !== false && typeof p.num === 'number' && p.disconnectedAt == null
+      );
       if (present.length < 2) return; // لا معنى لجولة بأقل من لاعبَين
       const decisions = {};
       present.forEach(p => { decisions[p.num] = "pending"; });
