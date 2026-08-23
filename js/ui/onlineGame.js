@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1787485449";
-import { onlineManager } from "../firebase.js?v=1787485449";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787485449";
-import { setBank } from "./turnTimer.js?v=1787485449";
-import { state } from "../core/state.js?v=1787485449";
-import { getCurrentUser } from "../auth.js?v=1787485449";
+import { config } from "../config/config.js?v=1787488948";
+import { onlineManager } from "../firebase.js?v=1787488948";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787488948";
+import { setBank } from "./turnTimer.js?v=1787488948";
+import { state } from "../core/state.js?v=1787488948";
+import { getCurrentUser } from "../auth.js?v=1787488948";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -489,9 +489,12 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       // إعادة السؤال فوراً بالعدد الفعلي الحاضر (بلا انتظار عدّاد)
       setTimeout(() => reopenApprovalIfNeeded(), 600);
     } else if (d.every(x => x === "accepted")) {
-      // تحقّق نهائي: قد يكون أحدهم غادر بنفس اللحظة (سباق) → نتأكد من العدد الحاضر
-      const nowCount = _lastLobbyCount || 0;
-      if (nowCount < (a.available || 0)) {
+      // كل الحاضرين وافقوا → نبدأ ما دام هناك لاعبان فأكثر
+      // (لا نقارن بـ a.available لأنها لقطة قديمة قد تشمل لاعباً غادر بعد فتح الجولة)
+      const acceptedNums = Object.keys(raw)
+        .filter(k => raw[k] === "accepted")
+        .filter(k => !presentNums.length || presentNums.includes(Number(k)));
+      if (acceptedNums.length < 2) {
         await onlineManager.closeApprovalRound("cancelled");
         setTimeout(() => reopenApprovalIfNeeded(), 600);
         return;
