@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1787484560";
+import { getCurrentUser }   from "./auth.js?v=1787485449";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -575,14 +575,26 @@ export class OnlineManager {
       // حماية: لا نعيد بناء جولة قائمة (وإلا تُمحى قرارات اللاعبين المسجّلة)
       const cur = await get(ref(db, `rooms/${this.roomCode}/approval`));
       if (cur.exists() && cur.val()?.state === "asking") return;
+      // نقرأ القائمة الحيّة لحظة الفتح ونستبعد غير النشطين/المغادرين
+      // (وإلا تُفتح الجولة باسم لاعب خرج فتُهدر جولة كاملة قبل أن تعمل)
       const snap = await get(ref(db, `rooms/${this.roomCode}/players`));
       if (!snap.exists()) return;
+      const present = Object.values(snap.val()).filter(p => p && p.active !== false && typeof p.num === 'number');
+      if (present.length < 2) return; // لا معنى لجولة بأقل من لاعبَين
       const decisions = {};
-      Object.values(snap.val()).forEach(p => { decisions[p.num] = "pending"; });
+      present.forEach(p => { decisions[p.num] = "pending"; });
       await update(ref(db, `rooms/${this.roomCode}/approval`), {
-        state: "asking", available: availableCount, wanted: wantedCount,
+        state: "asking", available: present.length, wanted: wantedCount,
         startedAt: serverTimestamp(), decisions,
       });
+    } catch {}
+  }
+
+  // إزالة قرار لاعب غادر من جولة قائمة (بدل انتظار قرار لن يأتي)
+  async pruneApprovalDecision(playerNum) {
+    if (!this.roomCode || typeof playerNum !== 'number') return;
+    try {
+      await update(ref(db, `rooms/${this.roomCode}/approval/decisions`), { [playerNum]: null });
     } catch {}
   }
 

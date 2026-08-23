@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1787484560";
-import { onlineManager } from "../firebase.js?v=1787484560";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787484560";
-import { setBank } from "./turnTimer.js?v=1787484560";
-import { state } from "../core/state.js?v=1787484560";
-import { getCurrentUser } from "../auth.js?v=1787484560";
+import { config } from "../config/config.js?v=1787485449";
+import { onlineManager } from "../firebase.js?v=1787485449";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787485449";
+import { setBank } from "./turnTimer.js?v=1787485449";
+import { state } from "../core/state.js?v=1787485449";
+import { getCurrentUser } from "../auth.js?v=1787485449";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -576,6 +576,15 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
           showAISuggestNow(`↩️ غادر بقية اللاعبين — نواصل البحث لك<br><span class="search-names">👥 ${count} من ${max}</span>`);
         }
         if (_approvalOpen && count >= 2 && count < max) { setTimeout(() => reopenApprovalIfNeeded(), 400); }
+        // جولة مفتوحة ونقص العدد؟ نزيل قرارات من غادر فوراً (لا ننتظر قراراً لن يأتي)
+        if (_approvalOpen && _lastApprovalState?.decisions && isApprovalOwner(_lastApprovalState)) {
+          const presentNums = list.map(p => p.num);
+          Object.keys(_lastApprovalState.decisions).forEach(k => {
+            if (_lastApprovalState.decisions[k] != null && !presentNums.includes(Number(k))) {
+              onlineManager.pruneApprovalDecision(Number(k));
+            }
+          });
+        }
         // اكتمل العدد → بدء مباشر (حتى لو كانت نافذة الموافقة مفتوحة نلغيها)
         if (count >= max && room?.status === "lobby") {
           stopSearchCountdown();
@@ -875,7 +884,6 @@ export function launchOnlineMultiGame(myPlayerNum, onlineTurnInd, onGameStart) {
         .map(p => p.num).filter(n => typeof n === 'number');
       if (nums.length) owner = Math.min(...nums);
     }
-    console.log("🗺️[FETCH] أنا=", myPlayerNum, "المالك=", owner, "| سأجلب؟", myPlayerNum !== owner);
     if (myPlayerNum !== owner) {
       for (let i = 0; i < 12; i++) {
         const map = await onlineManager.fetchElementMap();
