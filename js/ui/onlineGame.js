@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1787496521";
-import { onlineManager } from "../firebase.js?v=1787496521";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787496521";
-import { setBank } from "./turnTimer.js?v=1787496521";
-import { state } from "../core/state.js?v=1787496521";
-import { getCurrentUser } from "../auth.js?v=1787496521";
+import { config } from "../config/config.js?v=1787496961";
+import { onlineManager } from "../firebase.js?v=1787496961";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787496961";
+import { setBank } from "./turnTimer.js?v=1787496961";
+import { state } from "../core/state.js?v=1787496961";
+import { getCurrentUser } from "../auth.js?v=1787496961";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -53,14 +53,24 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   function startLoneWaitTimer() {
     if (_loneTimerId || _aiSuggestDismissed) return;
-    let left = LONE_WAIT_SEC;
+    // نعتمد الختم المشترك إن وُجد (نفس مصدر عدّاد المجموعة) فلا يظهر أي "قفز"
+    // عند انضمام لاعب ثانٍ — العدّ يبقى متصلاً من لحظة بدء البحث
+    const remainingNow = () => {
+      if (typeof _waitStartedAt === 'number' && onlineManager.serverNow) {
+        const el = Math.max(0, (onlineManager.serverNow() - _waitStartedAt) / 1000);
+        return Math.max(0, Math.ceil(LONE_WAIT_SEC - el));
+      }
+      return null;
+    };
+    let left = remainingNow() ?? LONE_WAIT_SEC;
     // عدّاد مرئي أثناء الانتظار وحيداً (اللاعب يعرف متى يظهر البديل)
     if (searchCountdownEl) {
       searchCountdownEl.classList.remove("hidden");
       searchCountdownEl.textContent = `⏳ ${left}`;
     }
     _loneTickId = setInterval(() => {
-      left--;
+      const sync = remainingNow();
+      left = (sync !== null) ? sync : (left - 1);
       if (searchCountdownEl && left >= 0) searchCountdownEl.textContent = `⏳ ${left}`;
       if (left <= 0) { clearInterval(_loneTickId); _loneTickId = null; }
     }, 1000);
@@ -588,6 +598,9 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
             }
           });
         }
+        // ختم بدء الانتظار يُثبَّت من **أول لحظة بحث** (لا عند اكتمال لاعبَين)
+        // وإلا يبدو العدّ وكأنه "يُعاد" لحظة انضمام اللاعب الثاني
+        if (isRoomOwner() && !_approvalOpen) onlineManager.markWaitStart();
         // اكتمل العدد → بدء مباشر (حتى لو كانت نافذة الموافقة مفتوحة نلغيها)
         if (count >= max && room?.status === "lobby") {
           stopSearchCountdown();
@@ -597,8 +610,6 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
             onlineManager.startMultiGame();
           }
         } else if (count >= 2 && !_approvalOpen) {
-          // المسؤول يثبّت ختم بدء الانتظار (ذرّياً، مرّة واحدة) ليكون العدّ موحّداً
-          if (isRoomOwner()) onlineManager.markWaitStart();
           startSearchCountdown(max);
         }
       });
