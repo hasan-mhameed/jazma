@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1787495901";
+import { getCurrentUser }   from "./auth.js?v=1787496521";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -536,7 +536,16 @@ export class OnlineManager {
   }
 
   // تنظيف حالة الموافقة والانتظار (عند بدء المباراة أو المغادرة)
+  // تنظيف حالة الموافقة فقط (لا نمسح ختم الانتظار — وإلا يُعاد عدّاد الآخرين)
   async clearApprovalState() {
+    if (!this.roomCode) return;
+    try {
+      await update(ref(db, `rooms/${this.roomCode}`), { approval: null });
+    } catch {}
+  }
+
+  // تنظيف كامل (موافقة + ختم انتظار) — يُستخدم عند بدء المباراة فقط
+  async clearRoundState() {
     if (!this.roomCode) return;
     try {
       await update(ref(db, `rooms/${this.roomCode}`), { approval: null, waitStartedAt: null });

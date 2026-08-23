@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1787495901";
-import { onlineManager } from "../firebase.js?v=1787495901";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787495901";
-import { setBank } from "./turnTimer.js?v=1787495901";
-import { state } from "../core/state.js?v=1787495901";
-import { getCurrentUser } from "../auth.js?v=1787495901";
+import { config } from "../config/config.js?v=1787496521";
+import { onlineManager } from "../firebase.js?v=1787496521";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787496521";
+import { setBank } from "./turnTimer.js?v=1787496521";
+import { state } from "../core/state.js?v=1787496521";
+import { getCurrentUser } from "../auth.js?v=1787496521";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -593,7 +593,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
           stopSearchCountdown();
           if (_approvalOpen) closeApproval();
           if (isRoomOwner()) {
-            onlineManager.clearApprovalState();
+            onlineManager.clearRoundState();
             onlineManager.startMultiGame();
           }
         } else if (count >= 2 && !_approvalOpen) {
@@ -610,7 +610,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         stopSearchCountdown(); closeApproval(); stopLoneWaitTimer();
         _waitStartedAt = null;
         // تنظيف حالة الموافقة حتى لا تظهر نافذة قديمة في بحث لاحق
-        if (isRoomOwner()) onlineManager.clearApprovalState();
+        if (isRoomOwner()) onlineManager.clearRoundState();
         runStartCountdown(() => startMultiMatch(room));
       });
       // المنشئ غادر قبل البدء
