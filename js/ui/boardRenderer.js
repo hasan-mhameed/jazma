@@ -1,20 +1,20 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1787005544";
-import { makeKey }                            from "../utils.js?v=1787005544";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1787005544";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1787005544";
-import { endGame }                            from "./gameEnd.js?v=1787005544";
-import { audioManager }                       from "../audio/audioManager.js?v=1787005544";
-import { checkSquaresAround }                 from "../core/logic.js?v=1787005544";
-import { onlineManager }                      from "../firebase.js?v=1787005544";
-import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1787005544";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1787005544";
-import { refreshInventory } from "./powersUI.js?v=1787005544";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1787005544";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer, cutBank, getTimerMode, getBank, setBank } from "./turnTimer.js?v=1787005544";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1787005544";
+import { state }                              from "../core/state.js?v=1787484560";
+import { makeKey }                            from "../utils.js?v=1787484560";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1787484560";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1787484560";
+import { endGame }                            from "./gameEnd.js?v=1787484560";
+import { audioManager }                       from "../audio/audioManager.js?v=1787484560";
+import { checkSquaresAround }                 from "../core/logic.js?v=1787484560";
+import { onlineManager }                      from "../firebase.js?v=1787484560";
+import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1787484560";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1787484560";
+import { refreshInventory } from "./powersUI.js?v=1787484560";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1787484560";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer, cutBank, getTimerMode, getBank, setBank } from "./turnTimer.js?v=1787484560";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1787484560";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -179,14 +179,25 @@ function buildDots(cfg) {
 //  العناصر الخاصة (خافتة + نابضة قبل الإكمال)
 // ═══════════════════════════════════════════════════════
 function buildSpecialElements(cfg) {
-  // تزامن الأونلاين: الضيف يستخدم خريطة المضيف؛ غير ذلك يولّد محلياً
+  // تزامن الأونلاين: من لديه خريطة مشتركة يستخدمها؛ غير ذلك يولّد محلياً
+  if (cfg.aiMode === "online") console.log("🗺️[MAP] بناء اللوحة | خريطة مشتركة وصلت؟", !!cfg._sharedElementMap, "| حجمها=", Object.keys(cfg._sharedElementMap||{}).length);
   if (cfg.aiMode === 'online' && cfg._sharedElementMap) {
     setElementMap(cfg._sharedElementMap);
   } else {
     generateSpecialSquares(cfg);
-    // المضيف يبثّ الخريطة للخصم (ليروا نفس التوزيع)
-    if (cfg.aiMode === 'online' && cfg.onlinePlayerNum === 1) {
-      try { onlineManager.shareElementMap(getElementMap()); } catch {}
+    // يبثّها أصغر رقم لاعب حاضر (وليس "1" ثابتاً — قد يكون غادر قبل البدء)
+    if (cfg.aiMode === 'online') {
+      let owner = 1;
+      if (cfg.multiPlayers) {
+        const nums = Object.values(cfg.multiPlayers)
+          .filter(p => p && p.active !== false)
+          .map(p => p.num).filter(n => typeof n === 'number');
+        if (nums.length) owner = Math.min(...nums);
+      }
+      console.log("🗺️[MAP] أنا=", cfg.onlinePlayerNum, "المالك=", owner, "| سأبثّ؟", cfg.onlinePlayerNum === owner, "| عناصر=", Object.keys(getElementMap()||{}).length);
+      if (cfg.onlinePlayerNum === owner) {
+        try { onlineManager.shareElementMap(getElementMap()); } catch {}
+      }
     }
   }
   const { spacing, padding } = cfg._pixi;

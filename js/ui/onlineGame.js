@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1787005544";
-import { onlineManager } from "../firebase.js?v=1787005544";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787005544";
-import { setBank } from "./turnTimer.js?v=1787005544";
-import { state } from "../core/state.js?v=1787005544";
-import { getCurrentUser } from "../auth.js?v=1787005544";
+import { config } from "../config/config.js?v=1787484560";
+import { onlineManager } from "../firebase.js?v=1787484560";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787484560";
+import { setBank } from "./turnTimer.js?v=1787484560";
+import { state } from "../core/state.js?v=1787484560";
+import { getCurrentUser } from "../auth.js?v=1787484560";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -865,10 +865,18 @@ export function launchOnlineMultiGame(myPlayerNum, onlineTurnInd, onGameStart) {
     onlineTurnInd.style.color = "#888";
   }
 
-  // الضيوف (غير المضيف) ينتظرون خريطة العناصر من المضيف
+  // كل من ليس "مالك الخريطة" (أصغر رقم حاضر) ينتظرها منه
   const prepare = async () => {
     config._sharedElementMap = null;
-    if (myPlayerNum !== 1) {
+    let owner = 1;
+    if (config.multiPlayers) {
+      const nums = Object.values(config.multiPlayers)
+        .filter(p => p && p.active !== false)
+        .map(p => p.num).filter(n => typeof n === 'number');
+      if (nums.length) owner = Math.min(...nums);
+    }
+    console.log("🗺️[FETCH] أنا=", myPlayerNum, "المالك=", owner, "| سأجلب؟", myPlayerNum !== owner);
+    if (myPlayerNum !== owner) {
       for (let i = 0; i < 12; i++) {
         const map = await onlineManager.fetchElementMap();
         if (map && Object.keys(map).length) { config._sharedElementMap = map; break; }
