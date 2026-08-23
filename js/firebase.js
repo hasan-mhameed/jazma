@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1787495026";
+import { getCurrentUser }   from "./auth.js?v=1787495901";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -527,11 +527,11 @@ export class OnlineManager {
   async markWaitStart() {
     if (!this.roomCode) return;
     try {
-      const snap = await get(ref(db, `rooms/${this.roomCode}/waitStartedAt`));
-      console.log("⏱️[FB] markWaitStart: موجود؟", snap.exists(), "قيمته=", snap.val());
-      if (snap.exists() && snap.val()) return; // مضبوط مسبقاً — لا نعيده
-      console.log("⏱️[FB] أكتب ختماً جديداً!");
-      await update(ref(db, `rooms/${this.roomCode}`), { waitStartedAt: serverTimestamp() });
+      // عملية ذرّية: تمنع سباق "اقرأ ثم اكتب" الذي كان يكتب ختمين فيُعاد العدّاد
+      await runTransaction(ref(db, `rooms/${this.roomCode}/waitStartedAt`), (cur) => {
+        if (cur) return cur;          // ختم موجود → لا نغيّره أبداً
+        return this.serverNow();      // أول من يصل يكتب (بتوقيت السيرفر)
+      });
     } catch {}
   }
 

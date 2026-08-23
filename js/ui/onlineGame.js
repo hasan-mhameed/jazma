@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1787495026";
-import { onlineManager } from "../firebase.js?v=1787495026";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787495026";
-import { setBank } from "./turnTimer.js?v=1787495026";
-import { state } from "../core/state.js?v=1787495026";
-import { getCurrentUser } from "../auth.js?v=1787495026";
+import { config } from "../config/config.js?v=1787495901";
+import { onlineManager } from "../firebase.js?v=1787495901";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787495901";
+import { setBank } from "./turnTimer.js?v=1787495901";
+import { state } from "../core/state.js?v=1787495901";
+import { getCurrentUser } from "../auth.js?v=1787495901";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -323,7 +323,6 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       searchCountdownEl?.classList.remove("hidden");
       const elapsed = Math.max(0, (onlineManager.serverNow() - started) / 1000);
       const left = Math.max(0, Math.ceil(SEARCH_WAIT_SEC - elapsed));
-      if (window.__wlog !== left) { window.__wlog = left; console.log("⏱️[TICK] متبقٍ=", left, "| started=", started, "| serverNow=", onlineManager.serverNow()); }
       if (searchCountdownEl) searchCountdownEl.textContent = `⏳ ${left}`;
       if (left <= 0) {
         stopSearchCountdown();
@@ -564,7 +563,6 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         _lastLobbyCount = count;
         _lobbyPlayers = players || {};
         if (count > 1) stopLoneWaitTimer(); else startLoneWaitTimer();
-        console.log("⏱️[WAIT] count=", count, "| room.waitStartedAt=", room?.waitStartedAt, "| محلي قبل=", _waitStartedAt, "| أنا=", onlineManager.playerNum, "| مالك؟", isRoomOwner());
         // نحتفظ بالختم السابق إن لم يصل ختم من الغرفة بعد (العدّاد يكمل ولا يعيد من 20)
         if (typeof room?.waitStartedAt === 'number') _waitStartedAt = room.waitStartedAt;
         _lobbyNames = {};
@@ -599,8 +597,8 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
             onlineManager.startMultiGame();
           }
         } else if (count >= 2 && !_approvalOpen) {
-          // المنشئ يثبّت ختم بدء الانتظار (مرّة واحدة) ليكون العدّ موحّداً
-          if (isRoomOwner()) { console.log("⏱️[WAIT] أطلب ختم بدء (markWaitStart)"); onlineManager.markWaitStart(); }
+          // المسؤول يثبّت ختم بدء الانتظار (ذرّياً، مرّة واحدة) ليكون العدّ موحّداً
+          if (isRoomOwner()) onlineManager.markWaitStart();
           startSearchCountdown(max);
         }
       });
