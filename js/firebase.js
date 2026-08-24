@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1787518236";
+import { getCurrentUser }   from "./auth.js?v=1787612152";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -314,7 +314,11 @@ export class OnlineManager {
       if (count >= cur.maxPlayers) return cur; // ممتلئة
       myNum = count + 1;
       cur.players = cur.players || {};
-      cur.players[myUid] = { name, num: myNum, active: true };
+      // إن كان تصويت جارياً: ندخل كمنتظرين (خارج الجولة) حتى تُحسم
+      const voting = cur.approval && cur.approval.state === "asking";
+      cur.players[myUid] = voting
+        ? { name, num: myNum, active: true, waiting: true }
+        : { name, num: myNum, active: true };
       cur.playerCount = myNum;
       return cur;
     });
@@ -400,6 +404,8 @@ export class OnlineManager {
   async findRandomMultiMatch(cfg, name, wantedPlayers) {
     const myUid = getCurrentUser()?.uid || ("guest_" + Date.now());
     // نبحث عن غرفة جماعية عامة مطابقة (نفس العدد المطلوب + نفس الحجم) وفيها مكان
+    // ملاحظة: أثناء التصويت (approval.state === "asking") لا نمنع الانضمام،
+    // بل ندخل بحالة "منتظر" (waiting) خارج التصويت — فلا تشتيت في غرف متوازية
     let foundCode = null;
     try {
       const snap = await get(ref(db, "rooms"));
@@ -409,9 +415,16 @@ export class OnlineManager {
               && room.status === "lobby"
               && Number(room.maxPlayers) === Number(wantedPlayers)
               && room.cfg && Number(room.cfg.rows) === Number(cfg.rows)
-              && (room.playerCount || 0) < room.maxPlayers
               && !(room.players && room.players[myUid])) {
-            foundCode = code; break;
+            const voting = room.approval && room.approval.state === "asking";
+            // أثناء التصويت: ندخل كمنتظرين ما لم يكتمل عدد المنتظرين لتجمّع مستقل
+            if (voting) {
+              const waitingCount = Object.values(room.players || {})
+                .filter(p => p && p.waiting === true).length;
+              if (waitingCount >= Number(wantedPlayers)) continue; // يكفون لتجمّع خاص → غرفة جديدة
+              foundCode = code; break;
+            }
+            if ((room.playerCount || 0) < room.maxPlayers) { foundCode = code; break; }
           }
         }
       }
@@ -541,6 +554,22 @@ export class OnlineManager {
   }
 
   // تنظيف حالة الموافقة والانتظار (عند بدء المباراة أو المغادرة)
+  // تحرير المنتظرين (بعد حسم الجولة) ليصبحوا أعضاء عاديين في الدورة التالية
+  async releaseWaitingPlayers() {
+    if (!this.roomCode) return;
+    try {
+      const snap = await get(ref(db, `rooms/${this.roomCode}/players`));
+      if (!snap.exists()) return;
+      const updates = {};
+      Object.entries(snap.val()).forEach(([uid, p]) => {
+        if (p && p.waiting === true) updates[`${uid}/waiting`] = null;
+      });
+      if (Object.keys(updates).length) {
+        await update(ref(db, `rooms/${this.roomCode}/players`), updates);
+      }
+    } catch {}
+  }
+
   // تنظيف حالة الموافقة فقط (لا نمسح ختم الانتظار — وإلا يُعاد عدّاد الآخرين)
   async clearApprovalState() {
     if (!this.roomCode) return;
@@ -596,7 +625,8 @@ export class OnlineManager {
       const snap = await get(ref(db, `rooms/${this.roomCode}/players`));
       if (!snap.exists()) return;
       const present = Object.values(snap.val()).filter(p =>
-        p && p.active !== false && typeof p.num === 'number' && p.disconnectedAt == null
+        p && p.active !== false && typeof p.num === 'number'
+        && p.disconnectedAt == null && p.waiting !== true
       );
       if (present.length < 2) return; // لا معنى لجولة بأقل من لاعبَين
       const decisions = {};

@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1787518236";
-import { onlineManager } from "../firebase.js?v=1787518236";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787518236";
-import { setBank } from "./turnTimer.js?v=1787518236";
-import { state } from "../core/state.js?v=1787518236";
-import { getCurrentUser } from "../auth.js?v=1787518236";
+import { config } from "../config/config.js?v=1787612152";
+import { onlineManager } from "../firebase.js?v=1787612152";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787612152";
+import { setBank } from "./turnTimer.js?v=1787612152";
+import { state } from "../core/state.js?v=1787612152";
+import { getCurrentUser } from "../auth.js?v=1787612152";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -82,7 +82,10 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         searchCountdownEl.classList.remove("hidden");
         if (left >= 0) searchCountdownEl.textContent = `⏳ ${left}`;
       }
-      if (left <= 0) { clearInterval(_loneTickId); _loneTickId = null; }
+      if (left <= 0) {
+        clearInterval(_loneTickId); _loneTickId = null;
+        searchCountdownEl?.classList.add("hidden"); // لا نعرض "0" جامداً
+      }
     }, 250);
     _loneTimerId = setTimeout(() => {
       _loneTimerId = null;
@@ -346,6 +349,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       if (searchCountdownEl) searchCountdownEl.textContent = `⏳ ${left}`;
       if (left <= 0) {
         stopSearchCountdown();
+        searchCountdownEl?.classList.add("hidden");
         // فتح جولة الموافقة مرة واحدة فقط (حارس محلي يمنع إعادة الفتح قبل وصول الحالة من الشبكة)
         if (isRoomOwner() && !_approvalOpen && !_approvalRequested) {
           const cnt = _lastLobbyCount || 2;
@@ -396,13 +400,19 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       // المنشئ يقيّم النتيجة
       if (isApprovalOwner(a)) evaluateApproval(a);
     } else if (a.state === "confirmed") {
+      if (isRoomOwner()) onlineManager.releaseWaitingPlayers();
       closeApproval();
       // المنشئ يبدأ المباراة فعلياً
       if (isRoomOwner()) onlineManager.startMultiGame();
     } else if (a.state === "cancelled") {
       closeApproval();
-      showLeaveToast("↩️ تغيّر العدد — سؤال جديد بعد لحظة");
-      // نُبقي ختم الانتظار كما هو (لا نعيد العدّاد) — الجولة الجديدة تُفتح فوراً
+      showLeaveToast("↩️ لم تكتمل الموافقة — دورة بحث جديدة");
+      // بعد الحسم: نحرّر المنتظرين ليصبحوا أعضاء، ونبدأ دورة تجميع كاملة (20 ثانية)
+      if (isRoomOwner()) {
+        onlineManager.releaseWaitingPlayers();
+        onlineManager.clearRoundState();   // مسح الموافقة + ختم الانتظار (دورة جديدة نظيفة)
+      }
+      _waitStartedAt = null;
     }
   }
 
@@ -597,14 +607,15 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
           if (isRoomOwner()) onlineManager.clearApprovalState();
           showAISuggestNow(`↩️ غادر بقية اللاعبين — نواصل البحث لك<br><span class="search-names">👥 ${count} من ${max}</span>`);
         }
-        // تغيّر عدد اللاعبين أثناء جولة مفتوحة (انضمام أو مغادرة) وما زال أقل من المطلوب؟
-        // نلغي الجولة ونفتح واحدة جديدة بالعدد الفعلي — فلا يدخل أحد مباراة لم يوافق عليها
-        if (_approvalOpen && count >= 2 && count < max && _lastApprovalState?.state === "asking") {
-          const roundCount = Number(_lastApprovalState.available || 0);
-          if (roundCount !== count && isApprovalOwner(_lastApprovalState)) {
-            onlineManager.closeApprovalRound("cancelled");
-            setTimeout(() => reopenApprovalIfNeeded(), 500);
-          }
+        // التصويت مغلق: لا نعيد فتح الجولة عند تغيّر العدد (القائمة مجمّدة أثناء الـ15 ثانية)
+        // من ينضم أثناءها يدخل بحالة "منتظر" ويُضمّ بعد الحسم.
+        // نعرض له شاشة انتظار واضحة بدل شاشة البحث العادية
+        const meWaiting = Object.values(players || {})
+          .some(p => p && p.num === onlineManager.playerNum && p.waiting === true);
+        if (meWaiting && !_approvalOpen) {
+          stopSearchCountdown(); stopLoneWaitTimer();
+          searchingText.innerHTML = "👥 لاعبون يصوّتون الآن — انتظر لحظة...";
+          return; // لا منطق تجميع/عدّاد أثناء انتظار حسم التصويت
         }
         // جولة مفتوحة ونقص العدد؟ نزيل قرارات من غادر فوراً (لا ننتظر قراراً لن يأتي)
         if (_approvalOpen && _lastApprovalState?.decisions && isApprovalOwner(_lastApprovalState)) {
