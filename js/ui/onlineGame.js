@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1787612152";
-import { onlineManager } from "../firebase.js?v=1787612152";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787612152";
-import { setBank } from "./turnTimer.js?v=1787612152";
-import { state } from "../core/state.js?v=1787612152";
-import { getCurrentUser } from "../auth.js?v=1787612152";
+import { config } from "../config/config.js?v=1787696664";
+import { onlineManager } from "../firebase.js?v=1787696664";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787696664";
+import { setBank } from "./turnTimer.js?v=1787696664";
+import { state } from "../core/state.js?v=1787696664";
+import { getCurrentUser } from "../auth.js?v=1787696664";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -400,10 +400,15 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       // المنشئ يقيّم النتيجة
       if (isApprovalOwner(a)) evaluateApproval(a);
     } else if (a.state === "confirmed") {
-      if (isRoomOwner()) onlineManager.releaseWaitingPlayers();
       closeApproval();
-      // المنشئ يبدأ المباراة فعلياً
-      if (isRoomOwner()) onlineManager.startMultiGame();
+      // ملاحظة: لا نحرّر المنتظرين قبل البدء — وإلا يدخلون مباراة لم يصوّتوا عليها.
+      // المباراة تبدأ بالمصوّتين فقط، ثم يُحرَّر المنتظرون ليبدأوا دورة بحث جديدة.
+      if (isRoomOwner()) {
+        const votersNums = Object.keys(a.decisions || {})
+          .filter(k => a.decisions[k] === "accepted")
+          .map(Number);
+        onlineManager.startMultiGame(votersNums);
+      }
     } else if (a.state === "cancelled") {
       closeApproval();
       showLeaveToast("↩️ لم تكتمل الموافقة — دورة بحث جديدة");
@@ -418,11 +423,22 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   function startApprovalTimer() {
     if (_approvalTimerId) return;
-    let left = APPROVAL_SEC;
     _myApprovalDecision = null; // قرارنا في هذه الجولة (لا نسمح للمهلة بدهسه)
+    // المتبقّي يُحسب من ختم بدء الجولة المشترك (approval.startedAt) بدل عدّ محلي
+    // وإلا يختلف العدّاد بين الأجهزة حسب لحظة وصول الحالة
+    const leftNow = () => {
+      const st = _lastApprovalState?.startedAt;
+      if (typeof st === 'number' && onlineManager.serverNow) {
+        const el = Math.max(0, (onlineManager.serverNow() - st) / 1000);
+        return Math.max(0, Math.ceil(APPROVAL_SEC - el));
+      }
+      return null;
+    };
+    let left = leftNow() ?? APPROVAL_SEC;
     if (approvalTimer) { approvalTimer.textContent = `⏳ ${left}`; approvalTimer.classList.remove("low"); }
     _approvalTimerId = setInterval(() => {
-      left--;
+      const sync = leftNow();
+      left = (sync !== null) ? sync : Math.max(0, left - 1);
       if (approvalTimer) {
         approvalTimer.textContent = `⏳ ${left}`;
         approvalTimer.classList.toggle("low", left <= 5);
@@ -435,9 +451,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         // (من لم يردّ — بما فيهم من غادر — يُعتبر رافضاً حكماً، فلا انتظار لقرار لن يأتي)
         setTimeout(() => resolveApprovalDeadline(), 1200);
         // شبكة أمان: لو لم يحسمها المسؤول (غادر مثلاً) يحسمها أي موافق بعد 3 ثوانٍ
-        setTimeout(() => resolveApprovalDeadline(true), 4000);
-      }
-    }, 1000);
+);
   }
 
   // حسم الجولة عند انتهاء المهلة (يقوم به مسؤول الجولة)
@@ -654,6 +668,14 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       });
       // المنشئ غادر قبل البدء
       onlineManager.onPlayerLeft((reason) => {
+        if (reason === "removed_waiting" && _isMultiSearch) {
+          // كنّا منتظرين وبدأت المباراة بالمصوّتين → نبحث من جديد بدورة كاملة
+          showLeaveToast("🔍 بدأت مباراتهم — نبحث لك من جديد");
+          _isMultiSearch = false;
+          stopSearchCountdown(); closeApproval(); stopLoneWaitTimer();
+          setTimeout(() => startMultiRandomSearch(_randomWanted), 400);
+          return;
+        }
         if (reason === "host_left" && _isMultiSearch) {
           _isMultiSearch = false;
           stopSearchCountdown(); closeApproval();

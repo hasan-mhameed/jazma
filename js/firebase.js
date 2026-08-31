@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1787612152";
+import { getCurrentUser }   from "./auth.js?v=1787696664";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -346,8 +346,26 @@ export class OnlineManager {
   }
 
   // المضيف يبدأ المباراة
-  async startMultiGame() {
+  async startMultiGame(voterNums = null) {
     if (!this.roomCode) return;
+    // إن حُدّد المصوّتون: نُخرج المنتظرين من الغرفة قبل البدء (لم يصوّتوا فلا يدخلون)
+    // ونتركهم يبحثون من جديد — الغرفة تصير حصراً لمن وافق.
+    if (Array.isArray(voterNums) && voterNums.length) {
+      try {
+        const snap = await get(ref(db, `rooms/${this.roomCode}/players`));
+        if (snap.exists()) {
+          const updates = {};
+          Object.entries(snap.val()).forEach(([uid, p]) => {
+            if (p && typeof p.num === 'number' && !voterNums.includes(p.num)) {
+              updates[uid] = null; // إزالة غير المصوّتين (المنتظرين)
+            }
+          });
+          if (Object.keys(updates).length) {
+            await update(ref(db, `rooms/${this.roomCode}/players`), updates);
+          }
+        }
+      } catch {}
+    }
     await update(ref(db, `rooms/${this.roomCode}`), { status: "playing", turn: 1 });
   }
 
@@ -357,6 +375,12 @@ export class OnlineManager {
       if (!snap.exists()) { this._cbPlayerLeft && this._cbPlayerLeft("host_left"); return; }
       const room = snap.val();
       const players = room.players || {};
+      // أُزلنا من الغرفة (كنّا منتظرين والمباراة بدأت بالمصوّتين) → نبحث من جديد
+      if (this._myUid && !this._gameStarted && players && !players[this._myUid]
+          && Object.keys(players).length > 0) {
+        this._cbPlayerLeft && this._cbPlayerLeft("removed_waiting");
+        return;
+      }
       // تحديث قائمة اللوبي
       this._cbLobby && this._cbLobby(players, room);
       // بدء المباراة
