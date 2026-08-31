@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1787696664";
-import { onlineManager } from "../firebase.js?v=1787696664";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1787696664";
-import { setBank } from "./turnTimer.js?v=1787696664";
-import { state } from "../core/state.js?v=1787696664";
-import { getCurrentUser } from "../auth.js?v=1787696664";
+import { config } from "../config/config.js?v=1788215397";
+import { onlineManager } from "../firebase.js?v=1788215397";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1788215397";
+import { setBank } from "./turnTimer.js?v=1788215397";
+import { state } from "../core/state.js?v=1788215397";
+import { getCurrentUser } from "../auth.js?v=1788215397";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -451,7 +451,9 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         // (من لم يردّ — بما فيهم من غادر — يُعتبر رافضاً حكماً، فلا انتظار لقرار لن يأتي)
         setTimeout(() => resolveApprovalDeadline(), 1200);
         // شبكة أمان: لو لم يحسمها المسؤول (غادر مثلاً) يحسمها أي موافق بعد 3 ثوانٍ
-);
+        setTimeout(() => resolveApprovalDeadline(true), 4000);
+      }
+    }, 500);
   }
 
   // حسم الجولة عند انتهاء المهلة (يقوم به مسؤول الجولة)
