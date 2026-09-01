@@ -1,11 +1,11 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1788215397";
-import { onlineManager } from "../firebase.js?v=1788215397";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1788215397";
-import { setBank } from "./turnTimer.js?v=1788215397";
-import { state } from "../core/state.js?v=1788215397";
-import { getCurrentUser } from "../auth.js?v=1788215397";
+import { config } from "../config/config.js?v=1788217348";
+import { onlineManager } from "../firebase.js?v=1788217348";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1788217348";
+import { setBank } from "./turnTimer.js?v=1788217348";
+import { state } from "../core/state.js?v=1788217348";
+import { getCurrentUser } from "../auth.js?v=1788217348";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -587,6 +587,9 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   async function startMultiRandomSearch(wanted) {
     const name = getPlayerName(); if (!name) return;
+    // تنظيف إلزامي: أي غرفة سابقة نغادرها ونلغي اشتراكاتها قبل بدء بحث جديد
+    // (يمنع وصول تحديثات غرفة قديمة: وميض، تجديد عدّاد، وبقاء اسمنا شبحاً فيها)
+    try { if (onlineManager.roomCode) await onlineManager.leaveRoom(); } catch {}
     _isMultiSearch = true;
     // تصفير حالة الموافقة/الانتظار المحلية (بحث جديد نظيف)
     _approvalOpen = false; _waitStartedAt = null; _lastLobbyCount = 0; _lobbyNames = {};
@@ -675,7 +678,11 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
           showLeaveToast("🔍 بدأت مباراتهم — نبحث لك من جديد");
           _isMultiSearch = false;
           stopSearchCountdown(); closeApproval(); stopLoneWaitTimer();
-          setTimeout(() => startMultiRandomSearch(_randomWanted), 400);
+          // تنظيف كامل: إلغاء كل الاشتراكات بالغرفة القديمة قبل البحث الجديد
+          // (وإلا تصلنا تحديثاتها — وميض "يصوّتون" وتجديد العدّاد مع كل حركة في مباراتهم)
+          onlineManager.leaveRoom().finally(() => {
+            setTimeout(() => startMultiRandomSearch(_randomWanted), 300);
+          });
           return;
         }
         if (reason === "host_left" && _isMultiSearch) {

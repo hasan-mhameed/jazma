@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1788215397";
+import { getCurrentUser }   from "./auth.js?v=1788217348";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -751,6 +751,14 @@ export class OnlineManager {
   async leaveRoom() {
     this._unsubs.forEach(u => u());
     this._unsubs = [];
+    // إلغاء أي onDisconnect مسجّل للغرفة القديمة (وإلا يكتب فيها بعد مغادرتنا)
+    if (this.roomCode && this._myUid) {
+      try {
+        await onDisconnect(ref(db, `rooms/${this.roomCode}/players/${this._myUid}`)).cancel();
+        await onDisconnect(ref(db, `rooms/${this.roomCode}/players/${this._myUid}/disconnectedAt`)).cancel();
+        await onDisconnect(ref(db, `rooms/${this.roomCode}`)).cancel();
+      } catch {}
+    }
     if (this.roomCode) {
       if (this._isMulti && this._gameStarted) {
         // غرفة جماعية أثناء اللعب: نعلّم أنفسنا منسحبين فقط — المباراة تكمل للباقين
@@ -787,6 +795,16 @@ export class OnlineManager {
     this._lastApplied = null;
     this._pendingMove = null;
     this._pendingMoves = [];
+    // تصفير كل الحالة المخزّنة والمستمعات (وإلا تُسلَّم بيانات غرفة قديمة للبحث الجديد)
+    this._lastClock = null;
+    this._lastApproval = null;
+    this._lastBankSeq = null;
+    this._cbClock = null;
+    this._cbApproval = null;
+    this._cbBankUpdate = null;
+    this._cbLobby = null;
+    this._cbMultiStart = null;
+    this._cbPlayerLeft = null;
   }
 
   // ══ إرسال إشعار restart ═════════════════════════════════════
