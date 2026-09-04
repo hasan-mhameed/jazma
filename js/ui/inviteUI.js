@@ -1,8 +1,8 @@
 // 📄 ui/inviteUI.js
 // نظام الدعوات — إرسال، استقبال، رفض
-import { listenForInvites, clearInvite, rejectInvite, listenForInviteRejection } from "../invite.js?v=1788217348";
-import { sendGameInvite } from "../invite.js?v=1788217348";
-import { onlineManager } from "../firebase.js?v=1788217348";
+import { listenForInvites, clearInvite, rejectInvite, listenForInviteRejection } from "../invite.js?v=1788387146";
+import { sendGameInvite } from "../invite.js?v=1788387146";
+import { onlineManager } from "../firebase.js?v=1788387146";
 
 let _rejectionUnsub = null;
 let pendingInvite   = null;

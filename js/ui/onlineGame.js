@@ -1,11 +1,12 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { config } from "../config/config.js?v=1788217348";
-import { onlineManager } from "../firebase.js?v=1788217348";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1788217348";
-import { setBank } from "./turnTimer.js?v=1788217348";
-import { state } from "../core/state.js?v=1788217348";
-import { getCurrentUser } from "../auth.js?v=1788217348";
+import { updateScoreboard } from "./scoreboard.js?v=1788387146";
+import { config } from "../config/config.js?v=1788387146";
+import { onlineManager } from "../firebase.js?v=1788387146";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1788387146";
+import { setBank } from "./turnTimer.js?v=1788387146";
+import { state } from "../core/state.js?v=1788387146";
+import { getCurrentUser } from "../auth.js?v=1788387146";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1060,6 +1061,7 @@ function handleMultiPlayerLeft(players, onlineTurnInd) {
   // نحدّث حالة اللاعبين النشطين (المنسحب active:false)
   const active = Object.values(players || {}).filter(p => p.active !== false);
   config.multiPlayers = players;
+  updateScoreboard(config); // تحديث حالة "خرج" في شريط النقاط فوراً
   // نزامن الأسماء المعروضة مع القائمة الحيّة (لا يبقى اسم لاعب غادر فوق اللوحة)
   const liveNames = {};
   Object.values(players || {}).forEach(p => { if (p && p.num) liveNames[p.num] = p.name; });

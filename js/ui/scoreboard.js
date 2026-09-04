@@ -1,8 +1,8 @@
 // 📄 scoreboard.js — v16.0 (Nature cards + level badge)
-import { state }  from "../core/state.js?v=1788217348";
-import { config } from "../config/config.js?v=1788217348";
-import { getXP, getLevelFromXP } from "../xp.js?v=1788217348";
-import { getCurrentUser } from "../auth.js?v=1788217348";
+import { state }  from "../core/state.js?v=1788387146";
+import { config } from "../config/config.js?v=1788387146";
+import { getXP, getLevelFromXP } from "../xp.js?v=1788387146";
+import { getCurrentUser } from "../auth.js?v=1788387146";
 
 const AVATARS = ['🦊', '🤖', '🦅', '🐺'];
 const COLORS  = ['p1', 'p2', 'p3', 'p4'];
@@ -31,6 +31,10 @@ export function renderScoreboard(cfg) {
     const card = document.createElement("div");
     card.id = `pcard${i}`;
     card.className = `nat-player-card ${COLORS[i-1] || 'p1'}`;
+    // لاعب خرج من المباراة (انسحاب/انقطاع/نفاد وقت) → بطاقته باهتة ومشطوبة
+    const isOut = !!(cfg.multiPlayers &&
+      Object.values(cfg.multiPlayers).some(p => p && p.num === i && p.active === false));
+    if (isOut) card.classList.add('out');
 
     card.innerHTML = `
       <div class="npc-avatar">${AVATARS[i-1] || '🎮'}</div>
@@ -40,6 +44,7 @@ export function renderScoreboard(cfg) {
           <span class="npc-level" id="plevel${i}">⭐ —</span>
         </div>
         <div class="npc-turn-tag">دوره الآن</div>
+        <span class="npc-out-badge">🚪 خرج</span>
       </div>
       <span class="npc-bank" id="pbank${i}"></span>
       <div class="npc-score" id="p${i}">${scores[i] || 0}</div>`;
@@ -123,10 +128,19 @@ async function showPlayerInfo(cfg, i) {
   document.getElementById('pinfo-close').addEventListener('click', () => modal.remove());
 }
 
-export function updateScoreboard() {
+export function updateScoreboard(cfg = null) {
   const scores = state.scores || {};
   for (const id in scores) {
     const span = document.getElementById(`p${id}`);
     if (span) span.textContent = scores[id];
+  }
+  // تحديث حالة "خرج" (انسحاب/انقطاع/نفاد وقت) دون إعادة بناء البطاقات
+  const players = cfg?.multiPlayers || config?.multiPlayers;
+  if (players) {
+    Object.values(players).forEach(p => {
+      if (!p || typeof p.num !== 'number') return;
+      const card = document.getElementById(`pcard${p.num}`);
+      if (card) card.classList.toggle('out', p.active === false);
+    });
   }
 }
