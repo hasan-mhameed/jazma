@@ -1,12 +1,12 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { updateScoreboard } from "./scoreboard.js?v=1788387146";
-import { config } from "../config/config.js?v=1788387146";
-import { onlineManager } from "../firebase.js?v=1788387146";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1788387146";
-import { setBank } from "./turnTimer.js?v=1788387146";
-import { state } from "../core/state.js?v=1788387146";
-import { getCurrentUser } from "../auth.js?v=1788387146";
+import { updateScoreboard } from "./scoreboard.js?v=1788562565";
+import { config } from "../config/config.js?v=1788562565";
+import { onlineManager } from "../firebase.js?v=1788562565";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1788562565";
+import { setBank } from "./turnTimer.js?v=1788562565";
+import { state } from "../core/state.js?v=1788562565";
+import { getCurrentUser } from "../auth.js?v=1788562565";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -302,6 +302,17 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       _aiSuggestDismissed = false; _lastLobbyCount = 1; stopLoneWaitTimer(); startLoneWaitTimer();
 
       const result = await onlineManager.findRandomMatch(config, name);
+      // مراقبة الانقطاع أثناء البحث الثنائي — نفس منطق الجماعي
+      onlineManager.onConnectionChange(async (connected) => {
+        if (connected) return;
+        const searching = !stepSearching?.classList.contains("hidden");
+        if (!searching) return;
+        stopSearchCountdown(); stopLoneWaitTimer();
+        showLeaveToast("📴 انقطع اتصالك — سنبحث لك من جديد عند عودة الشبكة");
+        try { await onlineManager.cancelRandomMatch(); } catch {}
+        try { await onlineManager.leaveRoom(); } catch {}
+        showStep("randomCount");
+      });
 
       if (result.role === "guest") {
         // انضممنا لخصم موجود — نبدأ كلاعب 2 فوراً
@@ -663,6 +674,16 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       });
       // استقبال حالة جولة الموافقة (الجميع)
       onlineManager.onApproval((a) => renderApproval(a));
+      // مراقبة الاتصال أثناء البحث: الانقطاع هنا = خروج (قرار موثّق)
+      // فبدل ترك اللاعب عالقاً بشاشة غامضة، نعيده لبحث نظيف برسالة واضحة
+      onlineManager.onConnectionChange(async (connected) => {
+        if (connected || !_isMultiSearch) return;
+        _isMultiSearch = false;
+        stopSearchCountdown(); closeApproval(); stopLoneWaitTimer();
+        showLeaveToast("📴 انقطع اتصالك — سنبحث لك من جديد عند عودة الشبكة");
+        try { await onlineManager.leaveRoom(); } catch {}
+        showStep("randomCount");
+      });
       // بدء المباراة (للجميع) — مع عدّ تنازلي قصير
       onlineManager.onMultiStart((room) => {
         _isMultiSearch = false;
