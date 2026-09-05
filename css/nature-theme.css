@@ -1144,9 +1144,9 @@ body {
 .nat-player-card.out .npc-name { text-decoration: line-through; text-decoration-thickness: 2px; }
 .nat-player-card.out .npc-turn-tag { display: none !important; }
 .nat-player-card.out .npc-bank { display: none !important; }
-.npc-out-badge { display: none; }
+.npc-out-badge { display: none !important; }
 .nat-player-card.out .npc-out-badge {
-  display: inline-block; font-size: 0.68rem; font-weight: 800;
+  display: inline-block !important; font-size: 0.68rem; font-weight: 800;
   color: #fca5a5; background: rgba(248,113,113,0.18);
   border: 1px solid #f8717155; border-radius: 7px; padding: 1px 6px; margin-top: 2px;
 }

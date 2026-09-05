@@ -1,8 +1,8 @@
 // 📄 scoreboard.js — v16.0 (Nature cards + level badge)
-import { state }  from "../core/state.js?v=1788562565";
-import { config } from "../config/config.js?v=1788562565";
-import { getXP, getLevelFromXP } from "../xp.js?v=1788562565";
-import { getCurrentUser } from "../auth.js?v=1788562565";
+import { state }  from "../core/state.js?v=1788564649";
+import { config } from "../config/config.js?v=1788564649";
+import { getXP, getLevelFromXP } from "../xp.js?v=1788564649";
+import { getCurrentUser } from "../auth.js?v=1788564649";
 
 const AVATARS = ['🦊', '🤖', '🦅', '🐺'];
 const COLORS  = ['p1', 'p2', 'p3', 'p4'];
@@ -44,7 +44,7 @@ export function renderScoreboard(cfg) {
           <span class="npc-level" id="plevel${i}">⭐ —</span>
         </div>
         <div class="npc-turn-tag">دوره الآن</div>
-        <span class="npc-out-badge">🚪 خرج</span>
+        ${isOut ? '<span class="npc-out-badge">🚪 خرج</span>' : ''}
       </div>
       <span class="npc-bank" id="pbank${i}"></span>
       <div class="npc-score" id="p${i}">${scores[i] || 0}</div>`;
@@ -140,7 +140,20 @@ export function updateScoreboard(cfg = null) {
     Object.values(players).forEach(p => {
       if (!p || typeof p.num !== 'number') return;
       const card = document.getElementById(`pcard${p.num}`);
-      if (card) card.classList.toggle('out', p.active === false);
+      if (!card) return;
+      const isOut = p.active === false;
+      card.classList.toggle('out', isOut);
+      // نضيف/نزيل شارة "خرج" فعلياً (لا نعتمد على CSS وحده)
+      const info = card.querySelector('.npc-info');
+      let badge = card.querySelector('.npc-out-badge');
+      if (isOut && !badge && info) {
+        badge = document.createElement('span');
+        badge.className = 'npc-out-badge';
+        badge.textContent = '🚪 خرج';
+        info.appendChild(badge);
+      } else if (!isOut && badge) {
+        badge.remove();
+      }
     });
   }
 }
