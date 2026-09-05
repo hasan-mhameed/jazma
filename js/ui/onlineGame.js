@@ -1,12 +1,13 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { updateScoreboard } from "./scoreboard.js?v=1788564649";
-import { config } from "../config/config.js?v=1788564649";
-import { onlineManager } from "../firebase.js?v=1788564649";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1788564649";
-import { setBank } from "./turnTimer.js?v=1788564649";
-import { state } from "../core/state.js?v=1788564649";
-import { getCurrentUser } from "../auth.js?v=1788564649";
+import { setMyPresence } from "../presence.js?v=1788644342";
+import { updateScoreboard } from "./scoreboard.js?v=1788644342";
+import { config } from "../config/config.js?v=1788644342";
+import { onlineManager } from "../firebase.js?v=1788644342";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1788644342";
+import { setBank } from "./turnTimer.js?v=1788644342";
+import { state } from "../core/state.js?v=1788644342";
+import { getCurrentUser } from "../auth.js?v=1788644342";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1014,6 +1015,7 @@ export function launchOnlineMultiGame(myPlayerNum, onlineTurnInd, onGameStart) {
       if (onlineTurnInd && connected) updateOnlineTurnIndicator(onlineTurnInd);
       // عدنا للاتصال ضمن مهلة السماح → نمسح ختم الانقطاع لنبقى في المباراة
       if (connected) onlineManager.clearMyDisconnectMark();
+      try { setMyPresence(connected ? "playing" : "away"); } catch {}
     });
   }, 800);
 }

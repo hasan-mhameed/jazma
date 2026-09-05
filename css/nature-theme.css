@@ -1150,3 +1150,17 @@ body {
   color: #fca5a5; background: rgba(248,113,113,0.18);
   border: 1px solid #f8717155; border-radius: 7px; padding: 1px 6px; margin-top: 2px;
 }
+
+/* ═══ مؤشّر الحضور في قائمة الأصدقاء ═══ */
+.friend-presence {
+  font-size: 0.72rem; line-height: 1; margin-inline-end: 2px;
+  align-self: center; flex: 0 0 auto;
+}
+.friend-presence-text {
+  display: block; font-size: 0.68rem; font-weight: 600;
+  color: var(--nat-text-dim); margin-top: 2px;
+}
+.friend-card[data-presence="online"]  .friend-presence-text { color: #4ade80; }
+.friend-card[data-presence="playing"] .friend-presence-text { color: #60a5fa; }
+.friend-card[data-presence="away"]    .friend-presence-text { color: #fcd34d; }
+.friend-card[data-presence="offline"] .friend-presence-text { color: var(--nat-text-dim); }

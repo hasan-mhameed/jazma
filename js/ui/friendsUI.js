@@ -1,8 +1,9 @@
 // 📄 ui/friendsUI.js
 // قائمة الأصدقاء + البحث + الإجراءات
+import { watchPresence, PRESENCE_META, lastSeenText } from "../presence.js?v=1788644342";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend,
-         listenFriendRequests, listenFriends } from "../friends.js?v=1788564649";
+         listenFriendRequests, listenFriends } from "../friends.js?v=1788644342";
 
 function asText(v, fallback = "") { return String(v ?? fallback); }
 function firstInitial(name) { return asText(name, "?").trim().charAt(0).toUpperCase() || "?"; }
@@ -72,6 +73,29 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
     const name    = document.createElement("span"); name.className = "friend-name"; name.textContent = userName;
     const actions = document.createElement("div");  actions.className = "friend-actions";
 
+    // 🟢 مؤشّر الحضور + آخر ظهور (للأصدقاء فقط — يُتابَع حياً)
+    let presenceEl = null;
+    if (type === "friend" && user.uid) {
+      presenceEl = document.createElement("span");
+      presenceEl.className = "friend-presence";
+      presenceEl.textContent = "⚫";
+      name.appendChild(document.createElement("br"));
+      const sub = document.createElement("small");
+      sub.className = "friend-presence-text";
+      sub.textContent = "…";
+      name.appendChild(sub);
+      watchPresence(user.uid, (p) => {
+        const st = p?.state || "offline";
+        const meta = PRESENCE_META[st] || PRESENCE_META.offline;
+        presenceEl.textContent = meta.dot;
+        presenceEl.title = meta.label;
+        card.dataset.presence = st;
+        sub.textContent = (st === "offline")
+          ? (lastSeenText(p?.lastSeen) || meta.label)
+          : meta.label;
+      });
+    }
+
     function addAction(cls, text) {
       const btn = document.createElement("button");
       btn.className = cls; btn.dataset.uid = asText(user.uid); btn.textContent = text;
@@ -82,7 +106,8 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
     if (type === "request") { addAction("btn-accept", "✓ قبول"); addAction("btn-reject", "✕ رفض"); }
     if (type === "friend")  { addAction("btn-invite", "🎮 دعوة"); addAction("btn-chat", "💬"); addAction("btn-remove", "حذف"); }
 
-    card.append(avatar, name, actions);
+    if (presenceEl) card.append(presenceEl, avatar, name, actions);
+    else card.append(avatar, name, actions);
 
     card.querySelector(".btn-add")?.addEventListener("click", async e => {
       e.target.textContent = "✅ أُرسل"; e.target.disabled = true;
