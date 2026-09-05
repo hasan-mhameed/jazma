@@ -3,7 +3,7 @@
 // الحالات: online (متصل) | playing (في مباراة) | away (انقطاع مؤقت) | offline (غير متصل)
 import { getDatabase, ref, onValue, onDisconnect, update, serverTimestamp, off }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1788644342";
+import { getCurrentUser, onUserChange } from "./auth.js?v=1788647139";
 
 const db = getDatabase();
 
@@ -13,10 +13,22 @@ let _connUnsub = null;
 const _watchers = new Map(); // uid -> unsubscribe
 
 // ── تسجيل حضورنا ومتابعة الاتصال ────────────────────────────
+// مهم: نربط التسجيل بتغيّر حالة الدخول — استدعاء واحد عند التشغيل يفشل
+// لأن currentUser تكون null قبل اكتمال المصادقة
 export function initPresence() {
-  const user = getCurrentUser();
-  if (!user?.uid) return;
-  _myUid = user.uid;
+  // نسجّل فوراً إن كان المستخدم جاهزاً
+  const now = getCurrentUser();
+  if (now?.uid) _startFor(now.uid);
+  // ونتابع أي تغيّر لاحق (دخول/خروج/ترقية حساب ضيف)
+  onUserChange((user) => {
+    if (user?.uid) _startFor(user.uid);
+    else { _myUid = null; if (_connUnsub) { try { _connUnsub(); } catch {} _connUnsub = null; } }
+  });
+}
+
+function _startFor(uid) {
+  if (_myUid === uid && _connUnsub) return; // مسجَّل بالفعل لنفس المستخدم
+  _myUid = uid;
 
   const myRef = ref(db, `users/${_myUid}/presence`);
   const connRef = ref(db, ".info/connected");
@@ -26,7 +38,9 @@ export function initPresence() {
     if (snap.val() !== true) return; // غير متصل — Firebase سيكتب offline عبر onDisconnect
     // درس v29.8: onDisconnect يُستهلك بعد انطلاقه → نعيد تسجيله عند كل عودة اتصال
     onDisconnect(myRef).update({ state: "offline", lastSeen: serverTimestamp() });
-    update(myRef, { state: _myState, lastSeen: serverTimestamp() });
+    update(myRef, { state: _myState, lastSeen: serverTimestamp() })
+      .then(() => console.log("🟢[PRESENCE] كُتبت الحالة:", _myState, "uid=", _myUid))
+      .catch((e) => console.warn("🔴[PRESENCE] فشلت الكتابة:", e?.message || e));
   });
 }
 
@@ -43,7 +57,10 @@ export function setMyPresence(state) {
 export function watchPresence(uid, cb) {
   if (!uid || _watchers.has(uid)) return;
   const r = ref(db, `users/${uid}/presence`);
-  const unsub = onValue(r, (snap) => cb(snap.val() || { state: "offline", lastSeen: null }));
+  const unsub = onValue(r, (snap) => {
+    console.log("🔵[PRESENCE] قراءة", uid, "=", JSON.stringify(snap.val()));
+    cb(snap.val() || { state: "offline", lastSeen: null });
+  }, (e) => console.warn("🔴[PRESENCE] فشلت القراءة:", e?.message || e));
   _watchers.set(uid, () => { try { off(r); } catch {} unsub && unsub(); });
 }
 
