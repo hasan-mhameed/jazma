@@ -1,9 +1,9 @@
 // 📄 ui/friendsUI.js
 // قائمة الأصدقاء + البحث + الإجراءات
-import { watchPresence, PRESENCE_META, lastSeenText } from "../presence.js?v=1788647139";
+import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1788647792";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend,
-         listenFriendRequests, listenFriends } from "../friends.js?v=1788647139";
+         listenFriendRequests, listenFriends } from "../friends.js?v=1788647792";
 
 function asText(v, fallback = "") { return String(v ?? fallback); }
 function firstInitial(name) { return asText(name, "?").trim().charAt(0).toUpperCase() || "?"; }
@@ -84,16 +84,21 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
       sub.className = "friend-presence-text";
       sub.textContent = "…";
       name.appendChild(sub);
-      watchPresence(user.uid, (p) => {
-        const st = p?.state || "offline";
+      let _lastPresence = null;
+      const paint = () => {
+        const st = displayState(_lastPresence);
         const meta = PRESENCE_META[st] || PRESENCE_META.offline;
         presenceEl.textContent = meta.dot;
         presenceEl.title = meta.label;
         card.dataset.presence = st;
         sub.textContent = (st === "offline")
-          ? (lastSeenText(p?.lastSeen) || meta.label)
+          ? (lastSeenText(_lastPresence?.lastSeen) || meta.label)
           : meta.label;
-      });
+      };
+      watchPresence(user.uid, (p) => { _lastPresence = p; paint(); });
+      // تحديث دوري: "انقطاع مؤقت" تنتهي بعد المهلة، و"آخر ظهور" يتقادم
+      const tick = setInterval(paint, 5000);
+      card.addEventListener("DOMNodeRemoved", () => clearInterval(tick), { once: true });
     }
 
     function addAction(cls, text) {

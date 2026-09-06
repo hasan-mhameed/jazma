@@ -3,7 +3,7 @@
 // الحالات: online (متصل) | playing (في مباراة) | away (انقطاع مؤقت) | offline (غير متصل)
 import { getDatabase, ref, onValue, onDisconnect, update, serverTimestamp, off }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser, onUserChange } from "./auth.js?v=1788647139";
+import { getCurrentUser, onUserChange } from "./auth.js?v=1788647792";
 
 const db = getDatabase();
 
@@ -38,9 +38,7 @@ function _startFor(uid) {
     if (snap.val() !== true) return; // غير متصل — Firebase سيكتب offline عبر onDisconnect
     // درس v29.8: onDisconnect يُستهلك بعد انطلاقه → نعيد تسجيله عند كل عودة اتصال
     onDisconnect(myRef).update({ state: "offline", lastSeen: serverTimestamp() });
-    update(myRef, { state: _myState, lastSeen: serverTimestamp() })
-      .then(() => console.log("🟢[PRESENCE] كُتبت الحالة:", _myState, "uid=", _myUid))
-      .catch((e) => console.warn("🔴[PRESENCE] فشلت الكتابة:", e?.message || e));
+    update(myRef, { state: _myState, lastSeen: serverTimestamp() }).catch(() => {});
   });
 }
 
@@ -57,16 +55,26 @@ export function setMyPresence(state) {
 export function watchPresence(uid, cb) {
   if (!uid || _watchers.has(uid)) return;
   const r = ref(db, `users/${uid}/presence`);
-  const unsub = onValue(r, (snap) => {
-    console.log("🔵[PRESENCE] قراءة", uid, "=", JSON.stringify(snap.val()));
-    cb(snap.val() || { state: "offline", lastSeen: null });
-  }, (e) => console.warn("🔴[PRESENCE] فشلت القراءة:", e?.message || e));
+  const unsub = onValue(r, (snap) => cb(snap.val() || { state: "offline", lastSeen: null }));
   _watchers.set(uid, () => { try { off(r); } catch {} unsub && unsub(); });
 }
 
 export function unwatchAllPresence() {
   _watchers.forEach(fn => { try { fn(); } catch {} });
   _watchers.clear();
+}
+
+// مهلة اعتبار الانقطاع "مؤقتاً" — مطابقة لمهلة السماح داخل المباراة
+const GRACE_MS = 10000;
+
+// الحالة المعروضة: نستنتج "انقطاع مؤقت" محلياً بدل انتظار كتابة من جهاز مقطوع
+// (عند الانقطاع الفعلي لا يستطيع الجهاز الكتابة، فـ onDisconnect يكتب offline مباشرة)
+export function displayState(p) {
+  const st = p?.state || "offline";
+  if (st !== "offline") return st;
+  const ls = p?.lastSeen;
+  if (typeof ls === "number" && (Date.now() - ls) < GRACE_MS) return "away";
+  return "offline";
 }
 
 // ── أدوات العرض ─────────────────────────────────────────────
