@@ -1,10 +1,10 @@
 // 📄 ui/gameSetup.js
 // شاشة إعداد اللعبة + بدء اللعبة المحلية
 // تصميم مرن: الأحجام/اللاعبين/الأوضاع تُبنى من مصفوفات (سهلة التعديل)
-import { config } from "../config/config.js?v=1788647792";
-import { AIPlayer } from "../ai/aiPlayer.js?v=1788647792";
-import { getCurrentUser } from "../auth.js?v=1788647792";
-import { state } from "../core/state.js?v=1788647792";
+import { config } from "../config/config.js?v=1788733802";
+import { AIPlayer } from "../ai/aiPlayer.js?v=1788733802";
+import { getCurrentUser } from "../auth.js?v=1788733802";
+import { state } from "../core/state.js?v=1788733802";
 
 export let aiPlayer = null;
 
@@ -219,6 +219,7 @@ export function initGameSetup({ onGameStart, onOnlineRequested }) {
     config.aiMode  = _mode;
     config.aiDifficulty = _difficulty;
     config.online  = false;
+    config.spectator = false;
     config.turnTimer = _timerOn;
     config.timerMode = _timerMode;
 
@@ -252,6 +253,7 @@ export function initGameSetup({ onGameStart, onOnlineRequested }) {
       config.aiDifficulty = diff;
       config.online = false;
       config.multiPlayers = null;
+      config.spectator = false;
       config.onlinePlayerNames = null;
       config.turnTimer = _timerOn;
       config.timerMode = 'perTurn';

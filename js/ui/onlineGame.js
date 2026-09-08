@@ -1,13 +1,13 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { setMyPresence } from "../presence.js?v=1788647792";
-import { updateScoreboard } from "./scoreboard.js?v=1788647792";
-import { config } from "../config/config.js?v=1788647792";
-import { onlineManager } from "../firebase.js?v=1788647792";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1788647792";
-import { setBank } from "./turnTimer.js?v=1788647792";
-import { state } from "../core/state.js?v=1788647792";
-import { getCurrentUser } from "../auth.js?v=1788647792";
+import { setMyPresence } from "../presence.js?v=1788733802";
+import { updateScoreboard } from "./scoreboard.js?v=1788733802";
+import { config } from "../config/config.js?v=1788733802";
+import { onlineManager } from "../firebase.js?v=1788733802";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1788733802";
+import { setBank, applyClockState } from "./turnTimer.js?v=1788733802";
+import { state } from "../core/state.js?v=1788733802";
+import { getCurrentUser } from "../auth.js?v=1788733802";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -210,6 +210,19 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   });
 
   // ── الانضمام لغرفة ───────────────────────────────────────────
+  // 👁️ مشاهدة مباراة بالكود (الطبقة 1 — مدخل الاختبار)
+  const spectateBtn = document.getElementById("spectate-btn");
+  spectateBtn?.addEventListener("click", async () => {
+    const code = (roomCodeInput?.value || "").trim();
+    if (!code) { showError("أدخل كود المباراة أولاً"); return; }
+    spectateBtn.disabled = true;
+    try {
+      await launchSpectator(code, onlineTurnInd, onGameStart);
+    } catch (e) {
+      showError(e.message || "تعذّرت المشاهدة");
+    } finally { spectateBtn.disabled = false; }
+  });
+
   joinRoomBtn?.addEventListener("click", async () => {
     const name = getPlayerName(); if (!name) return;
     const code = roomCodeInput.value.trim();
@@ -961,6 +974,55 @@ export function launchOnlineGame(myPlayerNum, onlineTurnInd, onGameStart) {
 }
 
 // ═══ إطلاق اللعب الجماعي (3-4 لاعبين) ═══════════════════════
+// ══ وضع المشاهدة: عرض المباراة للقراءة فقط ═══════════════════
+export async function launchSpectator(code, onlineTurnInd, onGameStart) {
+  const info = await onlineManager.joinAsSpectator(code);
+
+  config.aiMode = "online";
+  config.online = true;
+  config.rows = info.cfg?.rows || 4;
+  config.cols = info.cfg?.cols || 4;
+  config.onlinePlayerNum = null;         // مشاهد: بلا رقم لاعب فلا يستطيع اللعب
+  config.spectator = true;
+
+  const players = info.players || {};
+  const names = {};
+  Object.values(players).forEach(p => { if (p?.num) names[p.num] = p.name; });
+  config.onlinePlayerNames = names;
+  config.multiPlayers = info.multi ? players : null;
+  const nums = Object.values(players).map(p => p?.num).filter(n => typeof n === 'number');
+  config.players = nums.length ? Math.max(...nums) : 2;
+  state.currentPlayer = nums.length ? Math.min(...nums) : 1;
+
+  if (onlineTurnInd) {
+    onlineTurnInd.textContent = "👁️ وضع المشاهدة";
+    onlineTurnInd.style.color = "#60a5fa";
+  }
+
+  // نجلب خريطة العناصر ليطابق توزيع الأدوات ما يراه اللاعبون
+  config._sharedElementMap = null;
+  for (let i = 0; i < 12; i++) {
+    const map = await onlineManager.fetchElementMap();
+    if (map && Object.keys(map).length) { config._sharedElementMap = map; break; }
+    await new Promise(r => setTimeout(r, 300));
+  }
+
+  showStep("playing");
+  onGameStart?.();
+
+  // استقبال الحركات وعرضها (نفس مسار اللاعبين — لكن بلا قدرة على اللعب)
+  requestAnimationFrame(() => {
+    onlineManager.onMove((lineKey, nextTurn, byPlayer, bankLeft) => {
+      const mover = (typeof byPlayer === 'number') ? byPlayer
+                  : (state.currentPlayer || 1);
+      applyOnlineMove(lineKey, config, nextTurn, mover, bankLeft);
+      updateOnlineTurnIndicator(onlineTurnInd);
+    });
+    onlineManager.onBankUpdate((player, bank) => setBank(player, bank));
+    onlineManager.onClock((clk) => applyClockState(clk));
+  });
+}
+
 export function launchOnlineMultiGame(myPlayerNum, onlineTurnInd, onGameStart) {
   config.aiMode = "online";
   config.onlinePlayerNum = myPlayerNum;

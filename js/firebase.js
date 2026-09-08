@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1788647792";
+import { getCurrentUser }   from "./auth.js?v=1788733802";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -247,6 +247,58 @@ export class OnlineManager {
 
   // ══ الاستماع للحركات ════════════════════════════════════════
   // كشف نوع الغرفة (multi أو duo) قبل الانضمام
+  // ══ وضع المشاهدة (قراءة فقط) ═══════════════════════════════
+  // المشاهد لا يُسجَّل ضمن players (لا رقم لاعب، لا دور) بل تحت spectators
+  async joinAsSpectator(code) {
+    code = (code || "").trim();
+    const myUid = getCurrentUser()?.uid || ("guest_" + Date.now());
+    const snap = await get(ref(db, `rooms/${code}`));
+    if (!snap.exists()) throw new Error("المباراة غير موجودة!");
+    const room = snap.val();
+    if (room.status === "finished") throw new Error("انتهت هذه المباراة!");
+
+    this.roomCode   = code;
+    this.playerNum  = null;      // مشاهد: بلا رقم لاعب
+    this.isSpectator = true;
+    this._myUid     = myUid;
+    this._isMulti   = !!room.multi;
+    this._gameStarted = room.status === "playing";
+
+    // تسجيل المشاهد + إزالته تلقائياً عند الانقطاع
+    try {
+      await update(ref(db, `rooms/${code}/spectators/${myUid}`), {
+        name: getCurrentUser()?.displayName || "مشاهد", at: serverTimestamp(),
+      });
+      onDisconnect(ref(db, `rooms/${code}/spectators/${myUid}`)).remove();
+    } catch {}
+
+    // نستمع للحركات (نفس قنوات اللاعبين) وللساعة ولحالة الغرفة
+    if (room.multi) this._listenForMultiMoves(code);
+    else this._listenForMoves(code);
+    this._listenBankUpdate(code);
+    this._listenClock(code);
+    this._watchServerOffset();
+    this._listenLobby(code);
+    this._monitorConnection();
+
+    return { cfg: room.cfg, players: room.players || {}, multi: !!room.multi, status: room.status };
+  }
+
+  // مغادرة وضع المشاهدة
+  async leaveSpectator() {
+    const code = this.roomCode, uid = this._myUid;
+    this._unsubs.forEach(u => u()); this._unsubs = [];
+    if (code && uid) {
+      try { await onDisconnect(ref(db, `rooms/${code}/spectators/${uid}`)).cancel(); } catch {}
+      try { await remove(ref(db, `rooms/${code}/spectators/${uid}`)); } catch {}
+    }
+    this.roomCode = null; this.isSpectator = false; this._isMulti = false;
+    this._gameStarted = false; this._lastApplied = null;
+    this._pendingMove = null; this._pendingMoves = [];
+    this._lastClock = null; this._cbMove = null; this._cbClock = null;
+    this._cbLobby = null; this._cbPlayerLeft = null;
+  }
+
   async getRoomType(code) {
     try {
       const snap = await get(ref(db, `rooms/${(code||"").trim()}`));
@@ -790,6 +842,7 @@ export class OnlineManager {
     this.roomCode  = null;
     this.playerNum = null;
     this._isMulti  = false;
+    this.isSpectator = false;  // وضع المشاهدة (قراءة فقط)
     this._gameStarted = false;
     this._lastMoveKey = null;
     this._lastApplied = null;
@@ -850,7 +903,7 @@ export class OnlineManager {
   onOpponentJoined(cb){ this._cbJoined  = cb; }
   onOpponentLeft(cb)  { this._cbLeft    = cb; }
   onConnectionChange(cb) { this._cbConnection = cb; }
-  isMyTurn(cp)        { return cp === this.playerNum; }
+  isMyTurn(cp)        { return !this.isSpectator && cp === this.playerNum; }
 
   // ══ مراقبة الاتصال بـ Firebase ══════════════════════════════
   _monitorConnection() {
@@ -861,7 +914,7 @@ export class OnlineManager {
     });
     this._unsubs.push(unsub);
   }
-  isMyTurn(cp)        { return cp === this.playerNum; }
+  isMyTurn(cp)        { return !this.isSpectator && cp === this.playerNum; }
 
   async getOpponentUid() {
     if (!this.roomCode) return null;
