@@ -1,13 +1,13 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { setMyPresence } from "../presence.js?v=1788733802";
-import { updateScoreboard } from "./scoreboard.js?v=1788733802";
-import { config } from "../config/config.js?v=1788733802";
-import { onlineManager } from "../firebase.js?v=1788733802";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1788733802";
-import { setBank, applyClockState } from "./turnTimer.js?v=1788733802";
-import { state } from "../core/state.js?v=1788733802";
-import { getCurrentUser } from "../auth.js?v=1788733802";
+import { setMyPresence } from "../presence.js?v=1788904668";
+import { updateScoreboard } from "./scoreboard.js?v=1788904668";
+import { config } from "../config/config.js?v=1788904668";
+import { onlineManager } from "../firebase.js?v=1788904668";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1788904668";
+import { setBank, applyClockState } from "./turnTimer.js?v=1788904668";
+import { state } from "../core/state.js?v=1788904668";
+import { getCurrentUser } from "../auth.js?v=1788904668";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -217,8 +217,10 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     if (!code) { showError("أدخل كود المباراة أولاً"); return; }
     spectateBtn.disabled = true;
     try {
+      showStep("playing");   // من داخل النطاق الصحيح
       await launchSpectator(code, onlineTurnInd, onGameStart);
     } catch (e) {
+      showStep("lobby");
       showError(e.message || "تعذّرت المشاهدة");
     } finally { spectateBtn.disabled = false; }
   });
@@ -1007,7 +1009,6 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
     await new Promise(r => setTimeout(r, 300));
   }
 
-  showStep("playing");
   onGameStart?.();
 
   // استقبال الحركات وعرضها (نفس مسار اللاعبين — لكن بلا قدرة على اللعب)
