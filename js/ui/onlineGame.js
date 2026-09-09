@@ -1,13 +1,13 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { setMyPresence } from "../presence.js?v=1788904668";
-import { updateScoreboard } from "./scoreboard.js?v=1788904668";
-import { config } from "../config/config.js?v=1788904668";
-import { onlineManager } from "../firebase.js?v=1788904668";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1788904668";
-import { setBank, applyClockState } from "./turnTimer.js?v=1788904668";
-import { state } from "../core/state.js?v=1788904668";
-import { getCurrentUser } from "../auth.js?v=1788904668";
+import { setMyPresence } from "../presence.js?v=1788992248";
+import { updateScoreboard } from "./scoreboard.js?v=1788992248";
+import { config } from "../config/config.js?v=1788992248";
+import { onlineManager } from "../firebase.js?v=1788992248";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1788992248";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1788992248";
+import { state } from "../core/state.js?v=1788992248";
+import { getCurrentUser } from "../auth.js?v=1788992248";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -986,6 +986,7 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
   config.cols = info.cfg?.cols || 4;
   config.onlinePlayerNum = null;         // مشاهد: بلا رقم لاعب فلا يستطيع اللعب
   config.spectator = true;
+  config._spectatorEnded = false;
 
   const players = info.players || {};
   const names = {};
@@ -1021,6 +1022,47 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
     });
     onlineManager.onBankUpdate((player, bank) => setBank(player, bank));
     onlineManager.onClock((clk) => applyClockState(clk));
+
+    // خروج نظيف: انتهت المباراة أو غادر اللاعبون → رسالة وعودة للقائمة
+    const endSpectating = async (msg) => {
+      if (config._spectatorEnded) return;
+      config._spectatorEnded = true;
+      try { await onlineManager.leaveSpectator(); } catch {}
+      config.spectator = false;
+      config.online = false;
+      config.multiPlayers = null;
+      showAlert("#60a5fa", msg, "🏠 العودة للقائمة");
+    };
+    onlineManager.onPlayerLeft((playersOrReason) => {
+      if (playersOrReason === "host_left" || playersOrReason === "removed_waiting") {
+        endSpectating("👁️ انتهت المباراة — غادر اللاعبون");
+        return;
+      }
+      const players = playersOrReason || {};
+      // سرد كامل للمشاهد: من خرج ومن فاز (هو خارج المنافسة، لكنه يعرف ما جرى)
+      const prev = config.multiPlayers || {};
+      Object.values(players).forEach(p => {
+        if (!p || typeof p.num !== 'number') return;
+        const was = Object.values(prev).find(q => q?.num === p.num);
+        if (was && was.active !== false && p.active === false) {
+          showLeaveToast(`🚪 ${p.name || 'لاعب'} خرج من المباراة`);
+        }
+      });
+      config.multiPlayers = players;
+      // نحدّث حالة البطاقات (باهت + شارة "خرج") عند المشاهد أيضاً
+      try { updateScoreboard(config); } catch {}
+
+      const active = Object.values(players).filter(p => p && p.active !== false);
+      if (active.length === 1 && !state.gameFinished) {
+        // بقي لاعب واحد → فاز بخروج البقية
+        const w = active[0];
+        state.gameFinished = true;
+        try { stopTurnTimer(); } catch {}
+        endSpectating(`🏆 فاز ${w.name || 'اللاعب'} — خرج بقية اللاعبين`);
+      } else if (active.length === 0) {
+        endSpectating("👁️ انتهت المباراة — غادر اللاعبون");
+      }
+    });
   });
 }
 

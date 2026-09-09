@@ -1170,3 +1170,16 @@ body {
   background: linear-gradient(135deg, #1e3a8a, #1e40af) !important;
   border-color: #60a5fa66 !important; margin-top: 10px;
 }
+
+/* 👁️ شريط أدوات وضع المشاهدة (معلومة لا قدرات) */
+#inventory-bar.spectator-inv { flex-wrap: wrap; gap: 10px; justify-content: center; }
+.inv-player-group {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 4px 8px; border-radius: 10px;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--nat-border);
+}
+.inv-player-name { font-size: 0.7rem; font-weight: 800; white-space: nowrap; }
+.inv-player-slots { display: flex; gap: 4px; align-items: center; min-height: 26px; }
+.inv-empty-text { color: var(--nat-text-dim); font-size: 0.8rem; }
+.inv-slot.spectator { cursor: default !important; pointer-events: none; opacity: 1 !important; }
+.inv-slot.spectator:hover { transform: none !important; }
