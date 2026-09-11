@@ -1,13 +1,13 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { setMyPresence } from "../presence.js?v=1788992248";
-import { updateScoreboard } from "./scoreboard.js?v=1788992248";
-import { config } from "../config/config.js?v=1788992248";
-import { onlineManager } from "../firebase.js?v=1788992248";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1788992248";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1788992248";
-import { state } from "../core/state.js?v=1788992248";
-import { getCurrentUser } from "../auth.js?v=1788992248";
+import { setMyPresence } from "../presence.js?v=1789078595";
+import { updateScoreboard } from "./scoreboard.js?v=1789078595";
+import { config } from "../config/config.js?v=1789078595";
+import { onlineManager } from "../firebase.js?v=1789078595";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789078595";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789078595";
+import { state } from "../core/state.js?v=1789078595";
+import { getCurrentUser } from "../auth.js?v=1789078595";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -998,7 +998,7 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
   state.currentPlayer = nums.length ? Math.min(...nums) : 1;
 
   if (onlineTurnInd) {
-    onlineTurnInd.textContent = "👁️ وضع المشاهدة";
+    onlineTurnInd.textContent = info.multi ? "👁️ وضع المشاهدة" : "👁️ مشاهدة (من الآن)";
     onlineTurnInd.style.color = "#60a5fa";
   }
 
@@ -1013,7 +1013,18 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
   onGameStart?.();
 
   // استقبال الحركات وعرضها (نفس مسار اللاعبين — لكن بلا قدرة على اللعب)
-  requestAnimationFrame(() => {
+  requestAnimationFrame(async () => {
+    // 1) نعيد بناء ما فات (الدخول من منتصف المباراة) — الجماعي له سجل moves كامل
+    if (info.multi) {
+      try {
+        const history = await onlineManager.fetchMovesHistory();
+        history.forEach(m => {
+          if (m.key === "__skip__") return;   // نقل دور بلا خط
+          applyOnlineMove(m.key, config, m.nextTurn, m.by, m.bank);
+        });
+      } catch {}
+    }
+    // 2) ثم نتابع الحركات الحيّة
     onlineManager.onMove((lineKey, nextTurn, byPlayer, bankLeft) => {
       const mover = (typeof byPlayer === 'number') ? byPlayer
                   : (state.currentPlayer || 1);
@@ -1039,10 +1050,14 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
         return;
       }
       const players = playersOrReason || {};
+      const nums = Object.values(players).filter(p => p && typeof p.num === 'number');
+      // حماية: هذا المنطق يخص الغرف الجماعية فقط.
+      // في الثنائي لا توجد قائمة players، فالقائمة الفارغة لا تعني أن أحداً خرج.
+      if (!nums.length) return;
+
       // سرد كامل للمشاهد: من خرج ومن فاز (هو خارج المنافسة، لكنه يعرف ما جرى)
       const prev = config.multiPlayers || {};
-      Object.values(players).forEach(p => {
-        if (!p || typeof p.num !== 'number') return;
+      nums.forEach(p => {
         const was = Object.values(prev).find(q => q?.num === p.num);
         if (was && was.active !== false && p.active === false) {
           showLeaveToast(`🚪 ${p.name || 'لاعب'} خرج من المباراة`);
@@ -1052,7 +1067,7 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
       // نحدّث حالة البطاقات (باهت + شارة "خرج") عند المشاهد أيضاً
       try { updateScoreboard(config); } catch {}
 
-      const active = Object.values(players).filter(p => p && p.active !== false);
+      const active = nums.filter(p => p.active !== false);
       if (active.length === 1 && !state.gameFinished) {
         // بقي لاعب واحد → فاز بخروج البقية
         const w = active[0];

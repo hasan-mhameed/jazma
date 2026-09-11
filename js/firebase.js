@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1788992248";
+import { getCurrentUser }   from "./auth.js?v=1789078595";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -282,6 +282,17 @@ export class OnlineManager {
     this._monitorConnection();
 
     return { cfg: room.cfg, players: room.players || {}, multi: !!room.multi, status: room.status };
+  }
+
+  // جلب سجل الحركات الكامل وتطبيقه (الدخول من منتصف المباراة يرى ما فات)
+  async fetchMovesHistory() {
+    if (!this.roomCode) return [];
+    try {
+      const snap = await get(ref(db, `rooms/${this.roomCode}/moves`));
+      if (!snap.exists()) return [];
+      const arr = Object.values(snap.val() || {});
+      return arr.filter(m => m && m.key).sort((a, b) => (a.seq || 0) - (b.seq || 0));
+    } catch { return []; }
   }
 
   // مغادرة وضع المشاهدة
