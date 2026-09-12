@@ -1,20 +1,20 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1789216621";
-import { makeKey }                            from "../utils.js?v=1789216621";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1789216621";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1789216621";
-import { endGame }                            from "./gameEnd.js?v=1789216621";
-import { audioManager }                       from "../audio/audioManager.js?v=1789216621";
-import { checkSquaresAround }                 from "../core/logic.js?v=1789216621";
-import { onlineManager }                      from "../firebase.js?v=1789216621";
-import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1789216621";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1789216621";
-import { refreshInventory } from "./powersUI.js?v=1789216621";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1789216621";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer, cutBank, getTimerMode, getBank, setBank } from "./turnTimer.js?v=1789216621";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1789216621";
+import { state }                              from "../core/state.js?v=1789218027";
+import { makeKey }                            from "../utils.js?v=1789218027";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1789218027";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1789218027";
+import { endGame }                            from "./gameEnd.js?v=1789218027";
+import { audioManager }                       from "../audio/audioManager.js?v=1789218027";
+import { checkSquaresAround }                 from "../core/logic.js?v=1789218027";
+import { onlineManager }                      from "../firebase.js?v=1789218027";
+import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1789218027";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1789218027";
+import { refreshInventory } from "./powersUI.js?v=1789218027";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1789218027";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer, cutBank, getTimerMode, getBank, setBank } from "./turnTimer.js?v=1789218027";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1789218027";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -409,7 +409,7 @@ function drawLine(g, x1,y1,x2,y2, color, width, alpha=1) {
 // ═══════════════════════════════════════════════════════
 //  النقر على خط
 // ═══════════════════════════════════════════════════════
-export function handleEdgeClick(obj, cfg, isOpponentMove=false, forcedPlayer=null) {
+export function handleEdgeClick(obj, cfg, isOpponentMove=false, forcedPlayer=null, silent=false) {
   if (isAIThinking && !isOpponentMove) return;
   // وضع المشاهدة: قراءة فقط — لا نقر ولا رسم من المشاهد إطلاقاً
   if (cfg.spectator && !isOpponentMove) return;
@@ -418,16 +418,16 @@ export function handleEdgeClick(obj, cfg, isOpponentMove=false, forcedPlayer=nul
 
   // في التعدد: صاحب الحركة يأتي صريحاً مع الحركة (لا نعتمد على currentPlayer المحلي)
   const player = (forcedPlayer != null) ? forcedPlayer : state.currentPlayer;
-  audioManager.playLineDraw();
+  if (!silent) audioManager.playLineDraw();
 
   obj.drawn = true;
   state.lines.add(obj.key);
-  animateLineDraw(obj, player);
+  if (silent) drawLineInstant(obj, player); else animateLineDraw(obj, player);
 
   // فحص المربعات
   let completed = false;
   checkSquaresAround(obj.r1, obj.c1, obj.r2, obj.c2, cfg).forEach(([r,c]) => {
-    fillSquare(r, c, cfg, player);
+    fillSquare(r, c, cfg, player, silent);
     state.scores[player] = (state.scores[player]||0) + 1;
     state.squaresFilled = (state.squaresFilled || 0) + 1;
 
@@ -437,7 +437,7 @@ export function handleEdgeClick(obj, cfg, isOpponentMove=false, forcedPlayer=nul
       // الجوهرة → عملات للاعب الحالي (فقط لو هو المستخدم في AI/أونلاين)
       if (isCoinEarner(cfg, player)) {
         addMatchCoins(3);
-        flashMessage('💎 +3 عملات!');
+        if (!silent) flashMessage("💎 +3 عملات!");
       }
     } else if (elType) {
       // عناصر أخرى (سمكة) → قدرة في المخزون
@@ -447,7 +447,7 @@ export function handleEdgeClick(obj, cfg, isOpponentMove=false, forcedPlayer=nul
     }
 
     completed = true;
-    audioManager.playSquareComplete();
+    if (!silent) audioManager.playSquareComplete();
   });
 
   updateScoreboard();
@@ -545,6 +545,13 @@ function restartTimerIfHuman(cfg) {
 // ═══════════════════════════════════════════════════════
 //  أنميشن رسم الخط (بلون اللاعب)
 // ═══════════════════════════════════════════════════════
+// رسم فوري بلا أنيميشن — لاستعادة حالة اللوحة (دخول المشاهد من المنتصف)
+function drawLineInstant(obj, player) {
+  const { line, glow, x1,y1,x2,y2 } = obj;
+  drawLine(line, x1,y1,x2,y2, pColor(player), 4.5);
+  glow.clear(); glow.alpha = 0;
+}
+
 function animateLineDraw(obj, player) {
   const { line, glow, x1,y1,x2,y2 } = obj;
   const color = pColor(player), glowC = pGlow(player);
@@ -574,7 +581,7 @@ function fadeGlow(glow) {
 // ═══════════════════════════════════════════════════════
 //  تعبئة مربع (بلون اللاعب) + جسيمات
 // ═══════════════════════════════════════════════════════
-export function fillSquare(r, c, cfg, player) {
+export function fillSquare(r, c, cfg, player, silent=false) {
   const { spacing, padding } = cfg._pixi;
   const x = padding + c*spacing + 3;
   const y = padding + r*spacing + 3;
@@ -598,15 +605,22 @@ export function fillSquare(r, c, cfg, player) {
     layers.squares.addChild(label);
   }
 
-  let t = 0;
-  const step = () => {
-    t = Math.min(t + 0.06, 1);
+  if (silent) {
+    // استعادة حالة: تعبئة فورية بلا تدرّج
     sq.clear();
-    sq.roundRect(x,y,w,h,6).fill({ color, alpha: t*THEME.squareAlpha });
-    if (label) label.alpha = t*0.4;
-    if (t < 1) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
+    sq.roundRect(x,y,w,h,6).fill({ color, alpha: THEME.squareAlpha });
+    if (label) label.alpha = 0.4;
+  } else {
+    let t = 0;
+    const step = () => {
+      t = Math.min(t + 0.06, 1);
+      sq.clear();
+      sq.roundRect(x,y,w,h,6).fill({ color, alpha: t*THEME.squareAlpha });
+      if (label) label.alpha = t*0.4;
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
 
   if (elType) {
     activateElement(r, c, elType, cx, cy, spacing);
@@ -904,13 +918,13 @@ export function skipInactiveTurn(cfg) {
   updateTurn(cfg);
 }
 
-export function applyOnlineMove(lineKey, cfg, nextTurn, byPlayer, bankLeft) {
+export function applyOnlineMove(lineKey, cfg, nextTurn, byPlayer, bankLeft, silent=false) {
   if (state.lines.has(lineKey)) return;
   const obj = edgeObjects.find(e => e.key === lineKey);
   // في التعدد: نمرّر صاحب الحركة صريحاً (byPlayer) حتى تُنسب للّاعب الصحيح
   if (obj && !obj.drawn) {
     const forced = (cfg.multiPlayers && typeof byPlayer === 'number') ? byPlayer : null;
-    handleEdgeClick(obj, cfg, true, forced);
+    handleEdgeClick(obj, cfg, true, forced, silent);
   }
   // تزامن البنك: نضبط بنك صاحب الحركة على قيمته الحقيقية المرسلة (يقتل الانحراف التراكمي)
   if (getTimerMode() === 'bank' && typeof bankLeft === 'number' && typeof byPlayer === 'number') {

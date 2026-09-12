@@ -1,13 +1,13 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { setMyPresence } from "../presence.js?v=1789216621";
-import { updateScoreboard } from "./scoreboard.js?v=1789216621";
-import { config } from "../config/config.js?v=1789216621";
-import { onlineManager } from "../firebase.js?v=1789216621";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789216621";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789216621";
-import { state } from "../core/state.js?v=1789216621";
-import { getCurrentUser } from "../auth.js?v=1789216621";
+import { setMyPresence } from "../presence.js?v=1789218027";
+import { updateScoreboard } from "./scoreboard.js?v=1789218027";
+import { config } from "../config/config.js?v=1789218027";
+import { onlineManager } from "../firebase.js?v=1789218027";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789218027";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789218027";
+import { state } from "../core/state.js?v=1789218027";
+import { getCurrentUser } from "../auth.js?v=1789218027";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1021,12 +1021,13 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
   requestAnimationFrame(async () => {
     // ننتظر اكتمال تهيئة اللوحة فعلياً (وإلا تضيع أول حركة لأن عناصر الخطوط لم تُبنَ بعد)
     await new Promise(r => setTimeout(r, 350));
-    // 1) نعيد بناء ما فات (الدخول من منتصف المباراة) — الثنائي والجماعي لهما سجل moves
+    // 1) نعيد بناء ما فات — استعادة حالة صامتة (بلا أنيميشن ولا صوت)
+    //    فيجد المشاهد اللوحة جاهزة فوراً بدل مشاهدة إعادة تشغيل للمباراة
     try {
       const history = await onlineManager.fetchMovesHistory();
       history.forEach(m => {
         if (m.key === "__skip__") return;   // نقل دور بلا خط
-        applyOnlineMove(m.key, config, m.nextTurn, m.by, m.bank);
+        applyOnlineMove(m.key, config, m.nextTurn, m.by, m.bank, true);
       });
     } catch {}
     // 2) ثم نتابع الحركات الحيّة
