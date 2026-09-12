@@ -1,38 +1,38 @@
 // 📄 main.js — v13.9
 // Bootstrap فقط — يربط كل الـ modules
 
-import { config }                              from "./config/config.js?v=1789215947";
-import { state }                               from "./core/state.js?v=1789215947";
-import { startBoard, updateScoreboard, resetState } from "./board.js?v=1789215947";
-import { updateTurnUI }                        from "./ui/turnManager.js?v=1789215947";
-import { audioManager }                        from "./audio/audioManager.js?v=1789215947";
-import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1789215947";
-import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1789215947";
+import { config }                              from "./config/config.js?v=1789216621";
+import { state }                               from "./core/state.js?v=1789216621";
+import { startBoard, updateScoreboard, resetState } from "./board.js?v=1789216621";
+import { updateTurnUI }                        from "./ui/turnManager.js?v=1789216621";
+import { audioManager }                        from "./audio/audioManager.js?v=1789216621";
+import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1789216621";
+import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1789216621";
 
-import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1789215947";
-import { initPresence, setMyPresence } from "./presence.js?v=1789215947";
-import { initGameSetup }       from "./ui/gameSetup.js?v=1789215947";
-import { initTurnTimer, stopTurnTimer, startTurnTimer, TIME_BANKS, enableCentralClock, applyClockState } from "./ui/turnTimer.js?v=1789215947";
-import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1789215947";
-import { initFriendsUI }       from "./ui/friendsUI.js?v=1789215947";
-import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1789215947";
-import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1789215947";
-import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1789215947";
-import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1789215947";
-import { renderStatsModal }    from "./ui/statsModal.js?v=1789215947";
-import { initHistoryUI }       from "./ui/historyUI.js?v=1789215947";
-import { resetMatchTimer, endGame } from "./ui/gameEnd.js?v=1789215947";
-import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1789215947";
-import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1789215947";
-import { refreshCoinsBadge } from "./core/wallet.js?v=1789215947";
-import { loadLearnedPowers } from "./ui/powerTutorial.js?v=1789215947";
-import { initPowersUI, refreshInventory } from "./ui/powersUI.js?v=1789215947";
-import { POWERS, addPower } from "./core/powers.js?v=1789215947";
-import { spendCoins } from "./core/wallet.js?v=1789215947";
-import { extendTime, cutBank, getTimerMode, getBank } from "./ui/turnTimer.js?v=1789215947";
-import { activatePower, triggerAI, nextActivePlayer } from "./ui/boardRenderer.js?v=1789215947";
-import { initNavMenu }            from "./ui/navMenu.js?v=1789215947";
-import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1789215947";
+import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1789216621";
+import { initPresence, setMyPresence } from "./presence.js?v=1789216621";
+import { initGameSetup }       from "./ui/gameSetup.js?v=1789216621";
+import { initTurnTimer, stopTurnTimer, startTurnTimer, TIME_BANKS, enableCentralClock, applyClockState } from "./ui/turnTimer.js?v=1789216621";
+import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator } from "./ui/onlineGame.js?v=1789216621";
+import { initFriendsUI }       from "./ui/friendsUI.js?v=1789216621";
+import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1789216621";
+import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1789216621";
+import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1789216621";
+import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1789216621";
+import { renderStatsModal }    from "./ui/statsModal.js?v=1789216621";
+import { initHistoryUI }       from "./ui/historyUI.js?v=1789216621";
+import { resetMatchTimer, endGame } from "./ui/gameEnd.js?v=1789216621";
+import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1789216621";
+import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1789216621";
+import { refreshCoinsBadge } from "./core/wallet.js?v=1789216621";
+import { loadLearnedPowers } from "./ui/powerTutorial.js?v=1789216621";
+import { initPowersUI, refreshInventory } from "./ui/powersUI.js?v=1789216621";
+import { POWERS, addPower } from "./core/powers.js?v=1789216621";
+import { spendCoins } from "./core/wallet.js?v=1789216621";
+import { extendTime, cutBank, getTimerMode, getBank } from "./ui/turnTimer.js?v=1789216621";
+import { activatePower, triggerAI, nextActivePlayer } from "./ui/boardRenderer.js?v=1789216621";
+import { initNavMenu }            from "./ui/navMenu.js?v=1789216621";
+import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1789216621";
 
 // ── PWA ─────────────────────────────────────────────────────────
 let _deferredInstallPrompt = null;
@@ -486,6 +486,26 @@ document.addEventListener("DOMContentLoaded", () => {
   const playAgainBtn = document.getElementById("play-again");
 
   restartBtn?.addEventListener("click", async () => {
+    // 👁️ المشاهد: خروج لا يمسّ المباراة إطلاقاً (ليس طرفاً فيها)
+    if (config.spectator) {
+      audioManager.playButtonClick();
+      audioManager.stopBackgroundMusic();
+      stopTurnTimer();
+      try { await onlineManager.leaveSpectator(); } catch {}
+      config.spectator = false;
+      config.online = false;
+      config.multiPlayers = null;
+      try { setMyPresence("online"); } catch {}
+      userBar.classList.remove("hidden");
+      infoDiv.classList.add("hidden");
+      document.getElementById("board")?.classList.add("hidden");
+      document.getElementById("nat-turn-indicator")?.classList.add("hidden");
+      document.getElementById("inventory-bar")?.classList.add("hidden");
+      onlineScreen.classList.add("hidden");
+      setupScreen.classList.remove("hidden");
+      gameSetup.resetUI();
+      return;
+    }
     // غرفة جماعية أثناء اللعب: تأكيد الانسحاب (الانسحاب = خسارة)
     // بعد انتهاء المباراة طبيعياً: خروج عادي بلا تأكيد ولا خسارة
     const isMultiGame = config.online && config.multiPlayers && !state.gameFinished;
