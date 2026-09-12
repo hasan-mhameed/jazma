@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789244309";
-import { setMyPresence } from "../presence.js?v=1789244309";
-import { updateScoreboard } from "./scoreboard.js?v=1789244309";
-import { config } from "../config/config.js?v=1789244309";
-import { onlineManager } from "../firebase.js?v=1789244309";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789244309";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789244309";
-import { state } from "../core/state.js?v=1789244309";
-import { getCurrentUser } from "../auth.js?v=1789244309";
+import { audioManager } from "../audio/audioManager.js?v=1789245123";
+import { setMyPresence } from "../presence.js?v=1789245123";
+import { updateScoreboard } from "./scoreboard.js?v=1789245123";
+import { config } from "../config/config.js?v=1789245123";
+import { onlineManager } from "../firebase.js?v=1789245123";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789245123";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789245123";
+import { state } from "../core/state.js?v=1789245123";
+import { getCurrentUser } from "../auth.js?v=1789245123";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1111,10 +1111,24 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
       config.multiPlayers = null;
       showAlert("#60a5fa", msg, "🏠 العودة للقائمة");
     };
-    // الثنائي: مغادرة أحد اللاعبين تُعلَن عبر status=finished
-    onlineManager.onOpponentLeft(() => {
+    // الثنائي: مغادرة أحد اللاعبين تُعلَن عبر status=finished (بلا هوية)
+    // فنستنتج المغادر بالاسم من لقطة الغرفة (من بقي مقابل من كان)
+    onlineManager.onOpponentLeft(async () => {
       if (state.gameFinished) { endSpectating("👁️ انتهت المباراة"); return; }
-      endSpectating("🚪 غادر أحد اللاعبين — انتهت المباراة");
+      let who = "";
+      try {
+        const room = await onlineManager.getRoomSnapshot();
+        const names = config.onlinePlayerNames || {};
+        // من غادر: اللاعب الذي لم يعد موجوداً/نشطاً في الغرفة
+        if (room) {
+          const stillP2 = !!room.p2uid, stillP1 = !!room.p1uid;
+          if (!stillP2 && names[2]) who = names[2];
+          else if (!stillP1 && names[1]) who = names[1];
+        }
+      } catch {}
+      endSpectating(who
+        ? `🚪 غادر ${who} — انتهت المباراة`
+        : "🚪 غادر أحد اللاعبين — انتهت المباراة");
     });
     onlineManager.onPlayerLeft((playersOrReason) => {
       if (playersOrReason === "host_left" || playersOrReason === "removed_waiting") {

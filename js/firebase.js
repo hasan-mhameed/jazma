@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789244309";
+import { getCurrentUser }   from "./auth.js?v=1789245123";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -307,6 +307,15 @@ export class OnlineManager {
       const arr = Object.values(snap.val() || {});
       return arr.filter(m => m && m.key).sort((a, b) => (a.seq || 0) - (b.seq || 0));
     } catch { return []; }
+  }
+
+  // قراءة لقطة الغرفة (يستخدمها المشاهد لمعرفة من غادر بالاسم)
+  async getRoomSnapshot() {
+    if (!this.roomCode) return null;
+    try {
+      const snap = await get(ref(db, `rooms/${this.roomCode}`));
+      return snap.exists() ? snap.val() : null;
+    } catch { return null; }
   }
 
   // 👁️ متابعة عدد المشاهدين (للاعبين والمشاهدين معاً)
