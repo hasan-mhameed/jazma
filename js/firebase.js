@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789243556";
+import { getCurrentUser }   from "./auth.js?v=1789244309";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -161,7 +161,7 @@ export class OnlineManager {
       this._listenForOpponentLeave(joinCode);
       this._listenForRestart(joinCode);
       this._monitorConnection();
-      this._listenSpectators(code);
+      this._listenSpectators(joinCode);
       return { role: "guest", code: joinCode, cfg: joinRoom.cfg,
                p1name: joinRoom.p1name, p1uid: joinRoom.p1uid };
     }
