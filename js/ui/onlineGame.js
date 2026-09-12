@@ -1,13 +1,13 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { setMyPresence } from "../presence.js?v=1789167849";
-import { updateScoreboard } from "./scoreboard.js?v=1789167849";
-import { config } from "../config/config.js?v=1789167849";
-import { onlineManager } from "../firebase.js?v=1789167849";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789167849";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789167849";
-import { state } from "../core/state.js?v=1789167849";
-import { getCurrentUser } from "../auth.js?v=1789167849";
+import { setMyPresence } from "../presence.js?v=1789215947";
+import { updateScoreboard } from "./scoreboard.js?v=1789215947";
+import { config } from "../config/config.js?v=1789215947";
+import { onlineManager } from "../firebase.js?v=1789215947";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789215947";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789215947";
+import { state } from "../core/state.js?v=1789215947";
+import { getCurrentUser } from "../auth.js?v=1789215947";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1003,7 +1003,7 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
   state.currentPlayer = nums.length ? Math.min(...nums) : 1;
 
   if (onlineTurnInd) {
-    onlineTurnInd.textContent = info.multi ? "👁️ وضع المشاهدة" : "👁️ مشاهدة (من الآن)";
+    onlineTurnInd.textContent = "👁️ وضع المشاهدة";
     onlineTurnInd.style.color = "#60a5fa";
   }
 
@@ -1021,16 +1021,14 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
   requestAnimationFrame(async () => {
     // ننتظر اكتمال تهيئة اللوحة فعلياً (وإلا تضيع أول حركة لأن عناصر الخطوط لم تُبنَ بعد)
     await new Promise(r => setTimeout(r, 350));
-    // 1) نعيد بناء ما فات (الدخول من منتصف المباراة) — الجماعي له سجل moves كامل
-    if (info.multi) {
-      try {
-        const history = await onlineManager.fetchMovesHistory();
-        history.forEach(m => {
-          if (m.key === "__skip__") return;   // نقل دور بلا خط
-          applyOnlineMove(m.key, config, m.nextTurn, m.by, m.bank);
-        });
-      } catch {}
-    }
+    // 1) نعيد بناء ما فات (الدخول من منتصف المباراة) — الثنائي والجماعي لهما سجل moves
+    try {
+      const history = await onlineManager.fetchMovesHistory();
+      history.forEach(m => {
+        if (m.key === "__skip__") return;   // نقل دور بلا خط
+        applyOnlineMove(m.key, config, m.nextTurn, m.by, m.bank);
+      });
+    } catch {}
     // 2) ثم نتابع الحركات الحيّة
     onlineManager.onMove((lineKey, nextTurn, byPlayer, bankLeft) => {
       const mover = (typeof byPlayer === 'number') ? byPlayer

@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789167849";
+import { getCurrentUser }   from "./auth.js?v=1789215947";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -215,13 +215,21 @@ export class OnlineManager {
   // ══ إرسال حركة ══════════════════════════════════════════════
   async pushMove(lineKey, seq, bankLeft = null, nextTurn = null) {
     if (!this.roomCode) return;
-    await update(ref(db, `rooms/${this.roomCode}/move`), {
+    const payload = {
       key: lineKey,
       by:  this.playerNum,
       seq: seq,  // رقم تسلسلي يضمن عدم تكرار نفس الحركة
       ...(bankLeft != null ? { bank: bankLeft } : {}),
       ...(nextTurn != null ? { nextTurn } : {}),
-    });
+    };
+    // مسار اللاعبين كما هو تماماً (لا نغيّر شيئاً في منطقهم المستقر)
+    await update(ref(db, `rooms/${this.roomCode}/move`), payload);
+    // + سجل موازٍ (append) للمشاهدين: يتيح رؤية ما فات عند الدخول من المنتصف
+    // لا يقرأه اللاعبون إطلاقاً — إضافة صامتة آمنة
+    try {
+      const mref = push(ref(db, `rooms/${this.roomCode}/moves`));
+      await set(mref, payload);
+    } catch {}
   }
 
   // ══ الاستماع لانضمام اللاعب 2 ══════════════════════════════
