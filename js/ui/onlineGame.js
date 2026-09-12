@@ -1,13 +1,13 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { setMyPresence } from "../presence.js?v=1789078595";
-import { updateScoreboard } from "./scoreboard.js?v=1789078595";
-import { config } from "../config/config.js?v=1789078595";
-import { onlineManager } from "../firebase.js?v=1789078595";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789078595";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789078595";
-import { state } from "../core/state.js?v=1789078595";
-import { getCurrentUser } from "../auth.js?v=1789078595";
+import { setMyPresence } from "../presence.js?v=1789167849";
+import { updateScoreboard } from "./scoreboard.js?v=1789167849";
+import { config } from "../config/config.js?v=1789167849";
+import { onlineManager } from "../firebase.js?v=1789167849";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789167849";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789167849";
+import { state } from "../core/state.js?v=1789167849";
+import { getCurrentUser } from "../auth.js?v=1789167849";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -991,6 +991,11 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
   const players = info.players || {};
   const names = {};
   Object.values(players).forEach(p => { if (p?.num) names[p.num] = p.name; });
+  // الثنائي لا يخزّن players — الأسماء في p1name/p2name على مستوى الغرفة
+  if (!info.multi) {
+    if (info.p1name) names[1] = info.p1name;
+    if (info.p2name) names[2] = info.p2name;
+  }
   config.onlinePlayerNames = names;
   config.multiPlayers = info.multi ? players : null;
   const nums = Object.values(players).map(p => p?.num).filter(n => typeof n === 'number');
@@ -1014,6 +1019,8 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
 
   // استقبال الحركات وعرضها (نفس مسار اللاعبين — لكن بلا قدرة على اللعب)
   requestAnimationFrame(async () => {
+    // ننتظر اكتمال تهيئة اللوحة فعلياً (وإلا تضيع أول حركة لأن عناصر الخطوط لم تُبنَ بعد)
+    await new Promise(r => setTimeout(r, 350));
     // 1) نعيد بناء ما فات (الدخول من منتصف المباراة) — الجماعي له سجل moves كامل
     if (info.multi) {
       try {

@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789078595";
+import { getCurrentUser }   from "./auth.js?v=1789167849";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -281,7 +281,8 @@ export class OnlineManager {
     this._listenLobby(code);
     this._monitorConnection();
 
-    return { cfg: room.cfg, players: room.players || {}, multi: !!room.multi, status: room.status };
+    return { cfg: room.cfg, players: room.players || {}, multi: !!room.multi, status: room.status,
+             p1name: room.p1name || null, p2name: room.p2name || null };
   }
 
   // جلب سجل الحركات الكامل وتطبيقه (الدخول من منتصف المباراة يرى ما فات)

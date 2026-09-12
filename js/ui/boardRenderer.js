@@ -1,20 +1,20 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1789078595";
-import { makeKey }                            from "../utils.js?v=1789078595";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1789078595";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1789078595";
-import { endGame }                            from "./gameEnd.js?v=1789078595";
-import { audioManager }                       from "../audio/audioManager.js?v=1789078595";
-import { checkSquaresAround }                 from "../core/logic.js?v=1789078595";
-import { onlineManager }                      from "../firebase.js?v=1789078595";
-import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1789078595";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1789078595";
-import { refreshInventory } from "./powersUI.js?v=1789078595";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1789078595";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer, cutBank, getTimerMode, getBank, setBank } from "./turnTimer.js?v=1789078595";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1789078595";
+import { state }                              from "../core/state.js?v=1789167849";
+import { makeKey }                            from "../utils.js?v=1789167849";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1789167849";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1789167849";
+import { endGame }                            from "./gameEnd.js?v=1789167849";
+import { audioManager }                       from "../audio/audioManager.js?v=1789167849";
+import { checkSquaresAround }                 from "../core/logic.js?v=1789167849";
+import { onlineManager }                      from "../firebase.js?v=1789167849";
+import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1789167849";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1789167849";
+import { refreshInventory } from "./powersUI.js?v=1789167849";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1789167849";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer, cutBank, getTimerMode, getBank, setBank } from "./turnTimer.js?v=1789167849";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1789167849";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -387,12 +387,12 @@ function addEdge(r1,c1,r2,c2,cfg) {
   const obj = { key, line, glow, x1,y1,x2,y2, r1,c1,r2,c2, drawn:false };
 
   hit.on('pointerover', () => {
-    if (obj.drawn) return;
+    if (obj.drawn || cfg.spectator) return;   // المشاهد: لا توهّج يوحي بإمكانية اللعب
     drawLine(line, x1,y1,x2,y2, THEME.edgeHover, 3.5, 0.8);
     drawLine(glow, x1,y1,x2,y2, THEME.edgeHover, 9, 0.25); glow.alpha = 1;
   });
   hit.on('pointerout', () => {
-    if (obj.drawn) return;
+    if (obj.drawn || cfg.spectator) return;
     drawLine(line, x1,y1,x2,y2, THEME.edgeIdle, 2.5);
     glow.clear(); glow.alpha = 0;
   });
