@@ -1183,3 +1183,16 @@ body {
 .inv-empty-text { color: var(--nat-text-dim); font-size: 0.8rem; }
 .inv-slot.spectator { cursor: default !important; pointer-events: none; opacity: 1 !important; }
 .inv-slot.spectator:hover { transform: none !important; }
+
+/* 👁️ شاشة تجهيز المشاهدة */
+.spectator-loading {
+  position: fixed; inset: 0; z-index: 9500;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(4,19,13,0.92);
+}
+.spectator-loading.hidden { display: none !important; }
+.spec-load-box {
+  color: #d7f5ec; font-weight: 800; font-size: 1.05rem;
+  padding: 16px 22px; border-radius: 14px;
+  background: rgba(255,255,255,0.06); border: 1px solid #2dd4bf44;
+}

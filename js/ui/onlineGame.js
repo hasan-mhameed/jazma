@@ -1,13 +1,13 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { setMyPresence } from "../presence.js?v=1789218971";
-import { updateScoreboard } from "./scoreboard.js?v=1789218971";
-import { config } from "../config/config.js?v=1789218971";
-import { onlineManager } from "../firebase.js?v=1789218971";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789218971";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789218971";
-import { state } from "../core/state.js?v=1789218971";
-import { getCurrentUser } from "../auth.js?v=1789218971";
+import { setMyPresence } from "../presence.js?v=1789238068";
+import { updateScoreboard } from "./scoreboard.js?v=1789238068";
+import { config } from "../config/config.js?v=1789238068";
+import { onlineManager } from "../firebase.js?v=1789238068";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789238068";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789238068";
+import { state } from "../core/state.js?v=1789238068";
+import { getCurrentUser } from "../auth.js?v=1789238068";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1003,6 +1003,7 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
   state.currentPlayer = nums.length ? Math.min(...nums) : 1;
 
   if (onlineTurnInd) {
+    // نص محايد أثناء التجهيز — الدور الحقيقي يُعرض بعد اكتمال الاستعادة
     onlineTurnInd.textContent = "👁️ وضع المشاهدة";
     onlineTurnInd.style.color = "#60a5fa";
   }
@@ -1015,10 +1016,20 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
     await new Promise(r => setTimeout(r, 300));
   }
 
-  // نُخفي اللوحة حتى تكتمل استعادة الحركات — فتظهر جاهزة بخطوطها دفعة واحدة
-  // (وإلا يراها المشاهد فارغة ثم تمتلئ أمامه)
-  const boardEl = document.getElementById("board");
-  if (boardEl) boardEl.style.visibility = "hidden";
+  // نُخفي كل عناصر شاشة اللعب حتى تكتمل الاستعادة، ونعرض شاشة تحميل موحّدة
+  // (وإلا تظهر الأسماء والأدوات أولاً، ثم اللوحة، ثم يُصحَّح الدور — تسلسل مزعج)
+  const spectatorEls = ["board", "info", "nat-turn-indicator", "inventory-bar", "scores"]
+    .map(id => document.getElementById(id)).filter(Boolean);
+  spectatorEls.forEach(el => { el.style.visibility = "hidden"; });
+  let loader = document.getElementById("spectator-loading");
+  if (!loader) {
+    loader = document.createElement("div");
+    loader.id = "spectator-loading";
+    loader.className = "spectator-loading";
+    loader.innerHTML = '<div class="spec-load-box">👁️ جارٍ تجهيز المباراة...</div>';
+    document.body.appendChild(loader);
+  }
+  loader.classList.remove("hidden");
 
   onGameStart?.();
 
@@ -1035,10 +1046,15 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
         applyOnlineMove(m.key, config, m.nextTurn, m.by, m.bank, true);
       });
     } catch {}
-    // اكتملت الاستعادة → نُظهر اللوحة جاهزة
-    if (boardEl) boardEl.style.visibility = "";
-    // حماية إضافية: نضمن الإظهار حتى لو تعثّر أي شيء لاحقاً
-    setTimeout(() => { const b = document.getElementById("board"); if (b) b.style.visibility = ""; }, 1500);
+    // اكتملت الاستعادة (اللوحة + الدور الصحيح) → نُظهر كل شيء دفعة واحدة
+    const revealAll = () => {
+      spectatorEls.forEach(el => { el.style.visibility = ""; });
+      document.getElementById("spectator-loading")?.classList.add("hidden");
+    };
+    updateOnlineTurnIndicator(onlineTurnInd);   // مؤشّر الدور بقيمته الصحيحة قبل الإظهار
+    revealAll();
+    // حماية: نضمن الإظهار حتى لو تعثّر أي شيء
+    setTimeout(revealAll, 1500);
     // 2) ثم نتابع الحركات الحيّة
     onlineManager.onMove((lineKey, nextTurn, byPlayer, bankLeft) => {
       const mover = (typeof byPlayer === 'number') ? byPlayer
