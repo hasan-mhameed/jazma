@@ -1196,3 +1196,10 @@ body {
   padding: 16px 22px; border-radius: 14px;
   background: rgba(255,255,255,0.06); border: 1px solid #2dd4bf44;
 }
+
+/* إخفاء عناصر اللعب أثناء تجهيز المشاهدة (كلاس على body — لا مراجع عناصر) */
+body.spectator-preparing #board,
+body.spectator-preparing #info,
+body.spectator-preparing #nat-turn-indicator,
+body.spectator-preparing #inventory-bar,
+body.spectator-preparing #scores { visibility: hidden !important; }

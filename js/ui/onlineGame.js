@@ -1,13 +1,13 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { setMyPresence } from "../presence.js?v=1789238068";
-import { updateScoreboard } from "./scoreboard.js?v=1789238068";
-import { config } from "../config/config.js?v=1789238068";
-import { onlineManager } from "../firebase.js?v=1789238068";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789238068";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789238068";
-import { state } from "../core/state.js?v=1789238068";
-import { getCurrentUser } from "../auth.js?v=1789238068";
+import { setMyPresence } from "../presence.js?v=1789238706";
+import { updateScoreboard } from "./scoreboard.js?v=1789238706";
+import { config } from "../config/config.js?v=1789238706";
+import { onlineManager } from "../firebase.js?v=1789238706";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789238706";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789238706";
+import { state } from "../core/state.js?v=1789238706";
+import { getCurrentUser } from "../auth.js?v=1789238706";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1018,9 +1018,9 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
 
   // نُخفي كل عناصر شاشة اللعب حتى تكتمل الاستعادة، ونعرض شاشة تحميل موحّدة
   // (وإلا تظهر الأسماء والأدوات أولاً، ثم اللوحة، ثم يُصحَّح الدور — تسلسل مزعج)
-  const spectatorEls = ["board", "info", "nat-turn-indicator", "inventory-bar", "scores"]
-    .map(id => document.getElementById(id)).filter(Boolean);
-  spectatorEls.forEach(el => { el.style.visibility = "hidden"; });
+  // نستخدم كلاساً على <body> (لا مراجع عناصر) — العناصر قد يُعاد بناؤها فتضيع المراجع
+  const SPEC_PREP = "spectator-preparing";
+  document.body.classList.add(SPEC_PREP);
   let loader = document.getElementById("spectator-loading");
   if (!loader) {
     loader = document.createElement("div");
@@ -1037,6 +1037,11 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
   requestAnimationFrame(async () => {
     // ننتظر اكتمال تهيئة اللوحة فعلياً (وإلا تضيع أول حركة لأن عناصر الخطوط لم تُبنَ بعد)
     await new Promise(r => setTimeout(r, 350));
+    // حماية مطلقة: مهما حدث، نُظهر الشاشة خلال ثانيتين كحدّ أقصى
+    setTimeout(() => {
+      document.body.classList.remove(SPEC_PREP);
+      document.getElementById("spectator-loading")?.classList.add("hidden");
+    }, 2000);
     // 1) نعيد بناء ما فات — استعادة حالة صامتة (بلا أنيميشن ولا صوت)
     //    فيجد المشاهد اللوحة جاهزة فوراً بدل مشاهدة إعادة تشغيل للمباراة
     try {
@@ -1047,14 +1052,9 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
       });
     } catch {}
     // اكتملت الاستعادة (اللوحة + الدور الصحيح) → نُظهر كل شيء دفعة واحدة
-    const revealAll = () => {
-      spectatorEls.forEach(el => { el.style.visibility = ""; });
-      document.getElementById("spectator-loading")?.classList.add("hidden");
-    };
-    updateOnlineTurnIndicator(onlineTurnInd);   // مؤشّر الدور بقيمته الصحيحة قبل الإظهار
-    revealAll();
-    // حماية: نضمن الإظهار حتى لو تعثّر أي شيء
-    setTimeout(revealAll, 1500);
+    try { updateOnlineTurnIndicator(onlineTurnInd); } catch {}
+    document.body.classList.remove(SPEC_PREP);
+    document.getElementById("spectator-loading")?.classList.add("hidden");
     // 2) ثم نتابع الحركات الحيّة
     onlineManager.onMove((lineKey, nextTurn, byPlayer, bankLeft) => {
       const mover = (typeof byPlayer === 'number') ? byPlayer
@@ -1069,6 +1069,8 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
     const endSpectating = async (msg) => {
       if (config._spectatorEnded) return;
       config._spectatorEnded = true;
+      document.body.classList.remove("spectator-preparing");
+      document.getElementById("spectator-loading")?.classList.add("hidden");
       try { await onlineManager.leaveSpectator(); } catch {}
       config.spectator = false;
       config.online = false;
