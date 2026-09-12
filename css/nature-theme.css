@@ -1203,3 +1203,19 @@ body.spectator-preparing #info,
 body.spectator-preparing #nat-turn-indicator,
 body.spectator-preparing #inventory-bar,
 body.spectator-preparing #scores { visibility: hidden !important; }
+
+/* 👁️ عدّاد المشاهدين + زر الكتم السريع */
+.spectator-count {
+  font-size: 0.78rem; font-weight: 800; color: #93c5fd;
+  background: rgba(96,165,250,0.16); border: 1px solid #60a5fa55;
+  border-radius: 9px; padding: 2px 8px; margin-inline-start: 8px;
+  white-space: nowrap; direction: ltr;
+}
+.spectator-count.hidden { display: none !important; }
+.spectator-mute {
+  background: rgba(255,255,255,0.08); border: 1px solid var(--nat-border);
+  color: #d7f5ec; border-radius: 9px; padding: 2px 8px; cursor: pointer;
+  font-size: 0.85rem; margin-inline-start: 6px;
+}
+.spectator-mute.hidden { display: none !important; }
+.spectator-mute.muted { color: #f87171; border-color: #f8717155; }

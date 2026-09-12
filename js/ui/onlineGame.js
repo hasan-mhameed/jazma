@@ -1,13 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { setMyPresence } from "../presence.js?v=1789238706";
-import { updateScoreboard } from "./scoreboard.js?v=1789238706";
-import { config } from "../config/config.js?v=1789238706";
-import { onlineManager } from "../firebase.js?v=1789238706";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789238706";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789238706";
-import { state } from "../core/state.js?v=1789238706";
-import { getCurrentUser } from "../auth.js?v=1789238706";
+import { audioManager } from "../audio/audioManager.js?v=1789240328";
+import { setMyPresence } from "../presence.js?v=1789240328";
+import { updateScoreboard } from "./scoreboard.js?v=1789240328";
+import { config } from "../config/config.js?v=1789240328";
+import { onlineManager } from "../firebase.js?v=1789240328";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789240328";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789240328";
+import { state } from "../core/state.js?v=1789240328";
+import { getCurrentUser } from "../auth.js?v=1789240328";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -948,6 +949,7 @@ export function launchOnlineGame(myPlayerNum, onlineTurnInd, onGameStart) {
       onlineManager.onBankUpdate((player, bank) => setBank(player, bank));
     });
 
+    bindSpectatorCount();   // 👁️ اللاعبون يرون عدد من يشاهدهم
     onlineManager.onOpponentLeft(() => { if (!state.gameFinished) showDisconnectAlert(); });
     onlineManager.onRestart(() => { if (!state.gameFinished) showRestartAlert(); });
 
@@ -977,6 +979,36 @@ export function launchOnlineGame(myPlayerNum, onlineTurnInd, onGameStart) {
 
 // ═══ إطلاق اللعب الجماعي (3-4 لاعبين) ═══════════════════════
 // ══ وضع المشاهدة: عرض المباراة للقراءة فقط ═══════════════════
+// 👁️ عرض عدّاد المشاهدين — يظهر عند وجود مشاهد واحد فأكثر
+function bindSpectatorCount() {
+  const el = document.getElementById("spectator-count");
+  if (!el) return;
+  onlineManager.onSpectatorsChange((count) => {
+    if (count > 0) {
+      el.textContent = `👁️ ${count}`;
+      el.classList.remove("hidden");
+      el.title = count === 1 ? "مشاهد واحد" : `${count} مشاهدين`;
+    } else {
+      el.classList.add("hidden");
+    }
+  });
+}
+
+// 🔊 زر كتم سريع (للمشاهد خاصة — قد يتابع في مكان عام)
+function bindSpectatorMute(show) {
+  const btn = document.getElementById("spectator-mute");
+  if (!btn) return;
+  btn.classList.toggle("hidden", !show);
+  if (btn.dataset.bound === "1") return;
+  btn.dataset.bound = "1";
+  btn.addEventListener("click", (e) => {
+    e.currentTarget.blur();
+    const on = audioManager.toggle();
+    btn.textContent = on ? "🔊" : "🔇";
+    btn.classList.toggle("muted", !on);
+  });
+}
+
 export async function launchSpectator(code, onlineTurnInd, onGameStart) {
   const info = await onlineManager.joinAsSpectator(code);
 
@@ -1032,6 +1064,8 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
   loader.classList.remove("hidden");
 
   onGameStart?.();
+  bindSpectatorCount();
+  bindSpectatorMute(true);   // المشاهد يحتاج كتماً سريعاً
 
   // استقبال الحركات وعرضها (نفس مسار اللاعبين — لكن بلا قدرة على اللعب)
   requestAnimationFrame(async () => {
@@ -1157,6 +1191,7 @@ export function launchOnlineMultiGame(myPlayerNum, onlineTurnInd, onGameStart) {
       onlineManager.onBankUpdate((player, bank) => setBank(player, bank));
     });
 
+    bindSpectatorCount();   // 👁️ اللاعبون يرون عدد من يشاهدهم
     // خروج لاعب أثناء اللعب — المباراة تكمّل بالباقين
     onlineManager.onPlayerLeft((playersOrReason) => {
       if (playersOrReason === "host_left") { if (!state.gameFinished) showDisconnectAlert(); return; }

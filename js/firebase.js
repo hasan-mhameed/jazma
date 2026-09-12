@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789238706";
+import { getCurrentUser }   from "./auth.js?v=1789240328";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -92,6 +92,7 @@ export class OnlineManager {
     this._watchServerOffset();
     this._listenForRestart(code);
     this._monitorConnection();
+    this._listenSpectators(code);
     return code;
   }
 
@@ -120,6 +121,7 @@ export class OnlineManager {
     this._listenForOpponentLeave(code);
     this._listenForRestart(code);
     this._monitorConnection();
+    this._listenSpectators(code);
     return { cfg: room.cfg, p1name: room.p1name, p1uid: room.p1uid };
   }
 
@@ -159,6 +161,7 @@ export class OnlineManager {
       this._listenForOpponentLeave(joinCode);
       this._listenForRestart(joinCode);
       this._monitorConnection();
+      this._listenSpectators(code);
       return { role: "guest", code: joinCode, cfg: joinRoom.cfg,
                p1name: joinRoom.p1name, p1uid: joinRoom.p1uid };
     }
@@ -187,6 +190,7 @@ export class OnlineManager {
     this._listenForOpponentLeave(code);
     this._listenForRestart(code);
     this._monitorConnection();
+    this._listenSpectators(code);
     return { role: "host", code };
   }
 
@@ -288,6 +292,7 @@ export class OnlineManager {
     this._watchServerOffset();
     this._listenLobby(code);
     this._monitorConnection();
+    this._listenSpectators(code);
 
     return { cfg: room.cfg, players: room.players || {}, multi: !!room.multi, status: room.status,
              p1name: room.p1name || null, p2name: room.p2name || null };
@@ -302,6 +307,20 @@ export class OnlineManager {
       const arr = Object.values(snap.val() || {});
       return arr.filter(m => m && m.key).sort((a, b) => (a.seq || 0) - (b.seq || 0));
     } catch { return []; }
+  }
+
+  // 👁️ متابعة عدد المشاهدين (للاعبين والمشاهدين معاً)
+  _listenSpectators(code) {
+    const unsub = onValue(ref(db, `rooms/${code}/spectators`), (snap) => {
+      const count = snap.exists() ? Object.keys(snap.val() || {}).length : 0;
+      this._lastSpecCount = count;
+      this._cbSpectators && this._cbSpectators(count);
+    });
+    this._unsubs.push(unsub);
+  }
+  onSpectatorsChange(cb) {
+    this._cbSpectators = cb;
+    if (typeof this._lastSpecCount === 'number') cb(this._lastSpecCount);
   }
 
   // مغادرة وضع المشاهدة
@@ -362,6 +381,7 @@ export class OnlineManager {
     this._listenApproval(code);
     this._watchServerOffset();
     this._monitorConnection();
+    this._listenSpectators(code);
     return { code };
   }
 
@@ -414,6 +434,7 @@ export class OnlineManager {
     this._listenApproval(code);
     this._watchServerOffset();
     this._monitorConnection();
+    this._listenSpectators(code);
     return { code, myNum, cfg: room.cfg, maxPlayers: room.maxPlayers };
   }
 
