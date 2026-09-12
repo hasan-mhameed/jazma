@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789240328";
-import { setMyPresence } from "../presence.js?v=1789240328";
-import { updateScoreboard } from "./scoreboard.js?v=1789240328";
-import { config } from "../config/config.js?v=1789240328";
-import { onlineManager } from "../firebase.js?v=1789240328";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789240328";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789240328";
-import { state } from "../core/state.js?v=1789240328";
-import { getCurrentUser } from "../auth.js?v=1789240328";
+import { audioManager } from "../audio/audioManager.js?v=1789243556";
+import { setMyPresence } from "../presence.js?v=1789243556";
+import { updateScoreboard } from "./scoreboard.js?v=1789243556";
+import { config } from "../config/config.js?v=1789243556";
+import { onlineManager } from "../firebase.js?v=1789243556";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789243556";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789243556";
+import { state } from "../core/state.js?v=1789243556";
+import { getCurrentUser } from "../auth.js?v=1789243556";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1111,6 +1111,11 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
       config.multiPlayers = null;
       showAlert("#60a5fa", msg, "🏠 العودة للقائمة");
     };
+    // الثنائي: مغادرة أحد اللاعبين تُعلَن عبر status=finished
+    onlineManager.onOpponentLeft(() => {
+      if (state.gameFinished) { endSpectating("👁️ انتهت المباراة"); return; }
+      endSpectating("🚪 غادر أحد اللاعبين — انتهت المباراة");
+    });
     onlineManager.onPlayerLeft((playersOrReason) => {
       if (playersOrReason === "host_left" || playersOrReason === "removed_waiting") {
         endSpectating("👁️ انتهت المباراة — غادر اللاعبون");

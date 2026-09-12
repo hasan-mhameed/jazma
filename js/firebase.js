@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789240328";
+import { getCurrentUser }   from "./auth.js?v=1789243556";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -286,7 +286,7 @@ export class OnlineManager {
 
     // نستمع للحركات (نفس قنوات اللاعبين) وللساعة ولحالة الغرفة
     if (room.multi) this._listenForMultiMoves(code);
-    else this._listenForMoves(code);
+    else { this._listenForMoves(code); this._listenForOpponentLeave(code); }
     this._listenBankUpdate(code);
     this._listenClock(code);
     this._watchServerOffset();
