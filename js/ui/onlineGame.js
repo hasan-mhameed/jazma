@@ -1,13 +1,13 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { setMyPresence } from "../presence.js?v=1789218027";
-import { updateScoreboard } from "./scoreboard.js?v=1789218027";
-import { config } from "../config/config.js?v=1789218027";
-import { onlineManager } from "../firebase.js?v=1789218027";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789218027";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789218027";
-import { state } from "../core/state.js?v=1789218027";
-import { getCurrentUser } from "../auth.js?v=1789218027";
+import { setMyPresence } from "../presence.js?v=1789218971";
+import { updateScoreboard } from "./scoreboard.js?v=1789218971";
+import { config } from "../config/config.js?v=1789218971";
+import { onlineManager } from "../firebase.js?v=1789218971";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789218971";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789218971";
+import { state } from "../core/state.js?v=1789218971";
+import { getCurrentUser } from "../auth.js?v=1789218971";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1015,6 +1015,11 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
     await new Promise(r => setTimeout(r, 300));
   }
 
+  // نُخفي اللوحة حتى تكتمل استعادة الحركات — فتظهر جاهزة بخطوطها دفعة واحدة
+  // (وإلا يراها المشاهد فارغة ثم تمتلئ أمامه)
+  const boardEl = document.getElementById("board");
+  if (boardEl) boardEl.style.visibility = "hidden";
+
   onGameStart?.();
 
   // استقبال الحركات وعرضها (نفس مسار اللاعبين — لكن بلا قدرة على اللعب)
@@ -1030,6 +1035,10 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
         applyOnlineMove(m.key, config, m.nextTurn, m.by, m.bank, true);
       });
     } catch {}
+    // اكتملت الاستعادة → نُظهر اللوحة جاهزة
+    if (boardEl) boardEl.style.visibility = "";
+    // حماية إضافية: نضمن الإظهار حتى لو تعثّر أي شيء لاحقاً
+    setTimeout(() => { const b = document.getElementById("board"); if (b) b.style.visibility = ""; }, 1500);
     // 2) ثم نتابع الحركات الحيّة
     onlineManager.onMove((lineKey, nextTurn, byPlayer, bankLeft) => {
       const mover = (typeof byPlayer === 'number') ? byPlayer
