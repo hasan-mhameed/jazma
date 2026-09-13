@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789245123";
-import { setMyPresence } from "../presence.js?v=1789245123";
-import { updateScoreboard } from "./scoreboard.js?v=1789245123";
-import { config } from "../config/config.js?v=1789245123";
-import { onlineManager } from "../firebase.js?v=1789245123";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789245123";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789245123";
-import { state } from "../core/state.js?v=1789245123";
-import { getCurrentUser } from "../auth.js?v=1789245123";
+import { audioManager } from "../audio/audioManager.js?v=1789255925";
+import { setMyPresence } from "../presence.js?v=1789255925";
+import { updateScoreboard } from "./scoreboard.js?v=1789255925";
+import { config } from "../config/config.js?v=1789255925";
+import { onlineManager } from "../firebase.js?v=1789255925";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789255925";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789255925";
+import { state } from "../core/state.js?v=1789255925";
+import { getCurrentUser } from "../auth.js?v=1789255925";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -911,6 +911,8 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
 export function launchOnlineGame(myPlayerNum, onlineTurnInd, onGameStart) {
   config.aiMode = "online";
+  config.online = true;          // ضمان: بعض المسارات لم تكن تضبطها فيسقط تأكيد الانسحاب
+  config.spectator = false;
   config.onlinePlayerNum = myPlayerNum;
   onlineManager.getOpponentUid().then(uid => { config.onlineOpponentUid = uid; });
 
@@ -1119,12 +1121,8 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
       try {
         const room = await onlineManager.getRoomSnapshot();
         const names = config.onlinePlayerNames || {};
-        // من غادر: اللاعب الذي لم يعد موجوداً/نشطاً في الغرفة
-        if (room) {
-          const stillP2 = !!room.p2uid, stillP1 = !!room.p1uid;
-          if (!stillP2 && names[2]) who = names[2];
-          else if (!stillP1 && names[1]) who = names[1];
-        }
+        // المغادر يسجّل رقمه في leftBy عند خروجه
+        if (room && typeof room.leftBy === 'number') who = names[room.leftBy] || "";
       } catch {}
       endSpectating(who
         ? `🚪 غادر ${who} — انتهت المباراة`

@@ -1,7 +1,7 @@
 // 📄 turnManager.js — v15.8
-import { state }  from "../core/state.js?v=1789245123";
-import { config } from "../config/config.js?v=1789245123";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1789245123";
+import { state }  from "../core/state.js?v=1789255925";
+import { config } from "../config/config.js?v=1789255925";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1789255925";
 
 export function updateTurn(cfg) { updateTurnUI(cfg); }
 
