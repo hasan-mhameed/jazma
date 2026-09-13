@@ -1,20 +1,20 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1789327855";
-import { makeKey }                            from "../utils.js?v=1789327855";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1789327855";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1789327855";
-import { endGame }                            from "./gameEnd.js?v=1789327855";
-import { audioManager }                       from "../audio/audioManager.js?v=1789327855";
-import { checkSquaresAround }                 from "../core/logic.js?v=1789327855";
-import { onlineManager }                      from "../firebase.js?v=1789327855";
-import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1789327855";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1789327855";
-import { refreshInventory } from "./powersUI.js?v=1789327855";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1789327855";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer, cutBank, getTimerMode, getBank, setBank } from "./turnTimer.js?v=1789327855";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1789327855";
+import { state }                              from "../core/state.js?v=1789328750";
+import { makeKey }                            from "../utils.js?v=1789328750";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1789328750";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1789328750";
+import { endGame }                            from "./gameEnd.js?v=1789328750";
+import { audioManager }                       from "../audio/audioManager.js?v=1789328750";
+import { checkSquaresAround }                 from "../core/logic.js?v=1789328750";
+import { onlineManager }                      from "../firebase.js?v=1789328750";
+import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1789328750";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1789328750";
+import { refreshInventory } from "./powersUI.js?v=1789328750";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1789328750";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer, cutBank, getTimerMode, getBank, setBank } from "./turnTimer.js?v=1789328750";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1789328750";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -84,6 +84,10 @@ export async function initBoard(cfg, ai = null) {
     const fresh = canvasEl.cloneNode(false);
     fresh.className = canvasEl.className;
     fresh.classList.remove('hidden');
+    // نورّث حالة الإخفاء أثناء تجهيز المشاهدة (النسخة الجديدة لا ترث style)
+    if (document.body.classList.contains('spectator-preparing')) {
+      fresh.style.visibility = 'hidden';
+    }
     canvasEl.parentNode.replaceChild(fresh, canvasEl);
     canvasEl = fresh;
   }

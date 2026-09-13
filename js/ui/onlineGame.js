@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789327855";
-import { setMyPresence } from "../presence.js?v=1789327855";
-import { updateScoreboard } from "./scoreboard.js?v=1789327855";
-import { config } from "../config/config.js?v=1789327855";
-import { onlineManager } from "../firebase.js?v=1789327855";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789327855";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789327855";
-import { state } from "../core/state.js?v=1789327855";
-import { getCurrentUser } from "../auth.js?v=1789327855";
+import { audioManager } from "../audio/audioManager.js?v=1789328750";
+import { setMyPresence } from "../presence.js?v=1789328750";
+import { updateScoreboard } from "./scoreboard.js?v=1789328750";
+import { config } from "../config/config.js?v=1789328750";
+import { onlineManager } from "../firebase.js?v=1789328750";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789328750";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789328750";
+import { state } from "../core/state.js?v=1789328750";
+import { getCurrentUser } from "../auth.js?v=1789328750";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1094,6 +1094,9 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     await new Promise(r => setTimeout(r, 220));
     document.body.classList.remove(SPEC_PREP);
+    // نزيل الإخفاء المباشر الذي ورثته نسخة اللوحة الجديدة
+    const bEl = document.getElementById("board");
+    if (bEl) bEl.style.visibility = "";
     document.getElementById("spectator-loading")?.classList.add("hidden");
     // 2) ثم نتابع الحركات الحيّة
     onlineManager.onMove((lineKey, nextTurn, byPlayer, bankLeft) => {
