@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789328750";
-import { setMyPresence } from "../presence.js?v=1789328750";
-import { updateScoreboard } from "./scoreboard.js?v=1789328750";
-import { config } from "../config/config.js?v=1789328750";
-import { onlineManager } from "../firebase.js?v=1789328750";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789328750";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789328750";
-import { state } from "../core/state.js?v=1789328750";
-import { getCurrentUser } from "../auth.js?v=1789328750";
+import { audioManager } from "../audio/audioManager.js?v=1789329282";
+import { setMyPresence } from "../presence.js?v=1789329282";
+import { updateScoreboard } from "./scoreboard.js?v=1789329282";
+import { config } from "../config/config.js?v=1789329282";
+import { onlineManager } from "../firebase.js?v=1789329282";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789329282";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789329282";
+import { state } from "../core/state.js?v=1789329282";
+import { getCurrentUser } from "../auth.js?v=1789329282";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1089,10 +1089,8 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
     } catch {}
     // اكتملت الاستعادة (اللوحة + الدور الصحيح) → نُظهر كل شيء دفعة واحدة
     try { updateOnlineTurnIndicator(onlineTurnInd); } catch {}
-    // ننتظر دورة رسم المحرّك (PixiJS يرسم في دورته الخاصة لا بإطار المتصفّح)
-    // إطارات المتصفّح وحدها لم تكفِ — فنضيف مهلة قصيرة تضمن اكتمال العرض
-    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    await new Promise(r => setTimeout(r, 220));
+    // ننتظر المحرّك نفسه يرسم إطارين فعليين (أدق من مهل التخمين)
+    try { await waitForRender(); } catch { await new Promise(r => setTimeout(r, 250)); }
     document.body.classList.remove(SPEC_PREP);
     // نزيل الإخفاء المباشر الذي ورثته نسخة اللوحة الجديدة
     const bEl = document.getElementById("board");

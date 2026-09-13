@@ -1,20 +1,20 @@
 // 📄 boardRenderer.js — v18.0 (Living Board — clean architecture)
 // طبقات منظمة + ticker مركزي + نظام جاهز للعناصر الخاصة
 
-import { state }                              from "../core/state.js?v=1789328750";
-import { makeKey }                            from "../utils.js?v=1789328750";
-import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1789328750";
-import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1789328750";
-import { endGame }                            from "./gameEnd.js?v=1789328750";
-import { audioManager }                       from "../audio/audioManager.js?v=1789328750";
-import { checkSquaresAround }                 from "../core/logic.js?v=1789328750";
-import { onlineManager }                      from "../firebase.js?v=1789328750";
-import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1789328750";
-import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1789328750";
-import { refreshInventory } from "./powersUI.js?v=1789328750";
-import { maybeShowTutorial } from "./powerTutorial.js?v=1789328750";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer, cutBank, getTimerMode, getBank, setBank } from "./turnTimer.js?v=1789328750";
-import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1789328750";
+import { state }                              from "../core/state.js?v=1789329282";
+import { makeKey }                            from "../utils.js?v=1789329282";
+import { renderScoreboard, updateScoreboard } from "./scoreboard.js?v=1789329282";
+import { updateTurn, updateTurnUI }           from "./turnManager.js?v=1789329282";
+import { endGame }                            from "./gameEnd.js?v=1789329282";
+import { audioManager }                       from "../audio/audioManager.js?v=1789329282";
+import { checkSquaresAround }                 from "../core/logic.js?v=1789329282";
+import { onlineManager }                      from "../firebase.js?v=1789329282";
+import { generateSpecialSquares, getElementAt, ELEMENTS, setElementMap, getElementMap } from "../core/specialSquares.js?v=1789329282";
+import { resetPowers, addPower, getEffect, clearEffect, consumePower, setEffect, hasPower } from "../core/powers.js?v=1789329282";
+import { refreshInventory } from "./powersUI.js?v=1789329282";
+import { maybeShowTutorial } from "./powerTutorial.js?v=1789329282";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer, cutBank, getTimerMode, getBank, setBank } from "./turnTimer.js?v=1789329282";
+import { resetMatchCoins, addMatchCoins } from "../core/wallet.js?v=1789329282";
 
 // ═══════════════════════════════════════════════════════
 //  الحالة العامة
@@ -920,6 +920,23 @@ export function skipInactiveTurn(cfg) {
   if (isActive) return;
   state.currentPlayer = nextActivePlayer(cur, cfg);
   updateTurn(cfg);
+}
+
+// ننتظر أن يرسم محرّك PixiJS إطارين فعليين — أدق من مهل التخمين
+// (يُستخدم لكشف شاشة المشاهدة بعد اكتمال رسم اللوحة والخطوط)
+export function waitForRender() {
+  return new Promise(resolve => {
+    if (!app || !app.ticker) { setTimeout(resolve, 250); return; }
+    let frames = 0;
+    const onTick = () => {
+      frames++;
+      if (frames >= 2) {
+        try { app.ticker.remove(onTick); } catch {}
+        resolve();
+      }
+    };
+    try { app.ticker.add(onTick); } catch { setTimeout(resolve, 250); }
+  });
 }
 
 export function applyOnlineMove(lineKey, cfg, nextTurn, byPlayer, bankLeft, silent=false) {
