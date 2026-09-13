@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789255925";
-import { setMyPresence } from "../presence.js?v=1789255925";
-import { updateScoreboard } from "./scoreboard.js?v=1789255925";
-import { config } from "../config/config.js?v=1789255925";
-import { onlineManager } from "../firebase.js?v=1789255925";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789255925";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789255925";
-import { state } from "../core/state.js?v=1789255925";
-import { getCurrentUser } from "../auth.js?v=1789255925";
+import { audioManager } from "../audio/audioManager.js?v=1789303599";
+import { setMyPresence } from "../presence.js?v=1789303599";
+import { updateScoreboard } from "./scoreboard.js?v=1789303599";
+import { config } from "../config/config.js?v=1789303599";
+import { onlineManager } from "../firebase.js?v=1789303599";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789303599";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789303599";
+import { state } from "../core/state.js?v=1789303599";
+import { getCurrentUser } from "../auth.js?v=1789303599";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1117,16 +1117,22 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
     // فنستنتج المغادر بالاسم من لقطة الغرفة (من بقي مقابل من كان)
     onlineManager.onOpponentLeft(async () => {
       if (state.gameFinished) { endSpectating("👁️ انتهت المباراة"); return; }
-      let who = "";
+      let who = "", winner = "";
       try {
         const room = await onlineManager.getRoomSnapshot();
         const names = config.onlinePlayerNames || {};
-        // المغادر يسجّل رقمه في leftBy عند خروجه
-        if (room && typeof room.leftBy === 'number') who = names[room.leftBy] || "";
+        // المغادر يسجّل رقمه في leftBy عند خروجه — والفائز هو الطرف الآخر
+        if (room && typeof room.leftBy === 'number') {
+          who = names[room.leftBy] || "";
+          const otherNum = room.leftBy === 1 ? 2 : 1;
+          winner = names[otherNum] || "";
+        }
       } catch {}
-      endSpectating(who
-        ? `🚪 غادر ${who} — انتهت المباراة`
-        : "🚪 غادر أحد اللاعبين — انتهت المباراة");
+      // نكمل السرد: من غادر ومن فاز (المشاهد يتابع منافسة ومن حقه معرفة نتيجتها)
+      const msg = who
+        ? (winner ? `🚪 غادر ${who} — 🏆 فاز ${winner}` : `🚪 غادر ${who} — انتهت المباراة`)
+        : "🚪 غادر أحد اللاعبين — انتهت المباراة";
+      endSpectating(msg);
     });
     onlineManager.onPlayerLeft((playersOrReason) => {
       if (playersOrReason === "host_left" || playersOrReason === "removed_waiting") {
