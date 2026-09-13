@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789325132";
-import { setMyPresence } from "../presence.js?v=1789325132";
-import { updateScoreboard } from "./scoreboard.js?v=1789325132";
-import { config } from "../config/config.js?v=1789325132";
-import { onlineManager } from "../firebase.js?v=1789325132";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789325132";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789325132";
-import { state } from "../core/state.js?v=1789325132";
-import { getCurrentUser } from "../auth.js?v=1789325132";
+import { audioManager } from "../audio/audioManager.js?v=1789327855";
+import { setMyPresence } from "../presence.js?v=1789327855";
+import { updateScoreboard } from "./scoreboard.js?v=1789327855";
+import { config } from "../config/config.js?v=1789327855";
+import { onlineManager } from "../firebase.js?v=1789327855";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789327855";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789327855";
+import { state } from "../core/state.js?v=1789327855";
+import { getCurrentUser } from "../auth.js?v=1789327855";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1089,9 +1089,10 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
     } catch {}
     // اكتملت الاستعادة (اللوحة + الدور الصحيح) → نُظهر كل شيء دفعة واحدة
     try { updateOnlineTurnIndicator(onlineTurnInd); } catch {}
-    // ننتظر إطارَي رسم حتى تُرسم الخطوط فعلياً على الشاشة قبل الكشف
-    // (وإلا تظهر اللوحة فارغة للحظة ثم تمتلئ)
+    // ننتظر دورة رسم المحرّك (PixiJS يرسم في دورته الخاصة لا بإطار المتصفّح)
+    // إطارات المتصفّح وحدها لم تكفِ — فنضيف مهلة قصيرة تضمن اكتمال العرض
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await new Promise(r => setTimeout(r, 220));
     document.body.classList.remove(SPEC_PREP);
     document.getElementById("spectator-loading")?.classList.add("hidden");
     // 2) ثم نتابع الحركات الحيّة
@@ -1315,10 +1316,13 @@ function handleMultiPlayerLeft(players, onlineTurnInd) {
     const me = config.onlinePlayerNum;
     const iAmActive = Object.values(players || {}).some(p => p.num === me && p.active !== false);
     if (iAmActive) {
-      // نراعي العدد: خصم واحد (مفرد) أو أكثر (جمع)
-      const totalOthers = Object.values(players || {}).filter(p => p && p.num !== me).length;
+      // نراعي العدد ونذكر الاسم عند خصم واحد (أوضح وأدفأ)
+      const others = Object.values(players || {}).filter(p => p && p.num !== me);
+      const goneName = others.length === 1 ? (others[0].name || "") : "";
       showAlert("#4ade80",
-        totalOthers <= 1 ? "🏆 فزت بالمباراة! انسحب خصمك" : "🏆 فزت بالمباراة! انسحب جميع خصومك",
+        others.length <= 1
+          ? (goneName ? `🏆 فزت بالمباراة! انسحب ${goneName}` : "🏆 فزت بالمباراة! انسحب خصمك")
+          : "🏆 فزت بالمباراة! انسحب جميع خصومك",
         "🏠 العودة للقائمة");
     } else {
       // أنا خارج: المباراة انتهت ولا فوز لي
