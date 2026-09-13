@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789303599";
+import { getCurrentUser }   from "./auth.js?v=1789304371";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -887,11 +887,13 @@ export class OnlineManager {
           }
         } catch {}
       } else {
-        // الثنائي: كما كان
-        // نسجّل من غادر (رقمه) — المشاهد يحتاج الهوية لا مجرد "انتهت"
-        await update(ref(db, `rooms/${this.roomCode}`), {
-          status: "finished", leftBy: this.playerNum || null,
-        });
+        // الثنائي: ننهي المباراة فقط إذا كنّا لاعبين فيها فعلاً
+        // (leaveRoom تُستدعى أيضاً كتنظيف قبل البحث — يجب ألّا تُنهي غرفة غيرنا)
+        if (this.playerNum) {
+          await update(ref(db, `rooms/${this.roomCode}`), {
+            status: "finished", leftBy: this.playerNum,
+          });
+        }
       }
     }
     this.roomCode  = null;
