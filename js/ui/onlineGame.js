@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789304371";
-import { setMyPresence } from "../presence.js?v=1789304371";
-import { updateScoreboard } from "./scoreboard.js?v=1789304371";
-import { config } from "../config/config.js?v=1789304371";
-import { onlineManager } from "../firebase.js?v=1789304371";
-import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789304371";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789304371";
-import { state } from "../core/state.js?v=1789304371";
-import { getCurrentUser } from "../auth.js?v=1789304371";
+import { audioManager } from "../audio/audioManager.js?v=1789325132";
+import { setMyPresence } from "../presence.js?v=1789325132";
+import { updateScoreboard } from "./scoreboard.js?v=1789325132";
+import { config } from "../config/config.js?v=1789325132";
+import { onlineManager } from "../firebase.js?v=1789325132";
+import { applyOnlineMove, skipInactiveTurn } from "./boardRenderer.js?v=1789325132";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789325132";
+import { state } from "../core/state.js?v=1789325132";
+import { getCurrentUser } from "../auth.js?v=1789325132";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -952,7 +952,7 @@ export function launchOnlineGame(myPlayerNum, onlineTurnInd, onGameStart) {
     });
 
     bindSpectatorCount();   // 👁️ اللاعبون يرون عدد من يشاهدهم
-    onlineManager.onOpponentLeft(() => { if (!state.gameFinished) showDisconnectAlert(); });
+    onlineManager.onOpponentLeft(() => { if (!state.gameFinished) showOpponentGoneAlert(); });
     onlineManager.onRestart(() => { if (!state.gameFinished) showRestartAlert(); });
 
     // ── مراقبة الاتصال ──────────────────────────────────────
@@ -1089,6 +1089,9 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
     } catch {}
     // اكتملت الاستعادة (اللوحة + الدور الصحيح) → نُظهر كل شيء دفعة واحدة
     try { updateOnlineTurnIndicator(onlineTurnInd); } catch {}
+    // ننتظر إطارَي رسم حتى تُرسم الخطوط فعلياً على الشاشة قبل الكشف
+    // (وإلا تظهر اللوحة فارغة للحظة ثم تمتلئ)
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     document.body.classList.remove(SPEC_PREP);
     document.getElementById("spectator-loading")?.classList.add("hidden");
     // 2) ثم نتابع الحركات الحيّة
@@ -1312,7 +1315,11 @@ function handleMultiPlayerLeft(players, onlineTurnInd) {
     const me = config.onlinePlayerNum;
     const iAmActive = Object.values(players || {}).some(p => p.num === me && p.active !== false);
     if (iAmActive) {
-      showAlert("#4ade80", "🏆 فزت بالمباراة! انسحب جميع خصومك", "🏠 العودة للقائمة");
+      // نراعي العدد: خصم واحد (مفرد) أو أكثر (جمع)
+      const totalOthers = Object.values(players || {}).filter(p => p && p.num !== me).length;
+      showAlert("#4ade80",
+        totalOthers <= 1 ? "🏆 فزت بالمباراة! انسحب خصمك" : "🏆 فزت بالمباراة! انسحب جميع خصومك",
+        "🏠 العودة للقائمة");
     } else {
       // أنا خارج: المباراة انتهت ولا فوز لي
       showAlert("#f87171", "انتهت المباراة — كنت خارجها بعد انقطاعك", "🏠 العودة للقائمة");
@@ -1342,4 +1349,20 @@ function showAlert(borderColor, message, btnText) {
   box.append(p, btn); document.body.appendChild(box);
 }
 function showDisconnectAlert() { showAlert("#f87171", "❌ انقطع اتصال الخصم!", "🔄 العودة للقائمة"); }
+// نميّز بين الانسحاب الإرادي (leftBy مسجّل) والانقطاع (غير مسجّل)
+async function showOpponentGoneAlert() {
+  let withdrew = false, who = "";
+  try {
+    const room = await onlineManager.getRoomSnapshot();
+    if (room && typeof room.leftBy === 'number') {
+      withdrew = true;
+      who = (config.onlinePlayerNames || {})[room.leftBy] || "";
+    }
+  } catch {}
+  if (withdrew) {
+    showAlert("#4ade80", who ? `🏆 فزت! انسحب ${who}` : "🏆 فزت! انسحب خصمك", "🏠 العودة للقائمة");
+  } else {
+    showDisconnectAlert();
+  }
+}
 function showRestartAlert()    { showAlert("#7c6af7", "🔄 الخصم أنهى اللعبة!",  "🏠 العودة للقائمة"); }
