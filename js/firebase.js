@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789339905";
+import { getCurrentUser }   from "./auth.js?v=1789420806";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -318,6 +318,21 @@ export class OnlineManager {
     } catch { return null; }
   }
 
+  // ترشيح المضيف ذرّياً: يفوز واحد فقط حتى لو رشّح الجميع أنفسهم بنفس اللحظة
+  // (الحساب المحلي "أصغر رقم حاضر" يعطي نتائج مختلفة قبل وصول القائمة الكاملة)
+  async claimHostIfVacant(presentNums) {
+    if (!this.roomCode || !this.playerNum) return;
+    try {
+      await runTransaction(ref(db, `rooms/${this.roomCode}/hostNum`), (cur) => {
+        // مضيف حالي وما زال حاضراً → لا نغيّره
+        if (typeof cur === 'number' && presentNums.includes(cur)) return cur;
+        // شاغر: يفوز أصغر رقم حاضر (حساب متطابق، والترانزاكشن تحسم التسابق)
+        const candidate = presentNums.length ? Math.min(...presentNums) : this.playerNum;
+        return candidate;
+      });
+    } catch {}
+  }
+
   // 👁️ متابعة عدد المشاهدين (للاعبين والمشاهدين معاً)
   _listenSpectators(code) {
     const unsub = onValue(ref(db, `rooms/${code}/spectators`), (snap) => {
@@ -450,6 +465,17 @@ export class OnlineManager {
   // المضيف يبدأ المباراة
   async startMultiGame(voterNums = null) {
     if (!this.roomCode) return;
+    // حارس ذرّي: البدء يحدث مرة واحدة فقط مهما تعدّد من يظنّ نفسه مضيفاً
+    // (وإلا تُنشأ جلستان منفصلتان فيلعب كل لاعب لوحده)
+    try {
+      let won = false;
+      await runTransaction(ref(db, `rooms/${this.roomCode}/status`), (cur) => {
+        if (cur === "playing" || cur === "finished") return cur;  // بدأت أصلاً
+        won = true;
+        return "playing";
+      });
+      if (!won) return;   // سبقنا غيرنا — لا نكرّر البدء
+    } catch {}
     // إن حُدّد المصوّتون: نُخرج المنتظرين من الغرفة قبل البدء (لم يصوّتوا فلا يدخلون)
     // ونتركهم يبحثون من جديد — الغرفة تصير حصراً لمن وافق.
     if (Array.isArray(voterNums) && voterNums.length) {

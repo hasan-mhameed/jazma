@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789339905";
-import { setMyPresence } from "../presence.js?v=1789339905";
-import { updateScoreboard } from "./scoreboard.js?v=1789339905";
-import { config } from "../config/config.js?v=1789339905";
-import { onlineManager } from "../firebase.js?v=1789339905";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789339905";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789339905";
-import { state } from "../core/state.js?v=1789339905";
-import { getCurrentUser } from "../auth.js?v=1789339905";
+import { audioManager } from "../audio/audioManager.js?v=1789420806";
+import { setMyPresence } from "../presence.js?v=1789420806";
+import { updateScoreboard } from "./scoreboard.js?v=1789420806";
+import { config } from "../config/config.js?v=1789420806";
+import { onlineManager } from "../firebase.js?v=1789420806";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789420806";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789420806";
+import { state } from "../core/state.js?v=1789420806";
+import { getCurrentUser } from "../auth.js?v=1789420806";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -842,15 +842,22 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   function renderMultiPlayers(players, room) {
     if (!multiPlayersList) return;
     const list = Object.values(players || {}).sort((a, b) => a.num - b.num);
-    // المسؤولية ديناميكية: أصغر رقم حاضر هو المضيف (يرث تلقائياً لو غادر المنشئ)
+    // المضيف مخزّن في الغرفة (مصدر واحد للحقيقة) — لا يُحسب محلياً
+    // (الحساب المحلي كان يجعل كل لاعب يظنّ نفسه المضيف قبل وصول القائمة الكاملة)
     const nums = list.map(p => p.num).filter(n => typeof n === 'number');
-    const hostNum = nums.length ? Math.min(...nums) : 1;
+    let hostNum = (typeof room?.hostNum === 'number') ? room.hostNum : 1;
+    // المضيف المسجّل غادر؟ نرشّح أنفسنا ذرّياً (يفوز واحد فقط)
+    if (!nums.includes(hostNum) && nums.length) {
+      onlineManager.claimHostIfVacant(nums);
+      hostNum = Math.min(...nums);   // عرض مؤقت حتى تصل القيمة المعتمدة
+    }
     const amHost = onlineManager.playerNum === hostNum;
     // إشعار الوراثة (مرة واحدة)
     if (amHost && !_isMultiHost) {
       _isMultiHost = true;
       showLeaveToast("👑 صرت مضيف الغرفة — يمكنك بدء المباراة");
     }
+    if (!amHost) _isMultiHost = false;
     multiPlayersList.innerHTML = "";
     list.forEach(p => {
       const item = document.createElement("div");
