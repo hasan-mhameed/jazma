@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789329282";
-import { setMyPresence } from "../presence.js?v=1789329282";
-import { updateScoreboard } from "./scoreboard.js?v=1789329282";
-import { config } from "../config/config.js?v=1789329282";
-import { onlineManager } from "../firebase.js?v=1789329282";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789329282";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789329282";
-import { state } from "../core/state.js?v=1789329282";
-import { getCurrentUser } from "../auth.js?v=1789329282";
+import { audioManager } from "../audio/audioManager.js?v=1789339905";
+import { setMyPresence } from "../presence.js?v=1789339905";
+import { updateScoreboard } from "./scoreboard.js?v=1789339905";
+import { config } from "../config/config.js?v=1789339905";
+import { onlineManager } from "../firebase.js?v=1789339905";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789339905";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789339905";
+import { state } from "../core/state.js?v=1789339905";
+import { getCurrentUser } from "../auth.js?v=1789339905";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -440,13 +440,26 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       }
     } else if (a.state === "cancelled") {
       closeApproval();
-      showLeaveToast("↩️ لم تكتمل الموافقة — دورة بحث جديدة");
-      // بعد الحسم: نحرّر المنتظرين ليصبحوا أعضاء، ونبدأ دورة تجميع كاملة (20 ثانية)
+      // قرار: نبقى في **مرحلة التصويت** ونعيد 15 ثانية كاملة بالعدد المتبقي
+      // (لا رجوع للـ20 — لم ينضم أحد ولم نعد لمرحلة التجميع)
       if (isRoomOwner()) {
         onlineManager.releaseWaitingPlayers();
-        onlineManager.clearRoundState();   // مسح الموافقة + ختم الانتظار (دورة جديدة نظيفة)
+        // نفتح جولة تصويت جديدة فوراً إن بقي لاعبان فأكثر
+        setTimeout(async () => {
+          const cnt = _lastLobbyCount || 0;
+          if (_isMultiSearch && cnt >= 2 && cnt < _randomWanted) {
+            await onlineManager.clearApprovalState();   // الموافقة فقط (نُبقي ختم الانتظار)
+            await new Promise(r => setTimeout(r, 150));
+            _approvalRequested = false;
+            await onlineManager.startApprovalRound(cnt, _randomWanted);
+          } else {
+            // بقي لاعب واحد → نعود فعلاً لمرحلة التجميع (دورة 20 كاملة)
+            await onlineManager.clearRoundState();
+            _waitStartedAt = null;
+          }
+        }, 400);
       }
-      _waitStartedAt = null;
+      showLeaveToast("↩️ تغيّر العدد — تصويت جديد بالعدد المتبقي");
     }
   }
 
@@ -829,17 +842,26 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   function renderMultiPlayers(players, room) {
     if (!multiPlayersList) return;
     const list = Object.values(players || {}).sort((a, b) => a.num - b.num);
+    // المسؤولية ديناميكية: أصغر رقم حاضر هو المضيف (يرث تلقائياً لو غادر المنشئ)
+    const nums = list.map(p => p.num).filter(n => typeof n === 'number');
+    const hostNum = nums.length ? Math.min(...nums) : 1;
+    const amHost = onlineManager.playerNum === hostNum;
+    // إشعار الوراثة (مرة واحدة)
+    if (amHost && !_isMultiHost) {
+      _isMultiHost = true;
+      showLeaveToast("👑 صرت مضيف الغرفة — يمكنك بدء المباراة");
+    }
     multiPlayersList.innerHTML = "";
     list.forEach(p => {
       const item = document.createElement("div");
       item.className = "multi-player-item" + (p.active === false ? " inactive" : "");
-      item.innerHTML = `<span class="mp-num">${p.num}</span><span class="mp-name">${p.name}</span>${p.num === 1 ? '<span class="mp-host">👑</span>' : ''}`;
+      item.innerHTML = `<span class="mp-num">${p.num}</span><span class="mp-name">${p.name}</span>${p.num === hostNum ? '<span class="mp-host">👑</span>' : ''}`;
       multiPlayersList.appendChild(item);
     });
     const count = list.length;
     const max = room?.maxPlayers || _multiMaxPlayers;
     // المضيف يرى زر البدء (لو ≥2 لاعبين)
-    if (_isMultiHost) {
+    if (amHost) {
       multiStartBtn?.classList.toggle("hidden", count < 2);
       if (multiWaitHint) multiWaitHint.textContent = count < 2
         ? "بانتظار انضمام لاعب آخر على الأقل..."
