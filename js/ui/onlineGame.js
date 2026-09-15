@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789420806";
-import { setMyPresence } from "../presence.js?v=1789420806";
-import { updateScoreboard } from "./scoreboard.js?v=1789420806";
-import { config } from "../config/config.js?v=1789420806";
-import { onlineManager } from "../firebase.js?v=1789420806";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789420806";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789420806";
-import { state } from "../core/state.js?v=1789420806";
-import { getCurrentUser } from "../auth.js?v=1789420806";
+import { audioManager } from "../audio/audioManager.js?v=1789506475";
+import { setMyPresence } from "../presence.js?v=1789506475";
+import { updateScoreboard } from "./scoreboard.js?v=1789506475";
+import { config } from "../config/config.js?v=1789506475";
+import { onlineManager } from "../firebase.js?v=1789506475";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789506475";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789506475";
+import { state } from "../core/state.js?v=1789506475";
+import { getCurrentUser } from "../auth.js?v=1789506475";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -446,12 +446,16 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         onlineManager.releaseWaitingPlayers();
         // نفتح جولة تصويت جديدة فوراً إن بقي لاعبان فأكثر
         setTimeout(async () => {
-          const cnt = _lastLobbyCount || 0;
+          // من رفض أو خرج في الجولة السابقة: نستبعده صراحةً من الجولة الجديدة
+          const gone = Object.keys(a.decisions || {})
+            .filter(k => a.decisions[k] === "rejected")
+            .map(Number);
+          const cnt = Math.max(0, (_lastLobbyCount || 0));
           if (_isMultiSearch && cnt >= 2 && cnt < _randomWanted) {
             await onlineManager.clearApprovalState();   // الموافقة فقط (نُبقي ختم الانتظار)
-            await new Promise(r => setTimeout(r, 150));
+            await new Promise(r => setTimeout(r, 400));
             _approvalRequested = false;
-            await onlineManager.startApprovalRound(cnt, _randomWanted);
+            await onlineManager.startApprovalRound(cnt, _randomWanted, gone);
           } else {
             // بقي لاعب واحد → نعود فعلاً لمرحلة التجميع (دورة 20 كاملة)
             await onlineManager.clearRoundState();

@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789420806";
+import { getCurrentUser }   from "./auth.js?v=1789506475";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -766,7 +766,7 @@ export class OnlineManager {
 
   // ══ جولة الموافقة (المطابقة العشوائية الجماعية بعدد ناقص) ══
   // المنشئ يفتح الجولة: كل اللاعبين الحاضرين "pending" حتى يقرّروا
-  async startApprovalRound(availableCount, wantedCount) {
+  async startApprovalRound(availableCount, wantedCount, excludeNums = []) {
     if (!this.roomCode) return;
     try {
       // حماية: لا نعيد بناء جولة قائمة (وإلا تُمحى قرارات اللاعبين المسجّلة)
@@ -779,6 +779,8 @@ export class OnlineManager {
       const present = Object.values(snap.val()).filter(p =>
         p && p.active !== false && typeof p.num === 'number'
         && p.disconnectedAt == null && p.waiting !== true
+        // نستبعد من عرفنا خروجه صراحةً (قد لا تكون إزالته اكتملت في Firebase بعد)
+        && !excludeNums.includes(p.num)
       );
       if (present.length < 2) return; // لا معنى لجولة بأقل من لاعبَين
       const decisions = {};

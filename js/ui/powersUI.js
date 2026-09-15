@@ -1,9 +1,9 @@
 // 📄 ui/powersUI.js
 // شريط المخزون — يعرض قدرات اللاعب الحالي + التفعيل
 
-import { POWERS, getInventory } from "../core/powers.js?v=1789420806";
-import { state } from "../core/state.js?v=1789420806";
-import { getPowerIcon } from "./powerIcons.js?v=1789420806";
+import { POWERS, getInventory } from "../core/powers.js?v=1789506475";
+import { state } from "../core/state.js?v=1789506475";
+import { getPowerIcon } from "./powerIcons.js?v=1789506475";
 
 let _onActivate = null;
 let _onBuy = null;
@@ -133,7 +133,7 @@ function addGuideButton(bar) {
   btn.textContent = '؟';
   btn.title = 'دليل الأدوات';
   btn.addEventListener('click', () => {
-    import('./guideUI.js?v=1789420806').then(m => m.openGuide());
+    import('./guideUI.js?v=1789506475').then(m => m.openGuide());
   });
   bar.appendChild(btn);
 }
