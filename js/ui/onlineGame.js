@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789506475";
-import { setMyPresence } from "../presence.js?v=1789506475";
-import { updateScoreboard } from "./scoreboard.js?v=1789506475";
-import { config } from "../config/config.js?v=1789506475";
-import { onlineManager } from "../firebase.js?v=1789506475";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789506475";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789506475";
-import { state } from "../core/state.js?v=1789506475";
-import { getCurrentUser } from "../auth.js?v=1789506475";
+import { audioManager } from "../audio/audioManager.js?v=1789510137";
+import { setMyPresence } from "../presence.js?v=1789510137";
+import { updateScoreboard } from "./scoreboard.js?v=1789510137";
+import { config } from "../config/config.js?v=1789510137";
+import { onlineManager } from "../firebase.js?v=1789510137";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789510137";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789510137";
+import { state } from "../core/state.js?v=1789510137";
+import { getCurrentUser } from "../auth.js?v=1789510137";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -396,6 +396,11 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   // ── نافذة الموافقة المتزامنة ───────────────────────────────
   function renderApproval(a) {
     _lastApprovalState = a;
+    console.log("🗳️[APPR] وارد:", JSON.stringify(a),
+      "| أنا=", onlineManager.playerNum,
+      "| مسؤول الجولة؟", (()=>{try{return isApprovalOwner(a);}catch(e){return "ERR";}})(),
+      "| مسؤول الغرفة؟", (()=>{try{return isRoomOwner();}catch(e){return "ERR";}})(),
+      "| لوبي=", JSON.stringify(Object.values(_lobbyPlayers||{}).map(x=>x&&x.num)));
     if (!a || !approvalModal) return;
     if (!_isMultiSearch) return; // لسنا في بحث — نتجاهل أي حالة قديمة
     // نتجاهل جولة موافقة بدأت قبل بحثنا الحالي (بقايا جولة سابقة → وميض نافذة قديمة)
@@ -451,11 +456,14 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
             .filter(k => a.decisions[k] === "rejected")
             .map(Number);
           const cnt = Math.max(0, (_lastLobbyCount || 0));
+          console.log("🗳️[APPR] إعادة فتح: cnt=", cnt, "مطلوب=", _randomWanted,
+            "مستبعدون=", JSON.stringify(gone), "أنا=", onlineManager.playerNum);
           if (_isMultiSearch && cnt >= 2 && cnt < _randomWanted) {
             await onlineManager.clearApprovalState();   // الموافقة فقط (نُبقي ختم الانتظار)
             await new Promise(r => setTimeout(r, 400));
             _approvalRequested = false;
-            await onlineManager.startApprovalRound(cnt, _randomWanted, gone);
+            const okOpen = await onlineManager.startApprovalRound(cnt, _randomWanted, gone);
+            console.log("🗳️[APPR] نتيجة الفتح:", okOpen);
           } else {
             // بقي لاعب واحد → نعود فعلاً لمرحلة التجميع (دورة 20 كاملة)
             await onlineManager.clearRoundState();

@@ -1,9 +1,9 @@
 // 📄 ui/messagesUI.js
 // زر الرسائل في navbar + panel المحادثات
 
-import { listenMessages, markAsRead, getLastReadMap, listenLastRead, chatKey } from "../chat.js?v=1789506475";
-import { listenFriends }              from "../friends.js?v=1789506475";
-import { getCurrentUser }             from "../auth.js?v=1789506475";
+import { listenMessages, markAsRead, getLastReadMap, listenLastRead, chatKey } from "../chat.js?v=1789510137";
+import { listenFriends }              from "../friends.js?v=1789510137";
+import { getCurrentUser }             from "../auth.js?v=1789510137";
 
 let _friends     = [];
 let _unsubscribes = [];

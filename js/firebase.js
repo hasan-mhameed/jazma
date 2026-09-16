@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789506475";
+import { getCurrentUser }   from "./auth.js?v=1789510137";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -771,7 +771,10 @@ export class OnlineManager {
     try {
       // حماية: لا نعيد بناء جولة قائمة (وإلا تُمحى قرارات اللاعبين المسجّلة)
       const cur = await get(ref(db, `rooms/${this.roomCode}/approval`));
-      if (cur.exists() && cur.val()?.state === "asking") return;
+      if (cur.exists() && cur.val()?.state === "asking") {
+        console.log("🗳️[FB] رفض الفتح: جولة asking قائمة");
+        return "already-asking";
+      }
       // نقرأ القائمة الحيّة لحظة الفتح ونستبعد غير النشطين/المغادرين
       // (وإلا تُفتح الجولة باسم لاعب خرج فتُهدر جولة كاملة قبل أن تعمل)
       const snap = await get(ref(db, `rooms/${this.roomCode}/players`));
@@ -782,14 +785,20 @@ export class OnlineManager {
         // نستبعد من عرفنا خروجه صراحةً (قد لا تكون إزالته اكتملت في Firebase بعد)
         && !excludeNums.includes(p.num)
       );
-      if (present.length < 2) return; // لا معنى لجولة بأقل من لاعبَين
+      if (present.length < 2) {
+        console.log("🗳️[FB] رفض الفتح: الحاضرون =", present.length,
+          "| الخام=", JSON.stringify(Object.values(snap.val()).map(p=>({n:p.num,a:p.active,w:p.waiting,d:p.disconnectedAt}))));
+        return "too-few";
+      }
       const decisions = {};
       present.forEach(p => { decisions[p.num] = "pending"; });
       await update(ref(db, `rooms/${this.roomCode}/approval`), {
         state: "asking", available: present.length, wanted: wantedCount,
         startedAt: serverTimestamp(), decisions,
       });
-    } catch {}
+      console.log("🗳️[FB] فُتحت جولة:", JSON.stringify(decisions));
+      return "opened";
+    } catch (e) { console.warn("🗳️[FB] خطأ الفتح:", e?.message||e); }
   }
 
   // إزالة قرار لاعب غادر من جولة قائمة (بدل انتظار قرار لن يأتي)
