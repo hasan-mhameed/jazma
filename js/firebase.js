@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789510137";
+import { getCurrentUser }   from "./auth.js?v=1789592025";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -772,7 +772,6 @@ export class OnlineManager {
       // حماية: لا نعيد بناء جولة قائمة (وإلا تُمحى قرارات اللاعبين المسجّلة)
       const cur = await get(ref(db, `rooms/${this.roomCode}/approval`));
       if (cur.exists() && cur.val()?.state === "asking") {
-        console.log("🗳️[FB] رفض الفتح: جولة asking قائمة");
         return "already-asking";
       }
       // نقرأ القائمة الحيّة لحظة الفتح ونستبعد غير النشطين/المغادرين
@@ -786,8 +785,6 @@ export class OnlineManager {
         && !excludeNums.includes(p.num)
       );
       if (present.length < 2) {
-        console.log("🗳️[FB] رفض الفتح: الحاضرون =", present.length,
-          "| الخام=", JSON.stringify(Object.values(snap.val()).map(p=>({n:p.num,a:p.active,w:p.waiting,d:p.disconnectedAt}))));
         return "too-few";
       }
       const decisions = {};
@@ -796,9 +793,8 @@ export class OnlineManager {
         state: "asking", available: present.length, wanted: wantedCount,
         startedAt: serverTimestamp(), decisions,
       });
-      console.log("🗳️[FB] فُتحت جولة:", JSON.stringify(decisions));
       return "opened";
-    } catch (e) { console.warn("🗳️[FB] خطأ الفتح:", e?.message||e); }
+    } catch {}
   }
 
   // إزالة قرار لاعب غادر من جولة قائمة (بدل انتظار قرار لن يأتي)

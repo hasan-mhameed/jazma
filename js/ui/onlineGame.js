@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789510137";
-import { setMyPresence } from "../presence.js?v=1789510137";
-import { updateScoreboard } from "./scoreboard.js?v=1789510137";
-import { config } from "../config/config.js?v=1789510137";
-import { onlineManager } from "../firebase.js?v=1789510137";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789510137";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789510137";
-import { state } from "../core/state.js?v=1789510137";
-import { getCurrentUser } from "../auth.js?v=1789510137";
+import { audioManager } from "../audio/audioManager.js?v=1789592025";
+import { setMyPresence } from "../presence.js?v=1789592025";
+import { updateScoreboard } from "./scoreboard.js?v=1789592025";
+import { config } from "../config/config.js?v=1789592025";
+import { onlineManager } from "../firebase.js?v=1789592025";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789592025";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789592025";
+import { state } from "../core/state.js?v=1789592025";
+import { getCurrentUser } from "../auth.js?v=1789592025";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -384,7 +384,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
           const cnt = _lastLobbyCount || 2;
           if (cnt >= 2 && cnt < wanted) {
             _approvalRequested = true;
-            await onlineManager.startApprovalRound(cnt, wanted);
+            await onlineManager.startApprovalRound(cnt, wanted, rejectedNums());
           }
         }
       }
@@ -396,7 +396,6 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   // ── نافذة الموافقة المتزامنة ───────────────────────────────
   function renderApproval(a) {
     _lastApprovalState = a;
-    console.log("🗳️[APPR] وارد:", JSON.stringify(a),
       "| أنا=", onlineManager.playerNum,
       "| مسؤول الجولة؟", (()=>{try{return isApprovalOwner(a);}catch(e){return "ERR";}})(),
       "| مسؤول الغرفة؟", (()=>{try{return isRoomOwner();}catch(e){return "ERR";}})(),
@@ -445,6 +444,15 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       }
     } else if (a.state === "cancelled") {
       closeApproval();
+      // من رفض لا يبقى في المجموعة: يغادر البحث فعلياً (وإلا يظل اسمه وتنتظره الجولات)
+      const myNum = onlineManager.playerNum;
+      const myDecision = (a.decisions || {})[myNum];
+      if (myDecision === "rejected" || _myApprovalDecision === "rejected") {
+        _isMultiSearch = false;
+        stopSearchCountdown(); stopLoneWaitTimer();
+        onlineManager.leaveRoom().finally(() => showStep("randomCount"));
+        return;
+      }
       // قرار: نبقى في **مرحلة التصويت** ونعيد 15 ثانية كاملة بالعدد المتبقي
       // (لا رجوع للـ20 — لم ينضم أحد ولم نعد لمرحلة التجميع)
       if (isRoomOwner()) {
@@ -456,14 +464,11 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
             .filter(k => a.decisions[k] === "rejected")
             .map(Number);
           const cnt = Math.max(0, (_lastLobbyCount || 0));
-          console.log("🗳️[APPR] إعادة فتح: cnt=", cnt, "مطلوب=", _randomWanted,
-            "مستبعدون=", JSON.stringify(gone), "أنا=", onlineManager.playerNum);
           if (_isMultiSearch && cnt >= 2 && cnt < _randomWanted) {
             await onlineManager.clearApprovalState();   // الموافقة فقط (نُبقي ختم الانتظار)
             await new Promise(r => setTimeout(r, 400));
             _approvalRequested = false;
             const okOpen = await onlineManager.startApprovalRound(cnt, _randomWanted, gone);
-            console.log("🗳️[APPR] نتيجة الفتح:", okOpen);
           } else {
             // بقي لاعب واحد → نعود فعلاً لمرحلة التجميع (دورة 20 كاملة)
             await onlineManager.clearRoundState();
@@ -538,17 +543,26 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   // فتح جولة موافقة جديدة بالعدد الفعلي — يقوم بها المنشئ، أو أصغر رقم حاضر لو غادر المنشئ
   // المسؤول عن قرارات الغرفة: أصغر رقم حاضر (من قائمة اللوبي)
+  // من رفض الجولة الحالية لا يُعدّ مسؤولاً (وإلا يفتح جولات لا يشارك فيها)
+  function rejectedNums() {
+    const d = _lastApprovalState?.decisions || {};
+    return Object.keys(d).filter(k => d[k] === "rejected").map(Number);
+  }
   function isRoomOwner() {
-    const nums = Object.values(_lobbyPlayers || {}).map(p => p.num).filter(n => typeof n === 'number');
-    if (!nums.length) return onlineManager.playerNum === 1;
+    const rej = rejectedNums();
+    const nums = Object.values(_lobbyPlayers || {})
+      .map(p => p.num).filter(n => typeof n === 'number' && !rej.includes(n));
+    if (!nums.length) return false;
     return onlineManager.playerNum === Math.min(...nums);
   }
 
   // المسؤول عن تقييم جولة موافقة بعينها: أصغر رقم **حاضر فعلاً**
   // (لا نعتمد على أرقام الجولة وحدها — قد تحمل لاعباً غادر فيتعطّل الحسم)
   function isApprovalOwner(a) {
+    const d = a?.decisions || {};
+    const rej = Object.keys(d).filter(k => d[k] === "rejected").map(Number);
     const present = Object.values(_lobbyPlayers || {})
-      .map(p => p.num).filter(n => typeof n === 'number');
+      .map(p => p.num).filter(n => typeof n === 'number' && !rej.includes(n));
     if (present.length) return onlineManager.playerNum === Math.min(...present);
     // احتياط: لا قائمة لوبي بعد → نعتمد أرقام الجولة
     const d = a?.decisions;
@@ -569,7 +583,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     if (onlineManager.playerNum !== owner) return;
     if (_approvalRequested) return;
     _approvalRequested = true;
-    await onlineManager.startApprovalRound(cnt, _randomWanted);
+    await onlineManager.startApprovalRound(cnt, _randomWanted, rejectedNums());
   }
 
   // المنشئ: هل وافق الجميع؟ أو رفض أحدهم؟
