@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789592025";
-import { setMyPresence } from "../presence.js?v=1789592025";
-import { updateScoreboard } from "./scoreboard.js?v=1789592025";
-import { config } from "../config/config.js?v=1789592025";
-import { onlineManager } from "../firebase.js?v=1789592025";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789592025";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789592025";
-import { state } from "../core/state.js?v=1789592025";
-import { getCurrentUser } from "../auth.js?v=1789592025";
+import { audioManager } from "../audio/audioManager.js?v=1789681298";
+import { setMyPresence } from "../presence.js?v=1789681298";
+import { updateScoreboard } from "./scoreboard.js?v=1789681298";
+import { config } from "../config/config.js?v=1789681298";
+import { onlineManager } from "../firebase.js?v=1789681298";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789681298";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789681298";
+import { state } from "../core/state.js?v=1789681298";
+import { getCurrentUser } from "../auth.js?v=1789681298";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -396,10 +396,6 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   // ── نافذة الموافقة المتزامنة ───────────────────────────────
   function renderApproval(a) {
     _lastApprovalState = a;
-      "| أنا=", onlineManager.playerNum,
-      "| مسؤول الجولة؟", (()=>{try{return isApprovalOwner(a);}catch(e){return "ERR";}})(),
-      "| مسؤول الغرفة؟", (()=>{try{return isRoomOwner();}catch(e){return "ERR";}})(),
-      "| لوبي=", JSON.stringify(Object.values(_lobbyPlayers||{}).map(x=>x&&x.num)));
     if (!a || !approvalModal) return;
     if (!_isMultiSearch) return; // لسنا في بحث — نتجاهل أي حالة قديمة
     // نتجاهل جولة موافقة بدأت قبل بحثنا الحالي (بقايا جولة سابقة → وميض نافذة قديمة)
@@ -564,10 +560,11 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     const present = Object.values(_lobbyPlayers || {})
       .map(p => p.num).filter(n => typeof n === 'number' && !rej.includes(n));
     if (present.length) return onlineManager.playerNum === Math.min(...present);
-    // احتياط: لا قائمة لوبي بعد → نعتمد أرقام الجولة
-    const d = a?.decisions;
-    if (!d) return false;
-    const nums = Object.keys(d).filter(k => d[k] != null).map(Number).filter(n => !isNaN(n));
+    // احتياط: لا قائمة لوبي بعد → نعتمد أرقام الجولة (نستبعد الرافضين كذلك)
+    if (!d || !Object.keys(d).length) return false;
+    const nums = Object.keys(d)
+      .filter(k => d[k] != null && d[k] !== "rejected")
+      .map(Number).filter(n => !isNaN(n));
     if (!nums.length) return false;
     return onlineManager.playerNum === Math.min(...nums);
   }
