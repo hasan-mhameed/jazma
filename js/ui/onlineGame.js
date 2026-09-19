@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789767442";
-import { setMyPresence } from "../presence.js?v=1789767442";
-import { updateScoreboard } from "./scoreboard.js?v=1789767442";
-import { config } from "../config/config.js?v=1789767442";
-import { onlineManager } from "../firebase.js?v=1789767442";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789767442";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789767442";
-import { state } from "../core/state.js?v=1789767442";
-import { getCurrentUser } from "../auth.js?v=1789767442";
+import { audioManager } from "../audio/audioManager.js?v=1789824663";
+import { setMyPresence } from "../presence.js?v=1789824663";
+import { updateScoreboard } from "./scoreboard.js?v=1789824663";
+import { config } from "../config/config.js?v=1789824663";
+import { onlineManager } from "../firebase.js?v=1789824663";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789824663";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789824663";
+import { state } from "../core/state.js?v=1789824663";
+import { getCurrentUser } from "../auth.js?v=1789824663";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -142,7 +142,8 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     aiSuggestBox?.classList.add("hidden");
   });
   let _lastLobbyCount = 0, _lobbyNames = {}, _waitStartedAt = null;
-  let _lobbyPlayers = {}; // قائمة اللاعبين الحاضرين فعلياً (لحساب المسؤول عن الجولة)
+  let _lobbyPlayers = {};
+  let _waitFixTimer = null;   // شبكة أمان لضبط ختم الانتظار // قائمة اللاعبين الحاضرين فعلياً (لحساب المسؤول عن الجولة)
   let _searchStartedAt = null; // ختم بدء البحث الحالي (لتجاهل جولات موافقة أقدم)
 
   function showStep(step) {
@@ -464,11 +465,16 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
             await onlineManager.clearApprovalState();   // الموافقة فقط (نُبقي ختم الانتظار)
             await new Promise(r => setTimeout(r, 400));
             _approvalRequested = false;
-            const okOpen = await onlineManager.startApprovalRound(cnt, _randomWanted, gone);
+            await onlineManager.startApprovalRound(cnt, _randomWanted, gone);
           } else {
             // بقي لاعب واحد → نعود فعلاً لمرحلة التجميع (دورة 20 كاملة)
+            // مهم: بعد مسح الختم القديم نضبط ختماً جديداً، وإلا يبقى العدّاد بلا مرجع
             await onlineManager.clearRoundState();
             _waitStartedAt = null;
+            await new Promise(r => setTimeout(r, 200));
+            await onlineManager.markWaitStart();   // ختم جديد → العدّ يبدأ فعلاً
+            stopSearchCountdown();
+            startSearchCountdown(_randomWanted);
           }
         }, 400);
       }
@@ -717,6 +723,18 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         // ختم بدء الانتظار يُثبَّت من **أول لحظة بحث** (لا عند اكتمال لاعبَين)
         // وإلا يبدو العدّ وكأنه "يُعاد" لحظة انضمام اللاعب الثاني
         if (isRoomOwner() && !_approvalOpen) onlineManager.markWaitStart();
+        // شبكة أمان: لو بقينا بلا ختم أثناء البحث (أي مسار لم نتوقّعه) نضبطه
+        // — يمنع "الانتظار اللانهائي بلا عدّاد" مهما كان السبب
+        if (!_approvalOpen && typeof room?.waitStartedAt !== 'number') {
+          if (!_waitFixTimer) {
+            _waitFixTimer = setTimeout(() => {
+              _waitFixTimer = null;
+              if (_isMultiSearch && !_approvalOpen && typeof _waitStartedAt !== 'number') {
+                onlineManager.markWaitStart();
+              }
+            }, 2000);
+          }
+        } else if (_waitFixTimer) { clearTimeout(_waitFixTimer); _waitFixTimer = null; }
         // اكتمل العدد → بدء مباشر (حتى لو كانت نافذة الموافقة مفتوحة نلغيها)
         if (count >= max && room?.status === "lobby") {
           stopSearchCountdown();
