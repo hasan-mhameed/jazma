@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789681298";
-import { setMyPresence } from "../presence.js?v=1789681298";
-import { updateScoreboard } from "./scoreboard.js?v=1789681298";
-import { config } from "../config/config.js?v=1789681298";
-import { onlineManager } from "../firebase.js?v=1789681298";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789681298";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789681298";
-import { state } from "../core/state.js?v=1789681298";
-import { getCurrentUser } from "../auth.js?v=1789681298";
+import { audioManager } from "../audio/audioManager.js?v=1789767442";
+import { setMyPresence } from "../presence.js?v=1789767442";
+import { updateScoreboard } from "./scoreboard.js?v=1789767442";
+import { config } from "../config/config.js?v=1789767442";
+import { onlineManager } from "../firebase.js?v=1789767442";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789767442";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789767442";
+import { state } from "../core/state.js?v=1789767442";
+import { getCurrentUser } from "../auth.js?v=1789767442";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -657,7 +657,11 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     try { if (onlineManager.roomCode) await onlineManager.leaveRoom(); } catch {}
     _isMultiSearch = true;
     // تصفير حالة الموافقة/الانتظار المحلية (بحث جديد نظيف)
+    // مهم: نصفّر أيضاً حالة الجولة السابقة — بقاؤها يجعل rejectedNums() تستبعدنا
+    // في البحث الجديد فلا يُضبط ختم الانتظار ولا يعمل العدّاد (انتظار لا نهائي)
     _approvalOpen = false; _waitStartedAt = null; _lastLobbyCount = 0; _lobbyNames = {};
+    _lastApprovalState = null; _approvalRequested = false; _myApprovalDecision = null;
+    _lobbyPlayers = {};
     _searchStartedAt = onlineManager.serverNow ? onlineManager.serverNow() : Date.now();
     stopSearchCountdown(); closeApproval();
     _aiSuggestDismissed = false; stopLoneWaitTimer(); startLoneWaitTimer();

@@ -3,11 +3,11 @@
 // Handles game logic and player-square interactions
 
 // board.js - controller linking logic/state with renderer
-import { initState } from "./core/state.js?v=1789681298";
-import { initBoard } from "./ui/boardRenderer.js?v=1789681298";
-import { renderScoreboard } from "./ui/scoreboard.js?v=1789681298";
-import { updateTurn, updateTurnUI } from "./ui/turnManager.js?v=1789681298";
-import { config } from "./config/config.js?v=1789681298";
+import { initState } from "./core/state.js?v=1789767442";
+import { initBoard } from "./ui/boardRenderer.js?v=1789767442";
+import { renderScoreboard } from "./ui/scoreboard.js?v=1789767442";
+import { updateTurn, updateTurnUI } from "./ui/turnManager.js?v=1789767442";
+import { config } from "./config/config.js?v=1789767442";
 
 export function startBoard(cfg, aiPlayer = null) {
   initState(cfg);

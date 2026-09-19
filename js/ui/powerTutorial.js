@@ -4,9 +4,9 @@
 
 import { getDatabase, ref, get, update }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "../auth.js?v=1789681298";
-import { POWERS } from "../core/powers.js?v=1789681298";
-import { getPowerIcon } from "./powerIcons.js?v=1789681298";
+import { currentUser } from "../auth.js?v=1789767442";
+import { POWERS } from "../core/powers.js?v=1789767442";
+import { getPowerIcon } from "./powerIcons.js?v=1789767442";
 
 const db = getDatabase();
 
