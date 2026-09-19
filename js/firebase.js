@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789831815";
+import { getCurrentUser }   from "./auth.js?v=1789834031";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -435,7 +435,14 @@ export class OnlineManager {
       const ap = cur.approval;
       const apAge = (ap && typeof ap.startedAt === 'number')
         ? (this.serverNow() - ap.startedAt) : Infinity;
-      const voting = !!ap && ap.state === "asking" && apAge <= 25000;
+      const myOldDecision = ap?.decisions ? ap.decisions[myNum] : null;
+      // عدنا لغرفة فيها جولة رفضناها سابقاً؟ نُزيل قرارنا القديم لنبدأ نظيفين
+      const votingRaw = !!ap && ap.state === "asking" && apAge <= 25000;
+      const voting = votingRaw && myOldDecision !== "rejected";
+      // نُزيل قرارنا القديم من الجولة (عائدون بصفحة نظيفة)
+      if (myOldDecision != null && cur.approval?.decisions) {
+        cur.approval.decisions[myNum] = null;
+      }
       cur.players[myUid] = voting
         ? { name, num: myNum, active: true, waiting: true }
         : { name, num: myNum, active: true };
@@ -567,9 +574,9 @@ export class OnlineManager {
       const snap = await get(ref(db, "rooms"));
       if (snap.exists()) {
         for (const [code, room] of Object.entries(snap.val())) {
-          // نتخطّى الغرفة التي غادرناها للتوّ (خلال 20 ثانية)
-          const rl = this._recentlyLeft;
-          if (rl && rl.code === code && (Date.now() - rl.at) < 20000) continue;
+          // ملاحظة: لا نمنع العودة للغرفة التي غادرناها — المنع كان يشتّت
+          // لاعبَين متاحين في غرفتين منفصلتين. الحماية الحقيقية: الرافض لا يُحبس
+          // في جولته (أدناه + في الواجهة)، وقراره القديم يُزال عند عودته.
           if (room && room.multi === true && room.public === true
               && room.status === "lobby"
               && Number(room.maxPlayers) === Number(wantedPlayers)
