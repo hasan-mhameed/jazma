@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789826475";
+import { getCurrentUser }   from "./auth.js?v=1789830197";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -788,7 +788,7 @@ export class OnlineManager {
         && !excludeNums.includes(p.num)
       );
       if (present.length < 2) {
-        return "too-few";
+        return "too-few";   // حارس مستقل: لا تصويت بلاعب واحد مهما كان التوقيت
       }
       const decisions = {};
       present.forEach(p => { decisions[p.num] = "pending"; });

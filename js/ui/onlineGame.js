@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789826475";
-import { setMyPresence } from "../presence.js?v=1789826475";
-import { updateScoreboard } from "./scoreboard.js?v=1789826475";
-import { config } from "../config/config.js?v=1789826475";
-import { onlineManager } from "../firebase.js?v=1789826475";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789826475";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789826475";
-import { state } from "../core/state.js?v=1789826475";
-import { getCurrentUser } from "../auth.js?v=1789826475";
+import { audioManager } from "../audio/audioManager.js?v=1789830197";
+import { setMyPresence } from "../presence.js?v=1789830197";
+import { updateScoreboard } from "./scoreboard.js?v=1789830197";
+import { config } from "../config/config.js?v=1789830197";
+import { onlineManager } from "../firebase.js?v=1789830197";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789830197";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789830197";
+import { state } from "../core/state.js?v=1789830197";
+import { getCurrentUser } from "../auth.js?v=1789830197";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -402,7 +402,10 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         searchCountdownEl?.classList.add("hidden");
         // فتح جولة الموافقة مرة واحدة فقط (حارس محلي يمنع إعادة الفتح قبل وصول الحالة من الشبكة)
         if (isRoomOwner() && !_approvalOpen && !_approvalRequested) {
-          const cnt = _lastLobbyCount || 2;
+          // العدد الحقيقي من القائمة (لا افتراض بـ2 — كان يفتح التصويت بلاعب واحد)
+          const rej = rejectedNums();
+          const cnt = Object.values(_lobbyPlayers || {})
+            .filter(p => p && typeof p.num === 'number' && !rej.includes(p.num)).length;
           if (cnt >= 2 && cnt < wanted) {
             _approvalRequested = true;
             await onlineManager.startApprovalRound(cnt, wanted, rejectedNums());
@@ -490,9 +493,11 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
             // بقي لاعب واحد → نعود فعلاً لمرحلة التجميع (دورة 20 كاملة)
             // مهم: بعد مسح الختم القديم نضبط ختماً جديداً، وإلا يبقى العدّاد بلا مرجع
             await onlineManager.clearRoundState();
-            // ختم جديد إجباري + ضبط محلي فوري (لا ننتظر انتشار القيمة من Firebase)
+            // ختم جديد إجباري — ننتظر كتابته فعلاً في الغرفة قبل استئناف العدّ
+            // (وإلا يقرأ المنضمّون ختماً منقضياً فيفتحون التصويت فوراً وبعدد ناقص)
             const fresh = await onlineManager.markWaitStart(true);
             _waitStartedAt = (typeof fresh === 'number') ? fresh : null;
+            await new Promise(r => setTimeout(r, 250));   // مهلة انتشار قصيرة
             stopSearchCountdown();
             startSearchCountdown(_randomWanted);
           }
