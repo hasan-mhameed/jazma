@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789834031";
+import { getCurrentUser }   from "./auth.js?v=1789836173";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -426,27 +426,31 @@ export class OnlineManager {
     await runTransaction(roomRef, (cur) => {
       if (!cur) return cur;
       if (cur.status !== "lobby") return cur; // بدأت المباراة
-      const count = cur.playerCount || Object.keys(cur.players || {}).length;
-      if (count >= cur.maxPlayers) return cur; // ممتلئة
-      myNum = count + 1;
       cur.players = cur.players || {};
+      const present = Object.values(cur.players).filter(p => p && typeof p.num === 'number');
+      const count = present.length;
+      if (count >= cur.maxPlayers) return cur; // ممتلئة
+      // رقم المقعد = أصغر رقم غير محجوز (لا "العدد + 1")
+      // بعد المغادرات تصير الأرقام غير متتالية ({2,3} ثم {2})، فكان "العدد + 1"
+      // يعطي العائد رقماً محجوزاً (2) → لاعبان بنفس الرقم → خانة تصويت واحدة لهما
+      const used = new Set(present.map(p => p.num));
+      let seat = 1;
+      while (used.has(seat)) seat++;
+      myNum = seat;
       // إن كان تصويت جارياً: ندخل كمنتظرين (خارج الجولة) حتى تُحسم
       // جولة ميتة (تجاوزت مهلتها بوضوح) لا تحبس منضمّاً — نتجاهلها
       const ap = cur.approval;
       const apAge = (ap && typeof ap.startedAt === 'number')
         ? (this.serverNow() - ap.startedAt) : Infinity;
-      const myOldDecision = ap?.decisions ? ap.decisions[myNum] : null;
-      // عدنا لغرفة فيها جولة رفضناها سابقاً؟ نُزيل قرارنا القديم لنبدأ نظيفين
-      const votingRaw = !!ap && ap.state === "asking" && apAge <= 25000;
-      const voting = votingRaw && myOldDecision !== "rejected";
-      // نُزيل قرارنا القديم من الجولة (عائدون بصفحة نظيفة)
-      if (myOldDecision != null && cur.approval?.decisions) {
+      const voting = !!ap && ap.state === "asking" && apAge <= 25000;
+      // المقعد كان لغيرنا وغادر: نُزيل أي قرار متبقٍّ له في الجولة (لا يُنسب إلينا)
+      if (ap?.decisions && ap.decisions[myNum] != null) {
         cur.approval.decisions[myNum] = null;
       }
       cur.players[myUid] = voting
         ? { name, num: myNum, active: true, waiting: true }
         : { name, num: myNum, active: true };
-      cur.playerCount = myNum;
+      cur.playerCount = count + 1;   // العدد الفعلي (لا رقم المقعد)
       return cur;
     });
 
@@ -476,36 +480,37 @@ export class OnlineManager {
   // المضيف يبدأ المباراة
   async startMultiGame(voterNums = null) {
     if (!this.roomCode) return;
-    // حارس ذرّي: البدء يحدث مرة واحدة فقط مهما تعدّد من يظنّ نفسه مضيفاً
-    // (وإلا تُنشأ جلستان منفصلتان فيلعب كل لاعب لوحده)
+    // بدء ذرّي في كتابة واحدة: تصفية اللاعبين + تحويل الحالة إلى "playing" معاً.
+    // - يحدث مرة واحدة فقط مهما تعدّد من يظنّ نفسه مضيفاً (لا جلستان منفصلتان)
+    // - سابقاً كانت الحالة تتحوّل أولاً ثم يُزال المنتظرون بخطوة لاحقة، فيستلم
+    //   المنتظر لقطة "بدأت" وهو ما زال في القائمة → يدخل مباراة لم يصوّت عليها،
+    //   ويُحسب رقمه في الدور الأول وتهيئة الساعة عند الجميع
+    // - applyLocally:false → لا يرى أحد (ولا المضيف) إلا الحالة المعتمدة من الخادم
+    const onlyVoters = Array.isArray(voterNums) && voterNums.length > 0;
     try {
-      let won = false;
-      await runTransaction(ref(db, `rooms/${this.roomCode}/status`), (cur) => {
-        if (cur === "playing" || cur === "finished") return cur;  // بدأت أصلاً
-        won = true;
-        return "playing";
-      });
-      if (!won) return;   // سبقنا غيرنا — لا نكرّر البدء
-    } catch {}
-    // إن حُدّد المصوّتون: نُخرج المنتظرين من الغرفة قبل البدء (لم يصوّتوا فلا يدخلون)
-    // ونتركهم يبحثون من جديد — الغرفة تصير حصراً لمن وافق.
-    if (Array.isArray(voterNums) && voterNums.length) {
-      try {
-        const snap = await get(ref(db, `rooms/${this.roomCode}/players`));
-        if (snap.exists()) {
-          const updates = {};
-          Object.entries(snap.val()).forEach(([uid, p]) => {
-            if (p && typeof p.num === 'number' && !voterNums.includes(p.num)) {
-              updates[uid] = null; // إزالة غير المصوّتين (المنتظرين)
-            }
-          });
-          if (Object.keys(updates).length) {
-            await update(ref(db, `rooms/${this.roomCode}/players`), updates);
-          }
+      await runTransaction(ref(db, `rooms/${this.roomCode}`), (cur) => {
+        if (!cur) return cur;
+        if (cur.status !== "lobby") return;                 // بدأت أو انتهت → إلغاء بلا تكرار
+        const kept = {};
+        Object.entries(cur.players || {}).forEach(([uid, p]) => {
+          if (!p || typeof p.num !== 'number') return;
+          if (onlyVoters && !voterNums.includes(p.num)) return; // غير المصوّتين (المنتظرون) خارج المباراة
+          const { waiting, ...rest } = p;                       // لا حالة "منتظر" داخل مباراة
+          kept[uid] = rest;
+        });
+        const nums = Object.values(kept).map(p => p.num);
+        if (nums.length < 2) {
+          // غادر مصوّت في اللحظة الأخيرة: لا مباراة بلاعب واحد — نعود لمرحلة التجميع
+          if (onlyVoters) { cur.approval = null; cur.waitStartedAt = null; return cur; }
+          return;                                            // إلغاء بلا تغيير
         }
-      } catch {}
-    }
-    await update(ref(db, `rooms/${this.roomCode}`), { status: "playing", turn: 1 });
+        cur.players = kept;
+        cur.playerCount = nums.length;
+        cur.status = "playing";
+        cur.turn = Math.min(...nums);                        // أصغر مقعد حاضر (لا "1" ثابتاً)
+        return cur;
+      }, { applyLocally: false });
+    } catch {}
   }
 
   // الاستماع للوبي (انضمام/خروج لاعبين + بدء المباراة)
