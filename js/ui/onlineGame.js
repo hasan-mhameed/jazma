@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789825144";
-import { setMyPresence } from "../presence.js?v=1789825144";
-import { updateScoreboard } from "./scoreboard.js?v=1789825144";
-import { config } from "../config/config.js?v=1789825144";
-import { onlineManager } from "../firebase.js?v=1789825144";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789825144";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789825144";
-import { state } from "../core/state.js?v=1789825144";
-import { getCurrentUser } from "../auth.js?v=1789825144";
+import { audioManager } from "../audio/audioManager.js?v=1789825615";
+import { setMyPresence } from "../presence.js?v=1789825615";
+import { updateScoreboard } from "./scoreboard.js?v=1789825615";
+import { config } from "../config/config.js?v=1789825615";
+import { onlineManager } from "../firebase.js?v=1789825615";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789825615";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789825615";
+import { state } from "../core/state.js?v=1789825615";
+import { getCurrentUser } from "../auth.js?v=1789825615";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -70,7 +70,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     if (left === null) left = LONE_WAIT_SEC;
     // لا نعرض رقماً قبل وصول الختم الحقيقي (وإلا يومض "20" ثم يتصحّح)
     if (searchCountdownEl) {
-      if (hasStamp) {
+      if (hasStamp && left > 0) {
         searchCountdownEl.classList.remove("hidden");
         searchCountdownEl.textContent = `⏳ ${left}`;
       } else {
@@ -82,8 +82,12 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       if (sync === null) return; // ما زال الختم لم يصل — نبقى مخفيين بلا عدّ وهمي
       left = sync;
       if (searchCountdownEl) {
-        searchCountdownEl.classList.remove("hidden");
-        if (left >= 0) searchCountdownEl.textContent = `⏳ ${left}`;
+        if (left > 0) {
+          searchCountdownEl.classList.remove("hidden");
+          searchCountdownEl.textContent = `⏳ ${left}`;
+        } else {
+          searchCountdownEl.classList.add("hidden");
+        }
       }
       if (left <= 0) {
         clearInterval(_loneTickId); _loneTickId = null;
@@ -376,7 +380,15 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       searchCountdownEl?.classList.remove("hidden");
       const elapsed = Math.max(0, (onlineManager.serverNow() - started) / 1000);
       const left = Math.max(0, Math.ceil(SEARCH_WAIT_SEC - elapsed));
-      if (searchCountdownEl) searchCountdownEl.textContent = `⏳ ${left}`;
+      // لا نعرض "0" أبداً — نُخفي بهدوء عند بلوغ النهاية (الوميض مزعج بلا فائدة)
+      if (searchCountdownEl) {
+        if (left > 0) {
+          searchCountdownEl.classList.remove("hidden");
+          searchCountdownEl.textContent = `⏳ ${left}`;
+        } else {
+          searchCountdownEl.classList.add("hidden");
+        }
+      }
       if (left <= 0) {
         stopSearchCountdown();
         searchCountdownEl?.classList.add("hidden");
