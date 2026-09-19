@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789836173";
-import { setMyPresence } from "../presence.js?v=1789836173";
-import { updateScoreboard } from "./scoreboard.js?v=1789836173";
-import { config } from "../config/config.js?v=1789836173";
-import { onlineManager } from "../firebase.js?v=1789836173";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789836173";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789836173";
-import { state } from "../core/state.js?v=1789836173";
-import { getCurrentUser } from "../auth.js?v=1789836173";
+import { audioManager } from "../audio/audioManager.js?v=1789847044";
+import { setMyPresence } from "../presence.js?v=1789847044";
+import { updateScoreboard } from "./scoreboard.js?v=1789847044";
+import { config } from "../config/config.js?v=1789847044";
+import { onlineManager } from "../firebase.js?v=1789847044";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789847044";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789847044";
+import { state } from "../core/state.js?v=1789847044";
+import { getCurrentUser } from "../auth.js?v=1789847044";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -52,61 +52,15 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const aiSuggestBox      = document.getElementById("ai-suggest-box");
   const aiSuggestDismiss  = document.getElementById("ai-suggest-dismiss");
   const LONE_WAIT_SEC     = 20;   // موحّدة مع مهلة البحث الجماعي (قابلة للضبط)
-  let _loneTimerId = null, _loneTickId = null, _aiSuggestDismissed = false;
+  let _loneTimerId = null, _aiSuggestDismissed = false;
 
+  // الانتظار وحيداً: **بلا عدّاد** (قرار المستخدم v35.1) — لا شيء يحدث عند "الصفر"،
+  // البحث مستمر. المؤقّت هنا فقط ليُظهر بديل الكمبيوتر بعد 20 ثانية وحيداً.
+  // (العدّاد الوحيد في البحث هو عدّاد **المجموعة**: يبدأ لحظة تكوّنها بلاعبَين)
   function startLoneWaitTimer() {
     if (_loneTimerId || _aiSuggestDismissed) return;
-    // نعتمد الختم المشترك إن وُجد (نفس مصدر عدّاد المجموعة) فلا يظهر أي "قفز"
-    // عند انضمام لاعب ثانٍ — العدّ يبقى متصلاً من لحظة بدء البحث
-    // المهلة الفعلية محلية (setTimeout أدناه) — فالعدّاد يعرض منها مباشرة.
-    // نفضّل الختم المشترك إن كان صالحاً (يبقي العدّ متصلاً عند انضمام لاعب)،
-    // وإلا نعرض من بداية المؤقّت المحلي — فلا يختفي العدّاد والمهلة تعمل.
-    const localStart = (onlineManager.serverNow?.() || Date.now());
-    _loneLocalStart = localStart;   // نحتاجها لمواصلة العدّ عند انضمام لاعب
-    const remainingNow = () => {
-      const now = onlineManager.serverNow?.() || Date.now();
-      // ختم مشترك صالح (غير منقضٍ)؟ نعتمده
-      if (typeof _waitStartedAt === 'number') {
-        const elapsed = (now - _waitStartedAt) / 1000;
-        if (elapsed >= 0 && elapsed <= LONE_WAIT_SEC + 2) {
-          return Math.max(0, Math.ceil(LONE_WAIT_SEC - elapsed));
-        }
-      }
-      // وإلا: من المؤقّت المحلي (المصدر الحقيقي للمهلة)
-      return Math.max(0, Math.ceil(LONE_WAIT_SEC - (now - localStart) / 1000));
-    };
-    let left = remainingNow();
-    const hasStamp = true;   // لدينا دائماً مصدر صالح الآن
-    // لا نعرض رقماً قبل وصول الختم الحقيقي (وإلا يومض "20" ثم يتصحّح)
-    if (searchCountdownEl) {
-      if (hasStamp && left > 0) {
-        searchCountdownEl.classList.remove("hidden");
-        searchCountdownEl.textContent = `⏳ ${left}`;
-      } else {
-        searchCountdownEl.classList.add("hidden");
-      }
-    }
-    _loneTickId = setInterval(() => {
-      const sync = remainingNow();
-      if (sync === null) return; // ما زال الختم لم يصل — نبقى مخفيين بلا عدّ وهمي
-      left = sync;
-      if (searchCountdownEl) {
-        if (left > 0) {
-          searchCountdownEl.classList.remove("hidden");
-          searchCountdownEl.textContent = `⏳ ${left}`;
-        } else {
-          searchCountdownEl.classList.add("hidden");
-        }
-      }
-      if (left <= 0) {
-        clearInterval(_loneTickId); _loneTickId = null;
-        searchCountdownEl?.classList.add("hidden"); // لا نعرض "0" جامداً
-      }
-    }, 250);
     _loneTimerId = setTimeout(() => {
       _loneTimerId = null;
-      if (_loneTickId) { clearInterval(_loneTickId); _loneTickId = null; }
-      searchCountdownEl?.classList.add("hidden");
       // نعرضه فقط لو ما زلنا نبحث ووحدنا
       if ((_lastLobbyCount <= 1) && !_aiSuggestDismissed) {
         aiSuggestBox?.classList.remove("hidden");
@@ -115,7 +69,6 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   }
   function stopLoneWaitTimer() {
     if (_loneTimerId) { clearTimeout(_loneTimerId); _loneTimerId = null; }
-    if (_loneTickId) { clearInterval(_loneTickId); _loneTickId = null; }
     aiSuggestBox?.classList.add("hidden");
   }
 
@@ -157,7 +110,6 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   let _lastLobbyCount = 0, _lobbyNames = {}, _waitStartedAt = null;
   let _lobbyPlayers = {};     // قائمة اللاعبين الحاضرين فعلياً (لحساب المسؤول عن الجولة)
   let _waitFixTimer = null;   // شبكة أمان لضبط ختم الانتظار
-  let _loneLocalStart = null; // بداية عدّ "وحدك" المحلي (لمواصلته مع المجموعة)
   let _waitGuardRound = null; // جولة نحرس انتظارنا فيها (منع البقاء منتظراً للأبد)
   let _searchStartedAt = null; // ختم بدء البحث الحالي (لتجاهل جولات موافقة أقدم)
 
@@ -371,6 +323,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const SEARCH_WAIT_SEC = 20;   // مهلة الانتظار قبل عرض الموافقة بعدد ناقص (قابلة للضبط)
   const APPROVAL_SEC    = 15;   // مهلة الرد على نافذة الموافقة
   let _searchTimerId = null, _searchLeft = 0, _approvalTimerId = null, _approvalOpen = false;
+  let _staleFixing = false;       // حارس: إعادة كتابة ختم منقضٍ جارية (لا نكرّرها)
   let _myApprovalDecision = null; // قرارنا في الجولة الحالية
   let _approvalRequested = false;  // حارس: طلبنا فتح جولة ولم تصل الحالة بعد
   let _lastApprovalState = null;   // آخر حالة جولة (لحسم المهلة)
@@ -383,23 +336,24 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   // عدّاد الانتظار: يُحسب من ختم زمني مشترك (waitStartedAt) فيكون موحّداً عند الجميع
   function startSearchCountdown(wanted, startedAt) {
     if (_searchTimerId) return;
-    searchCountdownEl?.classList.remove("hidden");
+    // لا نُظهر العنصر مسبقاً: يظهر فقط حين يُحسب رقم صالح (وإلا يومض نص قديم كـ"⏳ 1")
     const tickFn = async () => {
+      // عدّاد **المجموعة** فقط: صرنا وحيدين؟ يتوقّف (الوحيد لا عدّاد له)
+      if (_lastLobbyCount < 2) { stopSearchCountdown(); return; }
       const started = _waitStartedAt;
       // لم يصل الختم المشترك بعد → نخفي العدّاد بدل عرض رقم مضلّل يُعيد من 20
       if (typeof started !== 'number') { searchCountdownEl?.classList.add("hidden"); return; }
-      // ختم منقضٍ من دورة سابقة؟ لا نفتح تصويتاً به — نكتب ختماً يواصل عدّنا المحلي
+      // ختم منقضٍ من دورة سابقة؟ لا نفتح تصويتاً به — المسؤول يكتب ختماً جديداً (20 كاملة)
       // (كان يقطع عدّ الطرف الآخر ويفتح التصويت فوراً بعدد ناقص)
       const nowSrv = onlineManager.serverNow?.() || Date.now();
       if ((nowSrv - started) > (SEARCH_WAIT_SEC + 2) * 1000) {
-        if (isRoomOwner()) {
-          // نواصل عدّنا المحلي فقط إن كان ما زال جارياً؛ إن انتهى هو أيضاً نبدأ من الآن
-          // (وإلا نكتب ختماً منقضياً من جديد → حلقة "ختم منقضٍ" بلا عدّ ولا تصويت)
-          const localRunning = (typeof _loneLocalStart === 'number')
-            && (nowSrv - _loneLocalStart) < SEARCH_WAIT_SEC * 1000;
-          const base = localRunning ? _loneLocalStart : nowSrv;
-          const v = await onlineManager.markWaitStart(true, base);
-          if (typeof v === 'number') _waitStartedAt = v;
+        searchCountdownEl?.classList.add("hidden");   // لا رقم حتى يصل الختم الجديد
+        if (isRoomOwner() && !_staleFixing) {
+          _staleFixing = true;                          // كتابة واحدة حتى لو تتالت النبضات
+          try {
+            const v = await onlineManager.markWaitStart(true);
+            if (typeof v === 'number') _waitStartedAt = v;
+          } finally { _staleFixing = false; }
         }
         return;
       }
@@ -432,7 +386,9 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       }
     };
     tickFn();
-    _searchTimerId = setInterval(tickFn, 500);
+    // 4 مرات بالثانية (كساعة المباراة): بـ500مل كان جهازان يعبران حدّ الثانية بفارق
+    // يصل لنصف ثانية فيظهر 20 عند أحدهما و19 عند الآخر رغم نفس الختم
+    _searchTimerId = setInterval(tickFn, 250);
   }
 
   // ── نافذة الموافقة المتزامنة ───────────────────────────────
@@ -520,21 +476,27 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
           if (!_isMultiSearch) return;
           let opened = false;
           if (cnt >= 2 && cnt < _randomWanted) {
-            await onlineManager.clearApprovalState();   // الموافقة فقط (نُبقي ختم الانتظار)
-            await new Promise(r => setTimeout(r, 400));
+            // الجولة الجديدة تكتب فوق الملغاة مباشرة (لا مسح قبلها): المسح كان يترك
+            // لحظة "بلا جولة" يعود فيها عدّاد التجميع فيومض "20" قبل التصويت الجديد
             _approvalRequested = false;
             const res = await onlineManager.startApprovalRound(cnt, _randomWanted, gone);
             opened = (res === "opened" || res === "already-asking");
           }
           if (!opened) {
-            // بقي أقل من لاعبَين فعلياً → نعود لمرحلة التجميع (دورة 20 كاملة) بختم جديد
-            // (يشمل حالة: ظننّا الباقين اثنين لكن الجولة رفضت "عدد غير كافٍ")
             await onlineManager.clearRoundState();
-            const fresh = await onlineManager.markWaitStart(true);
-            _waitStartedAt = (typeof fresh === 'number') ? fresh : null;
-            await new Promise(r => setTimeout(r, 250));   // مهلة انتشار قصيرة
-            stopSearchCountdown();
-            startSearchCountdown(_randomWanted);
+            if (cnt >= 2) {
+              // مجموعة ما زالت قائمة لكن الجولة لم تُفتح → دورة تجميع جديدة (20 كاملة)
+              // (مثلاً: ظننّا الباقين اثنين لكن الجولة رفضت "عدد غير كافٍ")
+              const fresh = await onlineManager.markWaitStart(true);
+              _waitStartedAt = (typeof fresh === 'number') ? fresh : null;
+              await new Promise(r => setTimeout(r, 250));   // مهلة انتشار قصيرة
+              stopSearchCountdown();
+              startSearchCountdown(_randomWanted);
+            } else {
+              // بقينا وحيدين → لا عدّاد: ننتظر انضمام أحد (بديل الكمبيوتر يظهر بعد 20ث)
+              _waitStartedAt = null;
+              stopSearchCountdown();
+            }
           }
         }, 400);
       }
@@ -742,6 +704,9 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
       // تحديث حي: الأسماء المنضمّة + العدد + بدء تلقائي عند الاكتمال (المنشئ يقرر)
       onlineManager.onLobbyUpdate((players, room) => {
+        // آلة البحث تعمل في مرحلة البحث فقط: بعد بدء المباراة كانت تستمر خفيةً مع كل
+        // حركة (أختام وعدّادات وكتابات، وحتى فتح جولة تصويت داخل مباراة جارية)
+        if (!_isMultiSearch || (room && room.status && room.status !== "lobby")) return;
         const list = Object.values(players || {}).sort((a, b) => a.num - b.num);
         const count = list.length;
         const max = room?.maxPlayers || wanted;
@@ -774,7 +739,9 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         const apRoom = room?.approval;
         // جولة حيّة = asking + حديثة + لسنا ممّن رفضها (الرافض لا يُحبس في جولته)
         const myDec = (apRoom?.decisions || {})[onlineManager.playerNum];
-        const apLive = !!apRoom && apRoom.state === "asking"
+        // "confirmed" حيّة كذلك للمنتظر: المباراة تبدأ الآن بالمصوّتين — يبقى منتظراً حتى
+        // يُزال ويبحث من جديد (لا نحرّره لحظة الحسم فيومض نص التجميع عنده)
+        const apLive = !!apRoom && (apRoom.state === "asking" || apRoom.state === "confirmed")
           && typeof apRoom.startedAt === 'number'
           && ((onlineManager.serverNow?.() || Date.now()) - apRoom.startedAt) <= 25000
           && myDec !== "rejected";
@@ -812,14 +779,37 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
             }
           });
         }
-        // ختم بدء الانتظار يُثبَّت من **أول لحظة بحث** (لا عند اكتمال لاعبَين)
-        // وإلا يبدو العدّ وكأنه "يُعاد" لحظة انضمام اللاعب الثاني
-        if (isRoomOwner() && !_approvalOpen) onlineManager.markWaitStart();
-        // شبكة أمان: لو بقينا بلا ختم أثناء البحث (أي مسار لم نتوقّعه) نضبطه
+        // ── وحيد: لا عدّاد ولا ختم (قرار المستخدم v35.1) ──
+        // لا شيء يحدث عند "الصفر" للوحيد — البحث مستمر وبديل الكمبيوتر يظهر بعد 20ث.
+        // وإن عدنا وحيدين بعد مجموعة: انتهت دورة التجميع → نمسح ختمها وجولتها،
+        // فالمجموعة التالية تبدأ 20 كاملة (قاعدة: الـ20 تُعاد عند العودة الفعلية للتجميع)
+        if (count < 2) {
+          stopSearchCountdown();
+          if (_waitFixTimer) { clearTimeout(_waitFixTimer); _waitFixTimer = null; }
+          _waitStartedAt = null;
+          if (!_approvalOpen && (typeof room?.waitStartedAt === 'number' || room?.approval)
+              && isRoomOwner()) {
+            onlineManager.clearRoundState();
+          }
+          return;
+        }
+        // ── مجموعة (2+) ──
+        // جولة حُسمت للتوّ (ملغاة/مؤكَّدة) والخطوة التالية جارية (جولة جديدة أو بدء المباراة):
+        // لا نعيد عدّاد التجميع في هذه اللحظة — كان يومض "20" بين جولتين.
+        // (محدودة بعمر الجولة: بعد 25ث من بدئها تُعتبر منتهية ويعود التجميع طبيعياً)
+        const apNow = room?.approval;
+        const roundPending = !!apNow && apNow.state !== "asking"
+          && typeof apNow.startedAt === 'number'
+          && ((onlineManager.serverNow?.() || Date.now()) - apNow.startedAt) <= 25000;
+        // ختم التجميع يُكتب لحظة تكوّن المجموعة ويكمل عليه المنضمّون اللاحقون
+        if (isRoomOwner() && !_approvalOpen && !roundPending && typeof room?.waitStartedAt !== 'number') {
+          onlineManager.markWaitStart();
+        }
+        // شبكة أمان: لو بقيت المجموعة بلا ختم (أي مسار لم نتوقّعه) نضبطه
         // — يمنع "الانتظار اللانهائي بلا عدّاد" مهما كان السبب
         const stampStale = (typeof room?.waitStartedAt === 'number')
           && ((onlineManager.serverNow?.() || Date.now()) - room.waitStartedAt) > (SEARCH_WAIT_SEC + 5) * 1000;
-        if (!_approvalOpen && (typeof room?.waitStartedAt !== 'number' || stampStale)) {
+        if (!_approvalOpen && !roundPending && (typeof room?.waitStartedAt !== 'number' || stampStale)) {
           if (!_waitFixTimer) {
             _waitFixTimer = setTimeout(() => {
               _waitFixTimer = null;
@@ -844,6 +834,8 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
             onlineManager.clearRoundState();
             onlineManager.startMultiGame();
           }
+        } else if (roundPending) {
+          stopSearchCountdown();          // انتقال بين جولتين/إلى المباراة: بلا عدّاد
         } else if (count >= 2 && !_approvalOpen) {
           startSearchCountdown(max);
         }

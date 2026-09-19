@@ -1,0 +1,13 @@
+{
+  "name": "jazam-sim",
+  "private": true,
+  "type": "module",
+  "description": "محاكي متعدد اللاعبين لمنطق المطابقة الجماعية (أداة تطوير — لا يُحمَّل في الموقع)",
+  "scripts": {
+    "test": "node --experimental-vm-modules --no-warnings run-all.mjs 100",
+    "quick": "node --experimental-vm-modules --no-warnings run-all.mjs 20"
+  },
+  "devDependencies": {
+    "@sinonjs/fake-timers": "^11.2.2"
+  }
+}
