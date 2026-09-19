@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789825615";
-import { setMyPresence } from "../presence.js?v=1789825615";
-import { updateScoreboard } from "./scoreboard.js?v=1789825615";
-import { config } from "../config/config.js?v=1789825615";
-import { onlineManager } from "../firebase.js?v=1789825615";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789825615";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789825615";
-import { state } from "../core/state.js?v=1789825615";
-import { getCurrentUser } from "../auth.js?v=1789825615";
+import { audioManager } from "../audio/audioManager.js?v=1789826475";
+import { setMyPresence } from "../presence.js?v=1789826475";
+import { updateScoreboard } from "./scoreboard.js?v=1789826475";
+import { config } from "../config/config.js?v=1789826475";
+import { onlineManager } from "../firebase.js?v=1789826475";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789826475";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789826475";
+import { state } from "../core/state.js?v=1789826475";
+import { getCurrentUser } from "../auth.js?v=1789826475";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -58,16 +58,24 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     if (_loneTimerId || _aiSuggestDismissed) return;
     // نعتمد الختم المشترك إن وُجد (نفس مصدر عدّاد المجموعة) فلا يظهر أي "قفز"
     // عند انضمام لاعب ثانٍ — العدّ يبقى متصلاً من لحظة بدء البحث
+    // المهلة الفعلية محلية (setTimeout أدناه) — فالعدّاد يعرض منها مباشرة.
+    // نفضّل الختم المشترك إن كان صالحاً (يبقي العدّ متصلاً عند انضمام لاعب)،
+    // وإلا نعرض من بداية المؤقّت المحلي — فلا يختفي العدّاد والمهلة تعمل.
+    const localStart = (onlineManager.serverNow?.() || Date.now());
     const remainingNow = () => {
-      if (typeof _waitStartedAt === 'number' && onlineManager.serverNow) {
-        const el = Math.max(0, (onlineManager.serverNow() - _waitStartedAt) / 1000);
-        return Math.max(0, Math.ceil(LONE_WAIT_SEC - el));
+      const now = onlineManager.serverNow?.() || Date.now();
+      // ختم مشترك صالح (غير منقضٍ)؟ نعتمده
+      if (typeof _waitStartedAt === 'number') {
+        const elapsed = (now - _waitStartedAt) / 1000;
+        if (elapsed >= 0 && elapsed <= LONE_WAIT_SEC + 2) {
+          return Math.max(0, Math.ceil(LONE_WAIT_SEC - elapsed));
+        }
       }
-      return null;
+      // وإلا: من المؤقّت المحلي (المصدر الحقيقي للمهلة)
+      return Math.max(0, Math.ceil(LONE_WAIT_SEC - (now - localStart) / 1000));
     };
     let left = remainingNow();
-    const hasStamp = left !== null;
-    if (left === null) left = LONE_WAIT_SEC;
+    const hasStamp = true;   // لدينا دائماً مصدر صالح الآن
     // لا نعرض رقماً قبل وصول الختم الحقيقي (وإلا يومض "20" ثم يتصحّح)
     if (searchCountdownEl) {
       if (hasStamp && left > 0) {
@@ -704,8 +712,10 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         list.forEach(p => { _lobbyNames[p.num] = p.name; });
         if (!_approvalOpen) {
           const names = list.map(p => `✓ ${p.name}`).join("<br>");
-          searchingText.innerHTML =
-            `👥 انضم ${count} من ${max}<br><span class="search-names">${names}</span><br>بانتظار البقية...`;
+          // النص يصدق مع الحالة: وحدنا = "نبحث عن لاعبين" لا "بانتظار البقية"
+          searchingText.innerHTML = (count <= 1)
+            ? `🔍 نبحث عن لاعبين...<br><span class="search-names">${names}</span>`
+            : `👥 انضم ${count} من ${max}<br><span class="search-names">${names}</span><br>بانتظار البقية...`;
         }
         // بقيتُ وحيداً بعد مغادرة الآخرين → نواصل البحث + بديل الكمبيوتر فوراً
         if (count <= 1 && _approvalOpen) {
