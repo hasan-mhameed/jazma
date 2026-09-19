@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789830735";
-import { setMyPresence } from "../presence.js?v=1789830735";
-import { updateScoreboard } from "./scoreboard.js?v=1789830735";
-import { config } from "../config/config.js?v=1789830735";
-import { onlineManager } from "../firebase.js?v=1789830735";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789830735";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789830735";
-import { state } from "../core/state.js?v=1789830735";
-import { getCurrentUser } from "../auth.js?v=1789830735";
+import { audioManager } from "../audio/audioManager.js?v=1789831815";
+import { setMyPresence } from "../presence.js?v=1789831815";
+import { updateScoreboard } from "./scoreboard.js?v=1789831815";
+import { config } from "../config/config.js?v=1789831815";
+import { onlineManager } from "../firebase.js?v=1789831815";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789831815";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789831815";
+import { state } from "../core/state.js?v=1789831815";
+import { getCurrentUser } from "../auth.js?v=1789831815";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -62,6 +62,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     // نفضّل الختم المشترك إن كان صالحاً (يبقي العدّ متصلاً عند انضمام لاعب)،
     // وإلا نعرض من بداية المؤقّت المحلي — فلا يختفي العدّاد والمهلة تعمل.
     const localStart = (onlineManager.serverNow?.() || Date.now());
+    _loneLocalStart = localStart;   // نحتاجها لمواصلة العدّ عند انضمام لاعب
     const remainingNow = () => {
       const now = onlineManager.serverNow?.() || Date.now();
       // ختم مشترك صالح (غير منقضٍ)؟ نعتمده
@@ -155,7 +156,8 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   });
   let _lastLobbyCount = 0, _lobbyNames = {}, _waitStartedAt = null;
   let _lobbyPlayers = {};
-  let _waitFixTimer = null;   // شبكة أمان لضبط ختم الانتظار // قائمة اللاعبين الحاضرين فعلياً (لحساب المسؤول عن الجولة)
+  let _waitFixTimer = null;   // شبكة أمان لضبط ختم الانتظار
+  let _loneLocalStart = null; // بداية عدّ "وحدك" المحلي (لمواصلته مع المجموعة) // قائمة اللاعبين الحاضرين فعلياً (لحساب المسؤول عن الجولة)
   let _searchStartedAt = null; // ختم بدء البحث الحالي (لتجاهل جولات موافقة أقدم)
 
   function showStep(step) {
@@ -385,6 +387,17 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       const started = _waitStartedAt;
       // لم يصل الختم المشترك بعد → نخفي العدّاد بدل عرض رقم مضلّل يُعيد من 20
       if (typeof started !== 'number') { searchCountdownEl?.classList.add("hidden"); return; }
+      // ختم منقضٍ من دورة سابقة؟ لا نفتح تصويتاً به — نكتب ختماً يواصل عدّنا المحلي
+      // (كان يقطع عدّ الطرف الآخر ويفتح التصويت فوراً بعدد ناقص)
+      const nowSrv = onlineManager.serverNow?.() || Date.now();
+      if ((nowSrv - started) > (SEARCH_WAIT_SEC + 2) * 1000) {
+        if (isRoomOwner()) {
+          const base = (typeof _loneLocalStart === 'number') ? _loneLocalStart : nowSrv;
+          const v = await onlineManager.markWaitStart(true, base);
+          if (typeof v === 'number') _waitStartedAt = v;
+        }
+        return;
+      }
       searchCountdownEl?.classList.remove("hidden");
       const elapsed = Math.max(0, (onlineManager.serverNow() - started) / 1000);
       const left = Math.max(0, Math.ceil(SEARCH_WAIT_SEC - elapsed));
@@ -744,9 +757,12 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
           .some(p => p && p.num === onlineManager.playerNum && p.waiting === true);
         // لا ننتظر جولة ميتة — نتحرّر منها ونتابع البحث عادياً
         const apRoom = room?.approval;
+        // جولة حيّة = asking + حديثة + لسنا ممّن رفضها (الرافض لا يُحبس في جولته)
+        const myDec = (apRoom?.decisions || {})[onlineManager.playerNum];
         const apLive = !!apRoom && apRoom.state === "asking"
           && typeof apRoom.startedAt === 'number'
-          && ((onlineManager.serverNow?.() || Date.now()) - apRoom.startedAt) <= 25000;
+          && ((onlineManager.serverNow?.() || Date.now()) - apRoom.startedAt) <= 25000
+          && myDec !== "rejected";
         if (meWaiting && !apLive) {
           onlineManager.releaseWaitingPlayers();
           if (isRoomOwner()) onlineManager.clearApprovalState();

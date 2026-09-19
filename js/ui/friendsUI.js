@@ -1,9 +1,9 @@
 // 📄 ui/friendsUI.js
 // قائمة الأصدقاء + البحث + الإجراءات
-import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1789830735";
+import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1789831815";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend,
-         listenFriendRequests, listenFriends } from "../friends.js?v=1789830735";
+         listenFriendRequests, listenFriends } from "../friends.js?v=1789831815";
 
 function asText(v, fallback = "") { return String(v ?? fallback); }
 function firstInitial(name) { return asText(name, "?").trim().charAt(0).toUpperCase() || "?"; }

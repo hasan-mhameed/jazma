@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789830735";
+import { getCurrentUser }   from "./auth.js?v=1789831815";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -567,6 +567,9 @@ export class OnlineManager {
       const snap = await get(ref(db, "rooms"));
       if (snap.exists()) {
         for (const [code, room] of Object.entries(snap.val())) {
+          // نتخطّى الغرفة التي غادرناها للتوّ (خلال 20 ثانية)
+          const rl = this._recentlyLeft;
+          if (rl && rl.code === code && (Date.now() - rl.at) < 20000) continue;
           if (room && room.multi === true && room.public === true
               && room.status === "lobby"
               && Number(room.maxPlayers) === Number(wantedPlayers)
@@ -700,10 +703,11 @@ export class OnlineManager {
   // ختم زمني مشترك لبدء عدّاد الانتظار (يوحّد العدّ عند الجميع)
   // force=true: دورة جديدة عمداً → نكتب ختماً جديداً حتى لو وُجد ختم قديم
   // (بلا ذلك يبقى الختم القديم فيحسب العدّاد زمناً منقضياً ويعرض 0)
-  async markWaitStart(force = false) {
+  // atTs: ختم محدّد (لمواصلة عدّ جارٍ بدل إعادته)
+  async markWaitStart(force = false, atTs = null) {
     if (!this.roomCode) return null;
     try {
-      const fresh = this.serverNow();
+      const fresh = (typeof atTs === 'number') ? atTs : this.serverNow();
       await runTransaction(ref(db, `rooms/${this.roomCode}/waitStartedAt`), (cur) => {
         if (cur && !force) return cur;   // الحالة العادية: لا نغيّر ختماً قائماً
         return fresh;                    // أول من يصل يكتب، أو كتابة إجبارية
@@ -898,6 +902,9 @@ export class OnlineManager {
   async leaveRoom() {
     // 👁️ حماية: المشاهد لا يغادر عبر مسار اللاعبين إطلاقاً (وإلا تُنهى المباراة)
     if (this.isSpectator) return this.leaveSpectator();
+    // نتذكّر الغرفة التي نغادرها: لا نعود إليها فوراً في بحث جديد
+    // (وإلا يعود الرافض لجولته نفسها فيُحبس كمنتظر — حلقة مغلقة)
+    if (this.roomCode) this._recentlyLeft = { code: this.roomCode, at: Date.now() };
     this._unsubs.forEach(u => u());
     this._unsubs = [];
     // إلغاء أي onDisconnect مسجّل للغرفة القديمة (وإلا يكتب فيها بعد مغادرتنا)
