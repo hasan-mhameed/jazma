@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789824663";
-import { setMyPresence } from "../presence.js?v=1789824663";
-import { updateScoreboard } from "./scoreboard.js?v=1789824663";
-import { config } from "../config/config.js?v=1789824663";
-import { onlineManager } from "../firebase.js?v=1789824663";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789824663";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789824663";
-import { state } from "../core/state.js?v=1789824663";
-import { getCurrentUser } from "../auth.js?v=1789824663";
+import { audioManager } from "../audio/audioManager.js?v=1789825144";
+import { setMyPresence } from "../presence.js?v=1789825144";
+import { updateScoreboard } from "./scoreboard.js?v=1789825144";
+import { config } from "../config/config.js?v=1789825144";
+import { onlineManager } from "../firebase.js?v=1789825144";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789825144";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789825144";
+import { state } from "../core/state.js?v=1789825144";
+import { getCurrentUser } from "../auth.js?v=1789825144";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -470,9 +470,9 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
             // بقي لاعب واحد → نعود فعلاً لمرحلة التجميع (دورة 20 كاملة)
             // مهم: بعد مسح الختم القديم نضبط ختماً جديداً، وإلا يبقى العدّاد بلا مرجع
             await onlineManager.clearRoundState();
-            _waitStartedAt = null;
-            await new Promise(r => setTimeout(r, 200));
-            await onlineManager.markWaitStart();   // ختم جديد → العدّ يبدأ فعلاً
+            // ختم جديد إجباري + ضبط محلي فوري (لا ننتظر انتشار القيمة من Firebase)
+            const fresh = await onlineManager.markWaitStart(true);
+            _waitStartedAt = (typeof fresh === 'number') ? fresh : null;
             stopSearchCountdown();
             startSearchCountdown(_randomWanted);
           }
@@ -725,12 +725,21 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         if (isRoomOwner() && !_approvalOpen) onlineManager.markWaitStart();
         // شبكة أمان: لو بقينا بلا ختم أثناء البحث (أي مسار لم نتوقّعه) نضبطه
         // — يمنع "الانتظار اللانهائي بلا عدّاد" مهما كان السبب
-        if (!_approvalOpen && typeof room?.waitStartedAt !== 'number') {
+        const stampStale = (typeof room?.waitStartedAt === 'number')
+          && ((onlineManager.serverNow?.() || Date.now()) - room.waitStartedAt) > (SEARCH_WAIT_SEC + 5) * 1000;
+        if (!_approvalOpen && (typeof room?.waitStartedAt !== 'number' || stampStale)) {
           if (!_waitFixTimer) {
             _waitFixTimer = setTimeout(() => {
               _waitFixTimer = null;
-              if (_isMultiSearch && !_approvalOpen && typeof _waitStartedAt !== 'number') {
-                onlineManager.markWaitStart();
+              if (_isMultiSearch && !_approvalOpen) {
+                const now = onlineManager.serverNow?.() || Date.now();
+                const stale = (typeof _waitStartedAt === 'number')
+                  && (now - _waitStartedAt) > (SEARCH_WAIT_SEC + 5) * 1000;
+                if (typeof _waitStartedAt !== 'number' || stale) {
+                  onlineManager.markWaitStart(true).then(v => {
+                    if (typeof v === 'number') { _waitStartedAt = v; startSearchCountdown(_randomWanted); }
+                  });
+                }
               }
             }, 2000);
           }

@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789824663";
+import { getCurrentUser }   from "./auth.js?v=1789825144";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -694,15 +694,18 @@ export class OnlineManager {
   }
 
   // ختم زمني مشترك لبدء عدّاد الانتظار (يوحّد العدّ عند الجميع)
-  async markWaitStart() {
-    if (!this.roomCode) return;
+  // force=true: دورة جديدة عمداً → نكتب ختماً جديداً حتى لو وُجد ختم قديم
+  // (بلا ذلك يبقى الختم القديم فيحسب العدّاد زمناً منقضياً ويعرض 0)
+  async markWaitStart(force = false) {
+    if (!this.roomCode) return null;
     try {
-      // عملية ذرّية: تمنع سباق "اقرأ ثم اكتب" الذي كان يكتب ختمين فيُعاد العدّاد
+      const fresh = this.serverNow();
       await runTransaction(ref(db, `rooms/${this.roomCode}/waitStartedAt`), (cur) => {
-        if (cur) return cur;          // ختم موجود → لا نغيّره أبداً
-        return this.serverNow();      // أول من يصل يكتب (بتوقيت السيرفر)
+        if (cur && !force) return cur;   // الحالة العادية: لا نغيّر ختماً قائماً
+        return fresh;                    // أول من يصل يكتب، أو كتابة إجبارية
       });
-    } catch {}
+      return fresh;
+    } catch { return null; }
   }
 
   // تنظيف حالة الموافقة والانتظار (عند بدء المباراة أو المغادرة)
