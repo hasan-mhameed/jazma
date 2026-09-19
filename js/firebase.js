@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789830197";
+import { getCurrentUser }   from "./auth.js?v=1789830735";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -431,7 +431,11 @@ export class OnlineManager {
       myNum = count + 1;
       cur.players = cur.players || {};
       // إن كان تصويت جارياً: ندخل كمنتظرين (خارج الجولة) حتى تُحسم
-      const voting = cur.approval && cur.approval.state === "asking";
+      // جولة ميتة (تجاوزت مهلتها بوضوح) لا تحبس منضمّاً — نتجاهلها
+      const ap = cur.approval;
+      const apAge = (ap && typeof ap.startedAt === 'number')
+        ? (this.serverNow() - ap.startedAt) : Infinity;
+      const voting = !!ap && ap.state === "asking" && apAge <= 25000;
       cur.players[myUid] = voting
         ? { name, num: myNum, active: true, waiting: true }
         : { name, num: myNum, active: true };
@@ -774,8 +778,13 @@ export class OnlineManager {
     try {
       // حماية: لا نعيد بناء جولة قائمة (وإلا تُمحى قرارات اللاعبين المسجّلة)
       const cur = await get(ref(db, `rooms/${this.roomCode}/approval`));
-      if (cur.exists() && cur.val()?.state === "asking") {
-        return "already-asking";
+      const curVal = cur.exists() ? cur.val() : null;
+      if (curVal && curVal.state === "asking") {
+        const age = (typeof curVal.startedAt === 'number')
+          ? (this.serverNow() - curVal.startedAt) : Infinity;
+        // جولة حيّة → لا نعيد البناء. جولة ميتة → ننظّفها ونكمل
+        if (age <= 25000) return "already-asking";
+        try { await update(ref(db, `rooms/${this.roomCode}`), { approval: null }); } catch {}
       }
       // نقرأ القائمة الحيّة لحظة الفتح ونستبعد غير النشطين/المغادرين
       // (وإلا تُفتح الجولة باسم لاعب خرج فتُهدر جولة كاملة قبل أن تعمل)

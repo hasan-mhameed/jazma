@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789830197";
-import { setMyPresence } from "../presence.js?v=1789830197";
-import { updateScoreboard } from "./scoreboard.js?v=1789830197";
-import { config } from "../config/config.js?v=1789830197";
-import { onlineManager } from "../firebase.js?v=1789830197";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789830197";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789830197";
-import { state } from "../core/state.js?v=1789830197";
-import { getCurrentUser } from "../auth.js?v=1789830197";
+import { audioManager } from "../audio/audioManager.js?v=1789830735";
+import { setMyPresence } from "../presence.js?v=1789830735";
+import { updateScoreboard } from "./scoreboard.js?v=1789830735";
+import { config } from "../config/config.js?v=1789830735";
+import { onlineManager } from "../firebase.js?v=1789830735";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789830735";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789830735";
+import { state } from "../core/state.js?v=1789830735";
+import { getCurrentUser } from "../auth.js?v=1789830735";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -424,6 +424,15 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     if (!_isMultiSearch) return; // لسنا في بحث — نتجاهل أي حالة قديمة
     // نتجاهل جولة موافقة بدأت قبل بحثنا الحالي (بقايا جولة سابقة → وميض نافذة قديمة)
     if (typeof a.startedAt === 'number' && _searchStartedAt && a.startedAt < _searchStartedAt) return;
+    // جولة ميتة (تجاوزت مهلتها بوضوح): نتجاهلها وننظّفها بدل أن تحبس الجميع
+    if (a.state === "asking" && typeof a.startedAt === 'number') {
+      const age = (onlineManager.serverNow?.() || Date.now()) - a.startedAt;
+      if (age > 25000) {
+        closeApproval();
+        if (isRoomOwner()) onlineManager.clearApprovalState();
+        return;
+      }
+    }
     if (a.state === "asking") {
       _approvalOpen = true;
       stopSearchCountdown();
@@ -733,7 +742,16 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         // نعرض له شاشة انتظار واضحة بدل شاشة البحث العادية
         const meWaiting = Object.values(players || {})
           .some(p => p && p.num === onlineManager.playerNum && p.waiting === true);
-        if (meWaiting && !_approvalOpen) {
+        // لا ننتظر جولة ميتة — نتحرّر منها ونتابع البحث عادياً
+        const apRoom = room?.approval;
+        const apLive = !!apRoom && apRoom.state === "asking"
+          && typeof apRoom.startedAt === 'number'
+          && ((onlineManager.serverNow?.() || Date.now()) - apRoom.startedAt) <= 25000;
+        if (meWaiting && !apLive) {
+          onlineManager.releaseWaitingPlayers();
+          if (isRoomOwner()) onlineManager.clearApprovalState();
+        }
+        if (meWaiting && apLive && !_approvalOpen) {
           stopSearchCountdown(); stopLoneWaitTimer();
           searchingText.innerHTML = "👥 لاعبون يصوّتون الآن — انتظر لحظة...";
           return; // لا منطق تجميع/عدّاد أثناء انتظار حسم التصويت
