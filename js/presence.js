@@ -3,7 +3,7 @@
 // الحالات: online (متصل) | playing (في مباراة) | away (انقطاع مؤقت) | offline (غير متصل)
 import { getDatabase, ref, onValue, onDisconnect, update, serverTimestamp, off }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser, onUserChange } from "./auth.js?v=1789847044";
+import { getCurrentUser, onUserChange } from "./auth.js?v=1789849016";
 
 const db = getDatabase();
 

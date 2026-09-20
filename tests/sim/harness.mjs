@@ -211,10 +211,11 @@ class FakeElement {
     this._h = {}; this._html = ''; this.value = ''; this.disabled = false;
     this.offsetWidth = 0; this.parentNode = null; this.attributes = {};
   }
-  get textContent() { return String(this._html).replace(/<[^>]+>/g, ''); }
-  set textContent(v) { this._html = String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
-  get innerHTML() { return this._html; }
-  set innerHTML(v) { this._html = String(v ?? ''); }
+  get textContent() { return String(this.innerHTML).replace(/<[^>]+>/g, ''); }
+  set textContent(v) { this._html = String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); this.children = []; }
+  get innerHTML() { return this._html + this.children.map(c => c.outerHTML).join(''); }
+  set innerHTML(v) { this._html = String(v ?? ''); this.children = []; }
+  get outerHTML() { const t = this.tagName.toLowerCase(); return `<${t} class="${this.className}">${this.innerHTML}</${t}>`; }
   set className(v) { this.classList = new FakeClassList(); String(v).split(/\s+/).filter(Boolean).forEach(c => this.classList.add(c)); }
   get className() { return [...this.classList.s].join(' '); }
   get parentElement() { return this.parentNode; }
@@ -353,7 +354,9 @@ class Client {
     this.mods.og.initOnlineGame({
       onGameStart: () => {
         const cfg = client.mods.config;
-        const nums = Object.values(cfg.multiPlayers || {}).map(p => p.num).sort();
+        const nums = client.om._isMulti
+          ? Object.values(cfg.multiPlayers || {}).map(p => p.num).sort()
+          : [1, 2];
         client.matches.push({ at: clock.now, num: cfg.onlinePlayerNum, nums, turn: client.mods.state.currentPlayer, room: client.om.roomCode });
         client.event('MATCH', `بدأت مباراة غرفة=${client.om.roomCode} أنا=${cfg.onlinePlayerNum} اللاعبون=[${nums}] الدور الأول=${client.mods.state.currentPlayer}`);
       },
@@ -372,7 +375,10 @@ class Client {
     const ai = this.hidden('ai-suggest-box') ? '' : 'صندوق-الكمبيوتر';
     const ap = this.hidden('approval-modal') ? '' : `تصويت[${this.el('approval-timer').textContent} ${strip(this.el('approval-players').innerHTML)}]`;
     const txt = this.visibleStep().includes('searching') ? strip(this.el('searching-text').innerHTML) : '';
-    const s = [this.visibleStep(), txt, cd, ai, ap].filter(Boolean).join(' | ');
+    const lob = this.visibleStep().includes('multi-lobby')
+      ? `لوبي[${this.lobbyList().map(p => p.num + ':' + p.name + (p.host ? '👑' : '')).join(' ')}]${this.hidden('multi-start-btn') ? '' : ' +زر-البدء'}` : '';
+    const err = this.hidden('online-error') ? '' : `خطأ[${this.el('online-error').textContent}]`;
+    const s = [this.visibleStep(), txt, lob, err, cd, ai, ap].filter(Boolean).join(' | ');
     // نسجّل تغيّر الحالة، مع ضغط تغيّر رقم العدّاد وحده (نسجّل أول وآخر قيمة)
     const key = s.replace(/عدّاد\[[^\]]*\]/, 'عدّاد[#]').replace(/تصويت\[⏳ \d+/, 'تصويت[⏳ #');
     if (key !== this.lastKey) { this.lastKey = key; this.event('ui', s); this.cdSeen = []; }
@@ -400,6 +406,33 @@ class Client {
   dismissAI() { if (this.blocked('أكمل الانتظار')) return; this.event('act', 'أكمل الانتظار'); this.el('ai-suggest-dismiss').click(); }
   cancelSearch() { if (this.blocked('إلغاء')) return; this.event('act', 'إلغاء البحث'); this.el('cancel-search-btn').click(); }
   countdownVisible() { return !this.hidden('search-countdown'); }
+  // ── الغرفة بالكود ──
+  createCodeRoom(max) {
+    this.el('player-name-input').value = this.name;
+    this.event('act', `إنشاء غرفة بالكود (${max})`);
+    this.el('create-multi-btn').click();
+    const chip = this.el('multi-count-chips').children.find(c => c.textContent === `${max} لاعبين`);
+    if (!chip) throw new Error('chip not found ' + max);
+    chip.click();
+    this.el('multi-create-confirm').click();
+  }
+  codeShown() { return this.el('multi-code-display').textContent; }
+  joinCode(code) {
+    this.el('player-name-input').value = this.name;
+    this.el('room-code-input').value = code;
+    this.event('act', `انضمام بالكود ${code}`);
+    this.el('join-room-btn').click();
+  }
+  startCode() { if (this.blocked('ابدأ')) return; this.event('act', 'ابدأ المباراة (زر المضيف)'); this.el('multi-start-btn').click(); }
+  leaveCode() { this.event('act', 'مغادرة اللوبي'); this.el('multi-lobby-leave').click(); }
+  lobbyList() {
+    return this.el('multi-players-list').children.map(ch => {
+      const h = ch.innerHTML;
+      return { num: Number((h.match(/mp-num">(\d+)</) || [])[1]), name: (h.match(/mp-name">([^<]*)</) || [])[1], host: h.includes('👑') };
+    });
+  }
+  startBtnVisible() { return !this.hidden('multi-start-btn') && !this.hidden('online-step-multi-lobby'); }
+  errorText() { return this.hidden('online-error') ? '' : this.el('online-error').textContent; }
   // إغلاق التبويب: الخادم ينفّذ أوامر onDisconnect، والعميل يتوقّف كلياً
   closeTab(serverDetectMs = 150) {
     this.event('act', 'إغلاق التبويب');

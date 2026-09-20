@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789847044";
-import { setMyPresence } from "../presence.js?v=1789847044";
-import { updateScoreboard } from "./scoreboard.js?v=1789847044";
-import { config } from "../config/config.js?v=1789847044";
-import { onlineManager } from "../firebase.js?v=1789847044";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789847044";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789847044";
-import { state } from "../core/state.js?v=1789847044";
-import { getCurrentUser } from "../auth.js?v=1789847044";
+import { audioManager } from "../audio/audioManager.js?v=1789849016";
+import { setMyPresence } from "../presence.js?v=1789849016";
+import { updateScoreboard } from "./scoreboard.js?v=1789849016";
+import { config } from "../config/config.js?v=1789849016";
+import { onlineManager } from "../firebase.js?v=1789849016";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789849016";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789849016";
+import { state } from "../core/state.js?v=1789849016";
+import { getCurrentUser } from "../auth.js?v=1789849016";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -968,6 +968,11 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   // إعداد اللوبي (استماع لتحديثات اللاعبين + البدء)
   function setupMultiLobby() {
+    // دخول جديد للوبي: نصفّر بقايا جلسة سابقة (قائمة بتاجها القديم + زر بدء ظاهر)
+    // وإلا يرى العائد لحظةً قائمته القديمة ويبقى زر البدء عنده رغم أنه لم يعد مضيفاً
+    if (multiPlayersList) multiPlayersList.innerHTML = "";
+    multiStartBtn?.classList.add("hidden");
+    if (multiWaitHint) multiWaitHint.textContent = "";
     onlineManager.onLobbyUpdate((players, room) => {
       renderMultiPlayers(players, room);
     });
@@ -1005,9 +1010,10 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     });
     const count = list.length;
     const max = room?.maxPlayers || _multiMaxPlayers;
-    // المضيف يرى زر البدء (لو ≥2 لاعبين)
+    // زر البدء للمضيف وحده (لو ≥2 لاعبين) — ويُخفى صراحةً عند غيره
+    // (كان يُضبط للمضيف فقط، فيبقى ظاهراً عند من فقد المضيفية أو عاد للغرفة)
+    multiStartBtn?.classList.toggle("hidden", !amHost || count < 2);
     if (amHost) {
-      multiStartBtn?.classList.toggle("hidden", count < 2);
       if (multiWaitHint) multiWaitHint.textContent = count < 2
         ? "بانتظار انضمام لاعب آخر على الأقل..."
         : `${count} من ${max} لاعبين — يمكنك البدء أو انتظار المزيد`;
@@ -1018,6 +1024,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   // المضيف يبدأ المباراة
   multiStartBtn?.addEventListener("click", async () => {
+    if (!_isMultiHost) return;   // حماية إضافية: غير المضيف لا يبدأ حتى لو ظهر الزر لحظةً
     await onlineManager.startMultiGame();
   });
 
