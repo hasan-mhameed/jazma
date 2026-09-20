@@ -14,7 +14,8 @@ const sections = [
   ['👥 4 لاعبين', [() => S.fourFull(verbose), () => S.fourWaiterFills(verbose), () => S.fourWantThree(verbose)]],
   ['🔑 الغرفة بالكود', [
     () => S.codeBasics(verbose), () => S.codeStartTwoAndLimits(verbose), () => S.codeHostLeaves(verbose),
-    () => S.codeSeatReuse(verbose), () => S.codeExHostRejoins(verbose), () => S.codeHostClosesTab(verbose)]],
+    () => S.codeSeatReuse(verbose), () => S.codeExHostRejoins(verbose), () => S.codeHostClosesTab(verbose),
+    () => S.abandonedRoomIgnored(verbose)]],
   ['⚔️ البحث الثنائي', [() => S.duoBasics(verbose), () => S.duoCancel(verbose), () => S.duoRaces(verbose)]],
 ];
 

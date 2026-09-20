@@ -265,16 +265,37 @@ export async function codeSeatReuse(verbose = false) {
   w.dispose(); return r;
 }
 
-// ── 10) خلل معروف: المنشئ يغلق تبويبه في اللوبي ──
+// ── 10) المنشئ يغلق تبويبه في اللوبي: الغرفة تستمر والتاج ينتقل (إصلاح 1.2) ──
 export async function codeHostClosesTab(verbose = false) {
-  const r = suite('غرفة بالكود: المنشئ يغلق تبويبه (خلل معروف — الدفعة التالية)'); r.verbose = verbose;
+  const r = suite('غرفة بالكود: المنشئ يغلق تبويبه → الغرفة تستمر والتاج ينتقل'); r.verbose = verbose;
   const w = new World(); w.quiet = true; w.startSampler(100);
   const A = await w.client('أحمد'), B = await w.client('باسل'), C = await w.client('كريم');
   const code = await makeCodeRoom(w, A, 3);
   B.joinCode(code); await w.run(600); C.joinCode(code); await w.run(800);
   A.closeTab(); await w.run(3000);
-  r.knownIssue(!!w.server.getAt('rooms/' + code), 'إغلاق المنشئ لتبويبه يحذف الغرفة كاملة');
-  r.knownIssue(B.startBtnVisible() || C.startBtnVisible(), `لا أحد يرث البدء، وقائمة الباقين عالقة على [${B.lobbyList().map(p => p.name)}] بلا أي إشعار`);
+  r.ok(!!w.server.getAt('rooms/' + code), 'الغرفة لم تُحذف بإغلاق تبويب المنشئ');
+  r.ok(B.lobbyList().length === 2 && C.lobbyList().length === 2, `المنشئ وحده اختفى من القائمة (${B.lobbyList().map(p => p.name)})`);
+  r.ok(crownOf(B) === 2 && crownOf(C) === 2, `التاج انتقل لأصغر رقم حاضر عند الاثنين (${crownOf(B)}/${crownOf(C)})`);
+  r.ok(B.startBtnVisible() && !C.startBtnVisible(), 'زر البدء عند الوريث وحده');
+  B.startCode();
+  r.ok(await waitFor(w, () => B.matches.length && C.matches.length, 8000), 'الوريث يستطيع بدء المباراة');
+  r.ok(B.matches[0]?.nums.join() === '2,3' && B.matches[0]?.turn === 2, `اللاعبون [${B.matches[0]?.nums}] والدور الأول ${B.matches[0]?.turn}`);
+  r.ok(w.errors.length === 0, 'بلا أخطاء JS' + (w.errors[0] ? ': ' + w.errors[0].slice(0, 150) : ''));
+  w.dispose(); return r;
+}
+
+// ── 10ب) المنشئ وحده يغلق تبويبه: لا تبقى غرفة مهجورة في المطابقة ──
+export async function abandonedRoomIgnored(verbose = false) {
+  const r = suite('غرفة مهجورة بعد انقطاع آخر من فيها لا تبتلع الباحثين'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const A = await w.client('أحمد'), B = await w.client('باسل');
+  await A.startSearch(3); await w.run(2000);
+  const ghost = A.om.roomCode;
+  A.closeTab(); await w.run(2000);
+  r.ok(!Object.keys(w.server.getAt('rooms/' + ghost + '/players') || {}).length, 'الغرفة بقيت بلا لاعبين');
+  await B.startSearch(3); await w.run(3000);
+  r.ok(B.om.roomCode && B.om.roomCode !== ghost, 'الباحث الجديد أنشأ غرفته ولم يدخل المهجورة');
+  r.ok(w.errors.length === 0, 'بلا أخطاء JS');
   w.dispose(); return r;
 }
 
@@ -466,16 +487,22 @@ export async function codeExHostRejoins(verbose = false) {
   w.dispose(); return r;
 }
 
-// ── 18) خلل معروف: منشئ غرفة البحث العشوائي يغلق تبويبه أثناء التجميع ──
+// ── 18) البحث العشوائي: المنشئ يغلق تبويبه أثناء التجميع → الباقون يكملون (إصلاح 1.2) ──
 export async function randomHostClosesTab(verbose = false) {
-  const r = suite('البحث العشوائي: المنشئ يغلق تبويبه أثناء التجميع (خلل معروف — الدفعة التالية)'); r.verbose = verbose;
+  const r = suite('البحث العشوائي: المنشئ يغلق تبويبه أثناء التجميع → الباقون يكملون معاً'); r.verbose = verbose;
   const w = new World(); w.quiet = true; w.startSampler(100);
   const A = await w.client('أحمد'), B = await w.client('باسل'), C = await w.client('كريم');
   await A.startSearch(4); await w.run(2000); await B.startSearch(4); await w.run(2000); await C.startSearch(4); await w.run(3000);
   const code = B.om.roomCode;
   A.closeTab(); await w.run(3000);
-  r.knownIssue(!!w.server.getAt('rooms/' + code), 'إغلاق المنشئ لتبويبه يحذف الغرفة كاملة (المغادرة بالزر سليمة)');
-  r.knownIssue(!B.hidden('online-step-searching') && !C.hidden('online-step-searching'),
-    `الباقون يُطردون لشاشة اختيار العدد ("غادر منشئ الغرفة") بدل أن يكملوا معاً`);
+  r.ok(!!w.server.getAt('rooms/' + code), 'الغرفة لم تُحذف بإغلاق تبويب المنشئ');
+  r.ok(B.om.roomCode === code && C.om.roomCode === code, 'الباقون ما زالوا في نفس الغرفة');
+  r.ok(!B.hidden('online-step-searching') && !C.hidden('online-step-searching'), 'لم يُطردا لشاشة اختيار العدد');
+  r.ok(!w.timeline.some(l => l.includes('غادر منشئ الغرفة')), 'لا رسالة "غادر منشئ الغرفة"');
+  r.ok(Object.keys(w.server.getAt('rooms/' + code + '/players') || {}).length === 2, 'بقي لاعبان في الغرفة');
+  r.ok(await waitFor(w, () => B.approvalVisible() && C.approvalVisible(), 25000), 'التجميع يكمل حتى التصويت بالعدد المتبقي');
+  B.accept(); await w.run(400); C.accept();
+  r.ok(await waitFor(w, () => B.matches.length && C.matches.length, 12000), 'المباراة تبدأ لهما');
+  r.ok(w.errors.length === 0, 'بلا أخطاء JS' + (w.errors[0] ? ': ' + w.errors[0].slice(0, 150) : ''));
   w.dispose(); return r;
 }

@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789849016";
+import { getCurrentUser }   from "./auth.js?v=1789932693";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -32,7 +32,10 @@ export async function cleanupOldRooms() {
     snap.forEach(child => {
       const room = child.val();
       const age  = now - (room.createdAt || 0);
-      if (age > oneHour || room.status === "finished") {
+      // غرفة لوبي بلا لاعبين: بقايا انقطاع آخر من كان فيها — تُمسح فوراً
+      const emptyLobby = room && room.multi === true && room.status === "lobby"
+        && !Object.keys(room.players || {}).length;
+      if (age > oneHour || room.status === "finished" || emptyLobby) {
         tasks.push(remove(ref(db, `rooms/${child.key}`)));
       }
     });
@@ -396,8 +399,10 @@ export class OnlineManager {
       move:       { key: "", by: 0, seq: 0 },
       createdAt:  Date.now(),
     });
-    // عند انقطاع المضيف في اللوبي: تُمسح الغرفة
-    onDisconnect(ref(db, `rooms/${code}`)).remove();
+    // عند انقطاع المنشئ في اللوبي (إغلاق تبويب/تحديث صفحة/انقطاع شبكة):
+    // يُزال **هو فقط** كالمنضمّين، والغرفة تستمر للباقين وينتقل التاج لأصغر رقم حاضر.
+    // (كانت تُمسح الغرفة كاملة: في العشوائي يُطرد الجميع، وفي الغرفة بالكود يعلقون بلا مضيف)
+    onDisconnect(ref(db, `rooms/${code}/players/${myUid}`)).remove();
     this._listenLobby(code);
     this._listenForMultiMoves(code);
     this._listenBankUpdate(code);
@@ -418,7 +423,8 @@ export class OnlineManager {
     const room = snap.val();
     if (!room.multi) throw new Error("هذه ليست غرفة متعددة!");
     if (room.status !== "lobby") throw new Error("المباراة بدأت أو انتهت!");
-    if (room.playerCount >= room.maxPlayers) throw new Error("الغرفة ممتلئة!");
+    // العدد الفعلي لا playerCount (قد يتقادم بعد إزالة منقطع) — والترانزاكشن تحسم السباق
+    if (Object.keys(room.players || {}).length >= room.maxPlayers) throw new Error("الغرفة ممتلئة!");
 
     // نستخدم transaction لضمان رقم لاعب فريد (يمنع تعارض الانضمام المتزامن)
     let myNum = null;
@@ -587,6 +593,10 @@ export class OnlineManager {
               && Number(room.maxPlayers) === Number(wantedPlayers)
               && room.cfg && Number(room.cfg.rows) === Number(cfg.rows)
               && !(room.players && room.players[myUid])) {
+            // العدد الفعلي من القائمة لا من playerCount: قد يتقادم حين يُزال لاعب
+            // بانقطاعه (onDisconnect يزيل عقدته فقط) فتبدو الغرفة ممتلئة وهي ليست كذلك
+            const present = Object.keys(room.players || {}).length;
+            if (!present) continue;                    // غرفة مهجورة — يمسحها التنظيف
             const voting = room.approval && room.approval.state === "asking";
             // أثناء التصويت: ندخل كمنتظرين ما لم يكتمل عدد المنتظرين لتجمّع مستقل
             if (voting) {
@@ -595,7 +605,7 @@ export class OnlineManager {
               if (waitingCount >= Number(wantedPlayers)) continue; // يكفون لتجمّع خاص → غرفة جديدة
               foundCode = code; break;
             }
-            if ((room.playerCount || 0) < room.maxPlayers) { foundCode = code; break; }
+            if (present < room.maxPlayers) { foundCode = code; break; }
           }
         }
       }
