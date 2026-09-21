@@ -190,10 +190,16 @@ export async function codeBasics(verbose = false) {
   const w = new World(); w.quiet = true; w.startSampler(100);
   const A = await w.client('أحمد'), B = await w.client('باسل'), C = await w.client('كريم');
   const code = await makeCodeRoom(w, A, 3);
-  B.joinCode(code); await w.run(600); C.joinCode(code); await w.run(800);
+  B.joinCode(code); await w.run(600);
+  // الخطوة 1.4: البدء بعدد ناقص مسموح، لكن الزر يقولها صراحةً
+  const btn = c => c.el('multi-start-btn').textContent, hint = c => c.el('multi-wait-hint').textContent;
+  r.ok(btn(A) === '🚀 ابدأ بلاعبَين (من 3)', `زر البدء بعدد ناقص يقولها صراحةً: "${btn(A)}"`);
+  C.joinCode(code); await w.run(800);
   r.ok([A, B, C].every(c => c.lobbyList().length === 3), 'الثلاثة يرون القائمة كاملة');
   r.ok([A, B, C].every(c => crownOf(c) === 1), 'التاج 👑 على المنشئ عند الجميع');
   r.ok(A.startBtnVisible() && !B.startBtnVisible() && !C.startBtnVisible(), 'زر البدء عند المضيف وحده');
+  r.ok(btn(A) === '🚀 ابدأ المباراة' && /اكتمل العدد/.test(hint(A)) && /اكتمل العدد/.test(hint(B)) && !/انتظار المزيد/.test(hint(A)),
+    `عند الاكتمال: "${btn(A)}" / المضيف: "${hint(A)}" / غيره: "${hint(B)}"`);
   A.startCode();
   r.ok(await waitFor(w, () => A.matches.length && B.matches.length && C.matches.length, 8000), 'المباراة بدأت للثلاثة');
   const sig = new Set([A, B, C].map(c => JSON.stringify([c.matches[0]?.nums, c.matches[0]?.turn])));

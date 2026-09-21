@@ -1,14 +1,15 @@
-// 📄 gameEnd.js — v14.3
-import { audioManager } from "../audio/audioManager.js?v=1789932693";
+// 📄 gameEnd.js — v35.5 (النتيجة من مصدر واحد: core/matchResult.js)
+import { audioManager } from "../audio/audioManager.js?v=1789998455";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1789932693";
-import { saveMatch } from "../history.js?v=1789932693";
-import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1789932693";
-import { showNewAchievements } from "./achievementsUI.js?v=1789932693";
-import { calcXP, addXP } from "../xp.js?v=1789932693";
-import { showXPGain } from "./xpUI.js?v=1789932693";
-import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1789932693";
-import { commitMatchCoins } from "../core/wallet.js?v=1789932693";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1789998455";
+import { saveMatch } from "../history.js?v=1789998455";
+import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1789998455";
+import { showNewAchievements } from "./achievementsUI.js?v=1789998455";
+import { calcXP, addXP } from "../xp.js?v=1789998455";
+import { showXPGain } from "./xpUI.js?v=1789998455";
+import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1789998455";
+import { commitMatchCoins } from "../core/wallet.js?v=1789998455";
+import { computeMatchResult, multiHistoryResult } from "../core/matchResult.js?v=1789998455";
 
 export let _matchStartTime = Date.now();
 export function resetMatchTimer() { _matchStartTime = Date.now(); }
@@ -19,37 +20,12 @@ export async function endGame(cfg, scores, forced = false, loserPlayer = null, e
   // النهاية الطبيعية تتطلب اكتمال اللوحة؛ الإجبارية (نفاد بنك الوقت) تتخطّاه
   if (!forced && filled < totalSquares) return;
 
-  // خريطة الخارجين وسبب خروجهم: { رقم اللاعب: "نفد وقته" | "انسحب" }
-  // نبنيها من exitInfo (المُمرّرة) + loserPlayer (توافق خلفي) + حالة multiPlayers
-  const exited = {};
-  if (exitInfo && typeof exitInfo === 'object') Object.assign(exited, exitInfo);
-  if (loserPlayer != null && !exited[loserPlayer]) exited[loserPlayer] = "نفد وقته";
-  if (cfg.multiPlayers) {
-    Object.values(cfg.multiPlayers).forEach(pl => {
-      if (pl.active === false && !exited[pl.num]) exited[pl.num] = "انسحب";
-    });
-  }
-  const exitedNums = Object.keys(exited).map(Number);
-
-  // ترتيب العرض: المتنافسون بالنقاط أولاً, ثم الخارجون بالأسفل
-  let ranking = Object.entries(scores)
-    .map(([player, score]) => ({ player: Number(player), score }))
-    .sort((a, b) => {
-      const aOut = exitedNums.includes(a.player) ? 1 : 0;
-      const bOut = exitedNums.includes(b.player) ? 1 : 0;
-      if (aOut !== bOut) return aOut - bOut;       // الخارجون للأسفل
-      return b.score - a.score;                      // ثم بالنقاط
-    });
-
-  // عند وجود خارجين: يُستبعدون من حساب الفوز/التعادل (خسروا مؤكّداً)
-  const contenders = exitedNums.length
-    ? ranking.filter(p => !exitedNums.includes(p.player))
-    : ranking;
-  const pool       = contenders.length ? contenders : ranking; // احتياط
-  const maxScore   = pool[0].score;
-  const topPlayers = pool.filter(p => p.score === maxScore);
-  const isDraw     = topPlayers.length > 1;
-  const winnerNum  = isDraw ? null : pool[0].player;
+  // النتيجة من مصدر واحد (core/matchResult.js):
+  // - من لعب فعلاً فقط: المقعد الفارغ (غادر صاحبه قبل البدء) لا يظهر كلاعب برصيد 0
+  // - "أنا" = مقعدي الحقيقي أونلاين (لا المقعد 1)، والمشاهد لا يُسجَّل له شيء
+  // - الخارجون (نفد وقته/انسحب) بالأسفل وخارج حساب الفوز، والمتعادلون يتشاركون المركز
+  const R = computeMatchResult(cfg, scores, { exitInfo, loserPlayer });
+  const { ranking, isDraw, winnerNum } = R;
 
   function playerName(num) {
     if (cfg.aiMode === "online" && cfg.onlinePlayerNames)
@@ -72,13 +48,11 @@ export async function endGame(cfg, scores, forced = false, loserPlayer = null, e
   }
 
   // ── تحديث الإحصائيات ─────────────────────────────────────────
+  // لصاحب الجهاز فقط: المشاهد (بلا مقعد) ليس طرفاً في المباراة فلا يُسجَّل له شيء
   let headToHead = null;  // { myW, myL, myD, label } أو { isMulti, rank, ... }
 
-  if (currentUser) {
-    const getResult = (myNum) => {
-      if (isDraw) return 'draw';
-      return winnerNum === myNum ? 'win' : 'loss';
-    };
+  if (currentUser && R.me != null) {
+    const myResult = R.myResult;   // 'win' | 'loss' | 'draw' — لمقعدي أنا
 
     // مساعد يحسب من history 1v1
     function fromHistory(h) {
@@ -91,13 +65,13 @@ export async function endGame(cfg, scores, forced = false, loserPlayer = null, e
       };
     }
 
-    const isMulti = cfg.players >= 3;
+    // اسم خصمي في مباراة الاثنين أونلاين (ثنائي، أو غرفة جماعية بقي فيها اثنان)
+    const oppNum  = R.opponent ? R.opponent.num : null;
+    const oppName = (oppNum != null && cfg.onlinePlayerNames?.[oppNum]) || "الخصم";
 
-    if (isMulti) {
-      // ── متعدد اللاعبين: نسجل مركز اللاعب 1 ونقاطه ──────────
-      const myRank  = ranking.findIndex(p => p.player === 1) + 1;
-      const myScore = scores[1] || 0;
-      await updateMultiStats(myRank, cfg.players, myScore);
+    if (R.category === 'multi') {
+      // ── متعدد اللاعبين (3 فأكثر لعبوا فعلاً): مركزي أنا ونقاطي ──
+      await updateMultiStats(R.myRank, R.count, R.myScore);
 
       // نجلب الإحصائيات الفردية لعرضها
       const stats   = await getAllStats(currentUser.uid);
@@ -111,29 +85,29 @@ export async function endGame(cfg, scores, forced = false, loserPlayer = null, e
       headToHead = {
         isMulti: true,
         total, wins, avgScore,
-        myRank,
-        players: cfg.players,
-        label: `${cfg.players} لاعبين`,
+        myRank:  R.myRank,
+        players: R.count,
+        label: `${R.count} لاعبين`,
       };
 
-    } else if (cfg.aiMode === "ai") {
-      await updateAIStats(getResult(1));
+    } else if (R.category === 'ai') {
+      await updateAIStats(myResult);
       const stats   = await getAllStats(currentUser.uid);
       const { w, l, d } = fromHistory(stats.ai?.history);
       headToHead = { myW: w, myL: l, myD: d, label: "أنت vs الكمبيوتر" };
 
-    } else if (cfg.aiMode === "online") {
-      const myNum       = cfg.onlinePlayerNum;
-      const opponentUid = cfg.onlineOpponentUid;
-      const oppName     = cfg.onlinePlayerNames?.[myNum === 1 ? 2 : 1] || "الخصم";
-      await updateOnlineStats(getResult(myNum), opponentUid, oppName);
+    } else if (R.category === 'online') {
+      // واحد ضد واحد: الخصم الحقيقي (من قائمة لاعبي المباراة في الغرفة الجماعية)
+      // لا cfg.onlineOpponentUid وحده — قد يكون متبقّياً من مباراة ثنائية سابقة
+      const opponentUid = R.opponent ? R.opponent.uid : null;
+      await updateOnlineStats(myResult, opponentUid, oppName);
       const stats = await getAllStats(currentUser.uid);
-      const { w, l, d } = fromHistory(stats.online?.[opponentUid]?.history);
+      const { w, l, d } = fromHistory(opponentUid ? stats.online?.[opponentUid]?.history : null);
       headToHead = { myW: w, myL: l, myD: d, label: `أنت vs ${oppName}` };
 
     } else {
       const p2 = cfg.localPlayerNames?.[2] || '';
-      await updateLocalStats(getResult(1), p2);
+      await updateLocalStats(myResult, p2);
       const stats = await getAllStats(currentUser.uid);
       const key   = p2
         ? `vs_${p2.trim().toLowerCase().replace(/\s+/g, '_')}`
@@ -148,43 +122,38 @@ export async function endGame(cfg, scores, forced = false, loserPlayer = null, e
     const duration = Math.floor((Date.now() - _matchStartTime) / 1000);
     const grid     = `${cfg.rows}x${cfg.cols}`;
 
-    if (isMulti) {
-      const myRank  = ranking.findIndex(p => p.player === 1) + 1;
+    if (R.category === 'multi') {
       await saveMatch({
         mode:    'multi',
-        result:  myRank === 1 ? 'win' : myRank === ranking.length ? 'loss' : 'draw',
-        myScore: scores[1] || 0,
+        result:  multiHistoryResult(R),   // الأول فوز، الأخير خسارة، الوسط تعادل
+        myScore: R.myScore,
         oppScore: 0,
         vs:      '',
         grid, duration,
       });
-    } else if (cfg.aiMode === 'ai') {
+    } else if (R.category === 'ai') {
       await saveMatch({
-        mode: 'ai', result: getResult(1),
-        myScore: scores[1] || 0, oppScore: scores[2] || 0,
+        mode: 'ai', result: myResult,
+        myScore: R.myScore, oppScore: R.bestOppScore,
         vs: 'الكمبيوتر', grid, duration,
       });
-    } else if (cfg.aiMode === 'online') {
-      const myNum  = cfg.onlinePlayerNum;
-      const oppName = cfg.onlinePlayerNames?.[myNum === 1 ? 2 : 1] || 'الخصم';
+    } else if (R.category === 'online') {
       await saveMatch({
-        mode: 'online', result: getResult(myNum),
-        myScore: scores[myNum] || 0, oppScore: scores[myNum === 1 ? 2 : 1] || 0,
+        mode: 'online', result: myResult,
+        myScore: R.myScore, oppScore: R.opponent ? R.opponent.score : 0,
         vs: oppName, grid, duration,
       });
     } else {
       const p2 = cfg.localPlayerNames?.[2] || '';
       await saveMatch({
-        mode: 'local', result: getResult(1),
-        myScore: scores[1] || 0, oppScore: scores[2] || 0,
+        mode: 'local', result: myResult,
+        myScore: R.myScore, oppScore: R.bestOppScore,
         vs: p2, grid, duration,
       });
     }
 
     // ── التحقق من الإنجازات ──────────────────────────────────
-    const mainResult = isMulti
-      ? (ranking[0].player === 1 ? 'win' : 'loss')
-      : getResult(cfg.aiMode === 'online' ? cfg.onlinePlayerNum : 1);
+    const mainResult = myResult;
 
     const [streak, totalMatches, allStats] = await Promise.all([
       updateStreak(mainResult),       // يحدث السلسلة ويرجع القيمة الجديدة
@@ -193,12 +162,10 @@ export async function endGame(cfg, scores, forced = false, loserPlayer = null, e
     ]);
 
     const matchData = {
-      mode:          cfg.aiMode === 'online' ? 'online'
-                   : cfg.players >= 3        ? 'multi'
-                   : cfg.aiMode === 'ai'     ? 'ai' : 'local',
+      mode:          cfg.aiMode === 'online' ? 'online' : R.category,   // 'ai' | 'local' | 'multi'
       result:        mainResult,
-      myScore:       scores[cfg.aiMode === 'online' ? cfg.onlinePlayerNum : 1] || 0,
-      oppScore:      scores[cfg.aiMode === 'online' ? (cfg.onlinePlayerNum === 1 ? 2 : 1) : 2] || 0,
+      myScore:       R.myScore,
+      oppScore:      R.bestOppScore,   // أعلى نقاط بين خصومي (لإنجاز "فوز بفارق")
       aiDifficulty:  cfg.aiDifficulty || 'easy',
       currentStreak: streak,
     };
@@ -222,8 +189,8 @@ export async function endGame(cfg, scores, forced = false, loserPlayer = null, e
         result:       mainResult,
         aiDifficulty: cfg.aiDifficulty || 'easy',
         gridSize:     cfg.rows,
-        rank:         isMulti ? (ranking.findIndex(p => p.player === 1) + 1) : 1,
-        players:      cfg.players,
+        rank:         R.category === 'multi' ? R.myRank : 1,
+        players:      R.count,
       };
       const xpResult = await addXP(calcXP(xpData));
       if (xpResult) {
@@ -243,13 +210,13 @@ export async function endGame(cfg, scores, forced = false, loserPlayer = null, e
 
   winnerMessage.textContent = message;
 
-  // ترتيب اللاعبين
+  // ترتيب اللاعبين — من لعب فعلاً فقط، والمتعادلون يتشاركون المركز (1، 1، 3)
   if (winnerDetails) {
     winnerDetails.textContent = "";
-    ranking.forEach((p, i) => {
+    ranking.forEach(p => {
       const color = cfg.colors[p.player - 1] || "#999";
       const row   = document.createElement("div");
-      const isExited = exited[p.player];
+      const isExited = p.exited;
       row.style.color        = color;
       row.style.padding      = "6px 0";
       row.style.fontSize     = "1.05rem";
@@ -259,7 +226,7 @@ export async function endGame(cfg, scores, forced = false, loserPlayer = null, e
       const badge = isExited
         ? ` <span style="font-size:0.8rem;background:rgba(248,113,113,0.2);color:#fca5a5;padding:1px 7px;border-radius:8px;border:1px solid #f8717155;">${isExited}</span>`
         : "";
-      row.innerHTML = `${i + 1}. ${playerName(p.player)}: ${p.score} نقطة${badge}`;
+      row.innerHTML = `${p.rank}. ${playerName(p.player)}: ${p.score} نقطة${badge}`;
       winnerDetails.appendChild(row);
     });
 

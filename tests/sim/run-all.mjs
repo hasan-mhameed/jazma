@@ -1,6 +1,7 @@
 // تشغيل كل فحوص المحاكي:
 //   node --experimental-vm-modules --no-warnings run-all.mjs [عدد_الجلسات_العشوائية] [-v] [--only=كلمة]
 import * as S from './scenarios.mjs';
+import * as RS from './results.mjs';
 
 const N = Number(process.argv.find(a => /^\d+$/.test(a)) || 100);
 const verbose = process.argv.includes('-v');
@@ -17,6 +18,7 @@ const sections = [
     () => S.codeSeatReuse(verbose), () => S.codeExHostRejoins(verbose), () => S.codeHostClosesTab(verbose),
     () => S.abandonedRoomIgnored(verbose)]],
   ['⚔️ البحث الثنائي', [() => S.duoBasics(verbose), () => S.duoCancel(verbose), () => S.duoRaces(verbose)]],
+  ['🏁 نافذة نهاية المباراة', [() => RS.resultsPure(verbose), () => RS.resultsEndGame(verbose)]],
 ];
 
 for (const [title, runs] of sections) {

@@ -1,14 +1,14 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1789932693";
-import { setMyPresence } from "../presence.js?v=1789932693";
-import { updateScoreboard } from "./scoreboard.js?v=1789932693";
-import { config } from "../config/config.js?v=1789932693";
-import { onlineManager } from "../firebase.js?v=1789932693";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789932693";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789932693";
-import { state } from "../core/state.js?v=1789932693";
-import { getCurrentUser } from "../auth.js?v=1789932693";
+import { audioManager } from "../audio/audioManager.js?v=1789998455";
+import { setMyPresence } from "../presence.js?v=1789998455";
+import { updateScoreboard } from "./scoreboard.js?v=1789998455";
+import { config } from "../config/config.js?v=1789998455";
+import { onlineManager } from "../firebase.js?v=1789998455";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1789998455";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1789998455";
+import { state } from "../core/state.js?v=1789998455";
+import { getCurrentUser } from "../auth.js?v=1789998455";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1013,13 +1013,28 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     // زر البدء للمضيف وحده (لو ≥2 لاعبين) — ويُخفى صراحةً عند غيره
     // (كان يُضبط للمضيف فقط، فيبقى ظاهراً عند من فقد المضيفية أو عاد للغرفة)
     multiStartBtn?.classList.toggle("hidden", !amHost || count < 2);
+    // العدد المختار حدّ أقصى لا شرط (قرار المستخدم — الخطوة 1.4): المضيف يبدأ بالموجودين،
+    // لكن الزر يقول صراحةً إنه يبدأ بعدد ناقص حتى لا يترك صديقاً على وشك الانضمام بلا قصد
+    const full = count >= max;
+    if (multiStartBtn && amHost && count >= 2) multiStartBtn.textContent = startButtonLabel(count, max);
     if (amHost) {
       if (multiWaitHint) multiWaitHint.textContent = count < 2
         ? "بانتظار انضمام لاعب آخر على الأقل..."
-        : `${count} من ${max} لاعبين — يمكنك البدء أو انتظار المزيد`;
+        : full
+        ? `✅ اكتمل العدد (${count} من ${max})`
+        : `${count} من ${max} لاعبين — يمكنك البدء الآن أو انتظار المزيد`;
     } else {
-      if (multiWaitHint) multiWaitHint.textContent = `${count} من ${max} لاعبين — بانتظار أن يبدأ المضيف...`;
+      if (multiWaitHint) multiWaitHint.textContent = full
+        ? `✅ اكتمل العدد — بانتظار أن يبدأ المضيف...`
+        : `${count} من ${max} لاعبين — بانتظار أن يبدأ المضيف...`;
     }
+  }
+
+  // نص زر البدء: "ابدأ المباراة" عند الاكتمال، وإلا "ابدأ بلاعبَين (من 3)" / "ابدأ بـ3 لاعبين (من 4)"
+  function startButtonLabel(count, max) {
+    if (count >= max) return "🚀 ابدأ المباراة";
+    const who = count === 2 ? "بلاعبَين" : `بـ${count} لاعبين`;
+    return `🚀 ابدأ ${who} (من ${max})`;
   }
 
   // المضيف يبدأ المباراة

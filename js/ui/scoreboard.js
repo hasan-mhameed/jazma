@@ -1,8 +1,9 @@
-// 📄 scoreboard.js — v16.0 (Nature cards + level badge)
-import { state }  from "../core/state.js?v=1789932693";
-import { config } from "../config/config.js?v=1789932693";
-import { getXP, getLevelFromXP } from "../xp.js?v=1789932693";
-import { getCurrentUser } from "../auth.js?v=1789932693";
+// 📄 scoreboard.js — v35.5 (Nature cards + level badge — "من أنا" من مصدر واحد)
+import { state }  from "../core/state.js?v=1789998455";
+import { config } from "../config/config.js?v=1789998455";
+import { getXP, getLevelFromXP } from "../xp.js?v=1789998455";
+import { getCurrentUser } from "../auth.js?v=1789998455";
+import { getParticipants, getMyNum, getPlayerUid } from "../core/matchResult.js?v=1789998455";
 
 const AVATARS = ['🦊', '🤖', '🦅', '🐺'];
 const COLORS  = ['p1', 'p2', 'p3', 'p4'];
@@ -18,16 +19,13 @@ export function renderScoreboard(cfg) {
   const scoreboard = document.getElementById("scores");
   if (!scoreboard) return;
   scoreboard.innerHTML = "";
-  scoreboard.className = `players-count-${cfg.players}`;
+  // في الأونلاين الجماعي قد لا يبدأ ترقيم اللاعبين من 1 (بعد مغادرات قبل البدء)
+  // فالبطاقات لمن لعب فعلاً فقط — نفس المصدر الذي تبني منه نافذة النهاية ترتيبها
+  const seats = getParticipants(cfg);
+  scoreboard.className = `players-count-${seats.length}`;
   const scores = state.scores || {};
 
-  for (let i = 1; i <= cfg.players; i++) {
-    // في الأونلاين الجماعي قد لا يبدأ ترقيم اللاعبين من 1 (بعد مغادرات)
-    // فنتخطّى الأرقام التي لا يقابلها لاعب فعلي حتى لا تظهر بطاقة "لاعب N" وهمية
-    if (cfg.multiPlayers) {
-      const exists = Object.values(cfg.multiPlayers).some(p => p && p.num === i);
-      if (!exists) continue;
-    }
+  for (const i of seats) {
     const card = document.createElement("div");
     card.id = `pcard${i}`;
     card.className = `nat-player-card ${COLORS[i-1] || 'p1'}`;
@@ -58,20 +56,29 @@ export function renderScoreboard(cfg) {
 }
 
 // ── جلب مستوى اللاعبين ──
+// كل بطاقة تحمل مستوى صاحبها الحقيقي. أونلاين: بطاقتي على مقعدي الحقيقي (لا المقعد 1 دائماً —
+// كان المنضمّ يرى مستواه على بطاقة خصمه)، والخصوم من قائمة لاعبي المباراة، والمشاهد يرى الجميع.
 async function loadLevels(cfg) {
-  // اللاعب الحالي (1) من حسابه
   const myUid = getCurrentUser()?.uid;
-  if (myUid) {
+  if (cfg.aiMode === 'online') {
+    await Promise.all(getParticipants(cfg).map(async num => {
+      const uid = getPlayerUid(cfg, num, myUid);
+      if (!uid) return;
+      try {
+        const xp = await getXP(uid);
+        setLevelBadge(num, getLevelFromXP(xp).current);
+      } catch {}
+    }));
+    return;
+  }
+  // ضد الكمبيوتر والمحلي: أنا المقعد 1 (نفس الجهاز)
+  const me = getMyNum(cfg);
+  if (myUid && me != null) {
     const xp  = await getXP(myUid);
     const lvl = getLevelFromXP(xp);
-    setLevelBadge(1, lvl.current);
+    setLevelBadge(me, lvl.current);
   }
-  // الخصم أونلاين
-  if (cfg.aiMode === 'online' && cfg.onlineOpponentUid) {
-    const xp  = await getXP(cfg.onlineOpponentUid);
-    const lvl = getLevelFromXP(xp);
-    setLevelBadge(2, lvl.current);
-  } else if (cfg.aiMode === 'ai') {
+  if (cfg.aiMode === 'ai') {
     const el = document.getElementById('plevel2');
     if (el) el.textContent = '🤖 AI';
   } else {
@@ -96,9 +103,10 @@ async function showPlayerInfo(cfg, i) {
 
   let levelInfo = '', xpInfo = '';
   const myUid = getCurrentUser()?.uid;
+  // صاحب البطاقة الحقيقي: أونلاين من مقعده (لا "1 = أنا")، وغير ذلك أنا المقعد 1
   let uid = null;
-  if (i === 1) uid = myUid;
-  else if (cfg.aiMode === 'online') uid = cfg.onlineOpponentUid;
+  if (cfg.aiMode === 'online') uid = getPlayerUid(cfg, i, myUid);
+  else if (i === getMyNum(cfg)) uid = myUid;
 
   if (uid) {
     const xp  = await getXP(uid);
@@ -109,7 +117,7 @@ async function showPlayerInfo(cfg, i) {
     levelInfo = '🤖 ذكاء اصطناعي';
     xpInfo = cfg.aiDifficulty === 'easy' ? 'سهل' : cfg.aiDifficulty === 'nightmare' ? 'صعب' : 'متوسط';
   } else {
-    levelInfo = '👤 لاعب محلي';
+    levelInfo = cfg.aiMode === 'online' ? '🌐 لاعب أونلاين' : '👤 لاعب محلي';
   }
 
   const modal = document.createElement('div');
