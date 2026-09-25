@@ -512,3 +512,160 @@ export async function randomHostClosesTab(verbose = false) {
   r.ok(w.errors.length === 0, 'بلا أخطاء JS' + (w.errors[0] ? ': ' + w.errors[0].slice(0, 150) : ''));
   w.dispose(); return r;
 }
+
+// ═════════════════════ نهايات الانسحاب (v35.6 — الخطوة 1.6) ═════════════════════
+// كل نهاية بخروج الخصوم تمرّ على نافذة النتيجة (فوز مسجّل + عملات) بدل رسالة ثم إعادة تحميل،
+// والمنسحب بالزر تُسجَّل خسارته. نلتقط النهايات عبر بديل gameEnd.js في المحاكي.
+const endsOf = (c, kind) => c.ends.filter(e => e.kind === kind);
+const noErr = (r, w) => r.ok(w.errors.length === 0, 'بلا أخطاء JS' + (w.errors[0] ? ': ' + w.errors[0].slice(0, 150) : ''));
+async function duoMatch(w) {
+  const A = await w.client('أحمد'), B = await w.client('باسل');
+  await A.startSearch(2); await w.run(1500); await B.startSearch(2);
+  await waitFor(w, () => A.matches.length && B.matches.length, 8000);
+  await w.run(5000);   // معالجات نهاية المباراة تُسجَّل بعد تحميل اللوحة (المنضم ينتظر خريطة العناصر)
+  return { A, B };
+}
+
+// ── 19) الثنائي: الانسحاب بالزر ──
+export async function duoWithdrawEnding(verbose = false) {
+  const r = suite('الثنائي: المنسحب بالزر تُسجَّل خسارته، وخصمه يرى فوزه بنافذة النتيجة'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const { A, B } = await duoMatch(w);
+  r.ok(A.matches.length && B.matches.length, 'بدأت المباراة');
+  B.withdraw(); await w.run(4000);
+  const e = endsOf(A, 'end');
+  r.ok(e.length === 1, `نافذة نتيجة واحدة عند الفائز (${e.length}) — إشارتا "أنهى" و"غادر" لا تكرّرانها`);
+  r.ok(e[0]?.forced && e[0]?.exitInfo?.[2] === 'انسحب', `المنسحب بشارة "انسحب" (${JSON.stringify(e[0]?.exitInfo)})`);
+  r.ok(/فزت/.test(e[0]?.title || '') && /انسحب باسل/.test(e[0]?.title || ''), `العنوان: "${e[0]?.title}"`);
+  r.ok(endsOf(B, 'forfeit').length === 1 && endsOf(B, 'end').length === 0, 'المنسحب: خسارته مسجّلة ولا نافذة فوز عنده');
+  r.ok(!/الخصم أنهى اللعبة/.test(A.toasts()), 'لا رسالة "الخصم أنهى اللعبة" القديمة');
+  noErr(r, w); w.dispose(); return r;
+}
+
+// ── 20) الثنائي: الخصم يغلق تبويبه ──
+export async function duoDropEnding(verbose = false) {
+  const r = suite('الثنائي: الخصم يغلق تبويبه → فوز مسجّل للباقي'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const { A, B } = await duoMatch(w);
+  const code = A.om.roomCode;
+  B.closeTab(); await w.run(3000);
+  r.ok(w.server.getAt(`rooms/${code}/dropped2`) === true, 'الغرفة تعرف من انقطع (dropped2)');
+  const e = endsOf(A, 'end');
+  r.ok(e.length === 1 && e[0].exitInfo?.[2] === 'انقطع' && /انقطع اتصال باسل/.test(e[0].title || ''), `الفائز: "${e[0]?.title}" ${JSON.stringify(e[0]?.exitInfo)}`);
+  noErr(r, w); w.dispose(); return r;
+}
+
+// ── 21) الثنائي: انقطاع حقيقي (Firebase يطبّق onDisconnect محلياً أولاً) — من انقطع لا يفوز ──
+// اكتشفه مراجع v35.6: المنقطع يرى "انتهت" قبل الخادم؛ لو قرأ الغرفة من الشبكة وجدها "جارية" فأعلن فوزه
+async function dropCase(r, dropper, label, timing) {
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const { A, B } = await duoMatch(w);
+  const D = dropper === 'A' ? A : B, S = dropper === 'A' ? B : A;
+  const dNum = dropper === 'A' ? 1 : 2;
+  D.drop(timing); await w.run(Math.max(timing.offlineMs, timing.serverDetectMs) + 4000);
+  const eS = endsOf(S, 'end');
+  r.ok(eS.length === 1 && eS[0].exitInfo?.[dNum] === 'انقطع' && /فزت/.test(eS[0].title || ''), `${label}: الباقي يفوز: "${eS[0]?.title}"`);
+  r.ok(endsOf(D, 'end').length === 0, `${label}: من انقطع لا نافذة فوز عنده ولا تسجيل`);
+  r.ok(/انقطع اتصالك/.test(D.toasts()), `${label}: ومن انقطع يرى "انقطع اتصالك — انتهت المباراة"`);
+  noErr(r, w); w.dispose();
+}
+export async function duoRealDrop(verbose = false) {
+  const r = suite('الثنائي: انقطاع حقيقي للمضيف أو المنضم → الباقي يفوز، ومن انقطع لا يعلن فوزه'); r.verbose = verbose;
+  // الخادم يلاحظ أولاً، ثم يعود الجهاز
+  await dropCase(r, 'A', 'المضيف ينقطع (الخادم يلاحظ أولاً)', { offlineMs: 4000, serverDetectMs: 1500 });
+  await dropCase(r, 'B', 'المنضم ينقطع (الخادم يلاحظ أولاً)', { offlineMs: 4000, serverDetectMs: 1500 });
+  // الأصعب والأشيع: انقطاع قصير يعود منه الجهاز قبل أن يلاحظ الخادم (قد يتأخر حتى دقيقة) —
+  // الخادم ما زال "جارية" عند العودة، فأي قراءة شبكة كانت تُعلن فوز المنقطع
+  await dropCase(r, 'A', 'المضيف ينقطع (يعود قبل الخادم)', { offlineMs: 3000, serverDetectMs: 20000 });
+  await dropCase(r, 'B', 'المنضم ينقطع (يعود قبل الخادم)', { offlineMs: 3000, serverDetectMs: 20000 });
+  return r;
+}
+
+// ── 21ب) انقطاع طويل: الفائز يخرج (أو يغلق صفحته) قبل عودة المنقطع — لا يُقرأ خروجه انسحاباً ──
+export async function duoLongDrop(verbose = false) {
+  const r = suite('الثنائي: انقطاع طويل ثم خروج الفائز → العائد لا يعلن فوزه'); r.verbose = verbose;
+  for (const how of ['زر الخروج', 'إغلاق الصفحة']) {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const { A, B } = await duoMatch(w);
+    const code = A.om.roomCode;
+    B.drop({ offlineMs: 20000, serverDetectMs: 1500 }); await w.run(4000);
+    r.ok(endsOf(A, 'end').length === 1, `${how}: المضيف فاز بانقطاع المنضم`);
+    if (how === 'زر الخروج') A.withdraw(); else A.closeTab();
+    await w.run(3000);
+    r.ok(w.server.getAt(`rooms/${code}/leftBy`) == null && w.server.getAt(`rooms/${code}/dropped1`) == null,
+      `${how}: خروج الفائز بعد النهاية صامت (لا leftBy ولا dropped1 فوق غرفة انتهت)`);
+    r.ok(endsOf(A, 'forfeit').length === 0, `${how}: الفائز لا تُسجَّل عليه خسارة بخروجه بعد النهاية`);
+    await w.run(20000);   // المنقطع يعود
+    r.ok(endsOf(B, 'end').length === 0 && /انقطع اتصالك/.test(B.toasts()), `${how}: العائد يعرف أنه هو من انقطع، بلا فوز`);
+    noErr(r, w); w.dispose();
+  }
+  return r;
+}
+
+// ── 21ج) مباراة ثانية بعد الأولى: معالجات الأولى لا تبقى، وما يصل قبل تحميل الثانية لا يضيع ──
+// (مراجعة v35.6: المعالجات القديمة كانت تلتقط أحداث الغرفة الجديدة قبل أن تسجّل معالجاتها
+//  فيُسجَّل الفوز مرتين؛ وبفصلها يجب أن يُسلَّم "انتهت" المبكر عند التسجيل لا أن يضيع)
+export async function duoSecondMatch(verbose = false) {
+  const r = suite('الثنائي: مباراة ثانية — معالجات الأولى تُفصل، وانسحاب مبكر في الثانية يُسجَّل مرة واحدة'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const { A, B } = await duoMatch(w);
+  B.withdraw(); await w.run(4000);
+  r.ok(endsOf(A, 'end').length === 1, 'المباراة الأولى: أحمد فاز بانسحاب باسل');
+  A.mods.og.leaveOnlineMatch(); await w.run(1500);      // "العب مجدداً" بعد النهاية
+  r.ok(A.om._cbLeft == null && A.om._cbRestart == null && A.om._cbMove == null,
+    'بعد المغادرة: لا معالجات نهاية ولا حركات من المباراة الأولى');
+  const C = await w.client('كريم');
+  await A.startSearch(2); await w.run(1500); await C.startSearch(2);
+  // كريم ينسحب فور بدء المباراة — قبل أن يكمل أحمد تحميلها ويسجّل معالجاتها (800ms)
+  r.ok(await waitFor(w, () => C.matches.length > 0 || (C.om.roomCode && A.om.roomCode === C.om.roomCode), 8000), 'بدأت المباراة الثانية');
+  C.withdraw(); await w.run(6000);
+  const e = endsOf(A, 'end');
+  r.ok(e.length === 2, `أحمد: نافذة نتيجة واحدة للمباراة الثانية (المجموع ${e.length} من 2)`);
+  r.ok(e[1]?.exitInfo?.[2] === 'انسحب' && /انسحب كريم/.test(e[1]?.title || ''), `الثانية: "${e[1]?.title}"`);
+  noErr(r, w); w.dispose(); return r;
+}
+
+// ── 22ب) الجماعي: ختم انقطاع متأخر لا يُخرج لاعباً عاد ──
+// (مراجعة v35.6: بعد انقطاع قصير قد ينفّذ الخادم onDisconnect الاتصال القديم بعد العودة —
+//  فيُكتب ختم لا يمسحه أحد، ويُخرَج اللاعب المتصل بعد 10ث وتُسجَّل خسارته)
+export async function multiLateMark(verbose = false) {
+  const r = suite('الجماعي: ختم انقطاع متأخر بعد العودة لا يُخرج اللاعب'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const A = await w.client('أحمد'), B = await w.client('باسل'), C = await w.client('كريم');
+  const code = await makeCodeRoom(w, A, 3);
+  B.joinCode(code); await w.run(600); C.joinCode(code); await w.run(800);
+  A.startCode();
+  r.ok(await waitFor(w, () => A.matches.length && B.matches.length && C.matches.length, 8000), 'بدأت المباراة للثلاثة');
+  await w.run(6000);
+  C.drop({ offlineMs: 3000, serverDetectMs: 20000 });   // يعود بعد 3ث، والخادم يلاحظ بعد 20ث
+  await w.run(40000);
+  // الختم المتأخر ظهر فعلاً عند الباقين (بعد عودة كريم بـ17ث) — الحالة التي نفحصها
+  r.ok(/كريم يعاني انقطاعاً/.test(A.toasts()), 'الخادم كتب ختم الانقطاع متأخراً بعد عودة كريم');
+  r.ok(w.server.getAt(`rooms/${code}/players/${C.uid}/active`) !== false, 'كريم ما زال في المباراة (لم يُخرَج)');
+  r.ok(w.server.getAt(`rooms/${code}/players/${C.uid}/disconnectedAt`) == null, 'الختم المتأخر مُسح');
+  r.ok([A, B, C].every(c => endsOf(c, 'end').length === 0 && endsOf(c, 'forfeit').length === 0), 'لا نهاية ولا خسارة لأحد');
+  noErr(r, w); w.dispose(); return r;
+}
+
+// ── 22) الجماعي: آخر الباقين يفوز، ومن خرج وبقيت صفحته تُسجَّل خسارته ──
+export async function multiLastStanding(verbose = false) {
+  const r = suite('الجماعي: انسحاب الجميع إلا واحداً → فوزه بنافذة النتيجة، والخارج الحاضر خسارة'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const A = await w.client('أحمد'), B = await w.client('باسل'), C = await w.client('كريم');
+  const code = await makeCodeRoom(w, A, 3);
+  B.joinCode(code); await w.run(600); C.joinCode(code); await w.run(800);
+  A.startCode();
+  r.ok(await waitFor(w, () => A.matches.length && B.matches.length && C.matches.length, 8000), 'بدأت المباراة للثلاثة');
+  await w.run(6000);
+  B.withdraw(); await w.run(2000);
+  r.ok(endsOf(B, 'forfeit').length === 1, 'باسل انسحب بالزر: خسارته مسجّلة');
+  r.ok(endsOf(A, 'end').length === 0 && endsOf(C, 'end').length === 0, 'بقي اثنان: المباراة تكمل بلا نهاية');
+  C.drop({ offlineMs: 15000, serverDetectMs: 1500 }); await w.run(17000);   // كريم ينقطع أكثر من مهلة السماح (10ث) وصفحته مفتوحة
+  const eA = endsOf(A, 'end'), eC = endsOf(C, 'end');
+  r.ok(eA.length === 1 && /فزت بالمباراة/.test(eA[0].title || '') && /جميع خصومك/.test(eA[0].title || ''), `أحمد آخر الباقين: "${eA[0]?.title}"`);
+  r.ok(eC.length === 1 && /كنت خارجها/.test(eC[0].title || ''), `كريم (خرج وصفحته مفتوحة): "${eC[0]?.title}"`);
+  r.ok(endsOf(B, 'end').length === 0, 'المنسحب بالزر لا تصله نافذة (غادر الغرفة)');
+  await w.run(5000);
+  r.ok(endsOf(A, 'end').length === 1 && endsOf(C, 'end').length === 1, 'لا تكرار للنهاية مع تحديثات الغرفة اللاحقة');
+  noErr(r, w); w.dispose(); return r;
+}

@@ -1,4 +1,4 @@
-// فحوص نافذة نهاية المباراة (v35.5) — المحاكي لا يصلها (يشغّل البحث واللوبي فقط)
+// فحوص نافذة نهاية المباراة (v35.5، ونهايات الخروج v35.6) — المحاكي لا يصل منطقها الداخلي
 // 1) الدالة النقية core/matchResult.js: من لعب فعلاً، من "أنا"، المراكز، نوع المباراة
 // 2) تكامل gameEnd.js الحقيقي: الأسطر المعروضة + ما يُسجَّل فعلاً (إحصائيات/سجل/سلسلة/خبرة)
 //    — يُحمَّل في سياق vm مع بدائل لـFirebase والواجهة، ونلتقط كل استدعاء تسجيل.
@@ -102,7 +102,7 @@ const STUBS = {
     export let currentUser = globalThis.__user;
     export async function updateAIStats(r) { C.push(['ai', r]); }
     export async function updateLocalStats(r, p2) { C.push(['local', r, p2]); }
-    export async function updateOnlineStats(r, uid, name) { C.push(['online', r, uid ?? null, name]); }
+    export async function updateOnlineStats(r, uid, name) { C.push(['online', r, uid ?? null, name]); if (globalThis.__gate) await globalThis.__gate; }
     export async function updateMultiStats(rank, players, score) { C.push(['multi', rank, players, score]); }
     export async function getAllStats() { return {}; }`,
   'history.js': `export async function saveMatch(d) { globalThis.__calls.push(['history', d.mode, d.result, d.myScore, d.oppScore, d.vs]); }`,
@@ -114,11 +114,12 @@ const STUBS = {
     export async function addXP() { return null; }`,
   'xpUI.js': `export function showXPGain() {}`,
   'dailyChallengeUI.js': `export function isDailyActive() { return false; } export async function finishDailyChallenge() {}`,
-  'wallet.js': `export async function commitMatchCoins() { return { earned: 0, total: 0 }; }`,
+  'wallet.js': `export async function commitMatchCoins() { globalThis.__calls.push(['coins']); return { earned: 0, total: 0 }; }`,
 };
 const REAL = { 'gameEnd.js': '/js/ui/gameEnd.js', 'matchResult.js': '/js/core/matchResult.js' };
 
-export async function runEndGame(cfg, scores, { user = { uid: 'uid_me' }, forced = false, loser = null } = {}) {
+// بيئة معزولة واحدة (يمكن استدعاء أكثر من دالة فيها بالتتابع — لفحص "مرة واحدة لكل مباراة")
+export async function loadGameEnd({ user = { uid: 'uid_me' } } = {}) {
   const calls = [], els = new Map();
   const document = { getElementById: id => { if (!els.has(id)) els.set(id, new El(id)); return els.get(id); }, createElement: () => new El() };
   const g = { document, console, setTimeout: () => 0, clearTimeout: () => {}, __calls: calls, __user: user };
@@ -135,16 +136,26 @@ export async function runEndGame(cfg, scores, { user = { uid: 'uid_me' }, forced
   const root = getMod('gameEnd.js');
   await root.link(async spec => getMod(spec.split('?')[0].split('/').pop()));
   await root.evaluate();
-  await root.namespace.endGame(cfg, scores, forced, loser);
-  await new Promise(res => setImmediate(res));
   const strip = s => String(s).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-  const h2h = document.getElementById('head-to-head');
-  return {
-    calls,
-    rows: document.getElementById('winner-details').children.map(c => strip(c.innerHTML)),
-    message: document.getElementById('winner-message').textContent,
-    h2hHidden: h2h.classList.contains('hidden'), h2h: strip(h2h.innerHTML),
+  const view = () => {
+    const h2h = document.getElementById('head-to-head');
+    return {
+      calls: calls.slice(),
+      rows: document.getElementById('winner-details').children.filter(c => !c._t).map(c => strip(c.innerHTML)),
+      message: document.getElementById('winner-message').textContent,
+      h2hHidden: h2h.classList.contains('hidden'), h2h: strip(h2h.innerHTML),
+    };
   };
+  // بوابة تحبس التسجيل في منتصفه (كرحلة شبكة بطيئة) حتى نفتحها
+  const hold = () => { let open; g.__gate = new Promise(res => { open = res; }); return () => { g.__gate = null; open(); }; };
+  return { ns: root.namespace, calls, view, hold };
+}
+
+export async function runEndGame(cfg, scores, { user = { uid: 'uid_me' }, forced = false, loser = null, exitInfo = null, opts = {} } = {}) {
+  const env = await loadGameEnd({ user });
+  await env.ns.endGame(cfg, scores, forced, loser, exitInfo, opts);
+  await new Promise(res => setImmediate(res));
+  return env.view();
 }
 const pick = (calls, kind) => calls.find(c => c[0] === kind);
 
@@ -173,7 +184,8 @@ export async function resultsEndGame(verbose = false) {
 
   // ج) المشاهد يتابع حتى النهاية: يرى الترتيب ولا يُسجَّل له شيء
   o = await runEndGame(online(null, 3, full3, { spectator: true, onlineOpponentUid: 'stale' }), { 1: 2, 2: 5, 3: 2 });
-  r.ok(o.calls.length === 0, `المشاهد: صفر تسجيلات (${o.calls.map(c => c[0]).join(',') || 'لا شيء'})`);
+  const recs = o.calls.filter(c => c[0] !== 'coins');   // إضافة العملات بلا عملات (0) ليست تسجيلاً
+  r.ok(recs.length === 0, `المشاهد: صفر تسجيلات (${recs.map(c => c[0]).join(',') || 'لا شيء'})`);
   r.ok(o.rows.length === 3 && o.h2hHidden && o.message.includes('باسل'), 'المشاهد يرى الترتيب والفائز بلا مربع "إحصائياتك"');
 
   // د) الثنائي (المنضم) + ضد الكمبيوتر + المحلي: كما كانت
@@ -185,6 +197,100 @@ export async function resultsEndGame(verbose = false) {
   r.ok(same(pick(o.calls, 'local'), ['local', 'loss', 'ب']), 'المحلي كما كان');
   // الضيف (بلا حساب): تُعرض النتيجة ولا يُسجَّل شيء
   o = await runEndGame(online(2, 3, full3), { 1: 2, 2: 5, 3: 2 }, { user: null });
-  r.ok(o.calls.length === 0 && o.rows.length === 3, 'بلا تسجيل دخول: عرض فقط');
+  r.ok(o.calls.filter(c => c[0] !== 'coins').length === 0 && o.rows.length === 3, 'بلا تسجيل دخول: عرض فقط');
+  return r;
+}
+
+// ═════════ 3) نهايات الخروج والانسحاب (v35.6) ═════════
+export async function resultsExitEndings(verbose = false) {
+  const r = suite('نهايات الخروج: فوز بانسحاب الخصم، خسارة المنسحب، ومرة واحدة لكل مباراة'); r.verbose = verbose;
+  const duo = (me, extra = {}) => ({ aiMode: 'online', online: true, rows: 4, cols: 4, colors: COLORS, players: 2,
+    onlinePlayerNum: me, onlineOpponentUid: me === 1 ? 'uJoin' : 'uHost', multiPlayers: null,
+    onlinePlayerNames: { 1: 'المضيف', 2: 'المنضم' }, ...extra });
+  const count = (calls, kind) => calls.filter(c => c[0] === kind).length;
+
+  // أ) الفوز بانسحاب الخصم في الثنائي — منتصف المباراة (النقاط لم تكتمل) وأنا متأخر بالنقاط
+  let env = await loadGameEnd();
+  await env.ns.endGame(duo(1), { 1: 1, 2: 3 }, true, null, { 2: 'انسحب' }, { title: '🏆 فزت! انسحب المنضم' });
+  let o = env.view();
+  r.ok(o.message === '🏆 فزت! انسحب المنضم', `عنوان النافذة: "${o.message}"`);
+  r.ok(same(pick(o.calls, 'online'), ['online', 'win', 'uJoin', 'المنضم']), `فوز مسجّل ضد المنسحب رغم تأخري بالنقاط (${JSON.stringify(pick(o.calls, 'online'))})`);
+  r.ok(same(pick(o.calls, 'streak'), ['streak', 'win']) && same(pick(o.calls, 'xp')?.slice(0, 3), ['xp', 'online', 'win']), 'السلسلة والخبرة: فوز');
+  r.ok(count(o.calls, 'coins') === 1, 'عملات الجواهر تُضاف (كانت تضيع مع الرسالة وإعادة التحميل)');
+  r.ok(o.rows.length === 2 && /انسحب/.test(o.rows[1]) && /^1\. المضيف/.test(o.rows[0]), `الترتيب: ${o.rows.join(' | ')}`);
+
+  // ب) نهاية ثانية في نفس المباراة (إشارتان متزامنتان): لا تسجيل ثانٍ ولا عملات مرتين، والمربع يبقى
+  await env.ns.endGame(duo(1), { 1: 1, 2: 3 }, true, null, { 2: 'انسحب' }, { title: '🏆 فزت! انسحب المنضم' });
+  o = env.view();
+  r.ok(count(o.calls, 'online') === 1 && count(o.calls, 'history') === 1 && count(o.calls, 'streak') === 1, 'النهاية الثانية لا تسجّل مرة أخرى');
+  r.ok(count(o.calls, 'coins') === 1, 'ولا تضيف العملات مرة أخرى');
+  r.ok(!o.h2hHidden && /المنضم/.test(o.h2h), 'ومربع "إحصائياتك" يبقى ظاهراً');
+
+  // ج) المنسحب بالزر (الثنائي): خسارة مسجّلة بلا نافذة وبلا عملات
+  env = await loadGameEnd();
+  await env.ns.recordForfeit(duo(2), { 1: 2, 2: 4 });
+  o = env.view();
+  r.ok(same(pick(o.calls, 'online'), ['online', 'loss', 'uHost', 'المضيف']) && same(pick(o.calls, 'streak'), ['streak', 'loss']),
+    `المنسحب: خسارة ضد خصمه رغم تقدّمه بالنقاط (${JSON.stringify(pick(o.calls, 'online'))})`);
+  r.ok(same(pick(o.calls, 'history')?.slice(0, 3), ['history', 'online', 'loss']), 'سجل المباريات: خسارة');
+  r.ok(count(o.calls, 'coins') === 0 && o.message === '', 'بلا عملات وبلا نافذة نتيجة');
+  // نهاية لاحقة شاردة على نفس الجهاز لا تسجّل فوقها ولا تضيف العملات
+  await env.ns.endGame(duo(2), { 1: 2, 2: 7 }, false, null, null);
+  o = env.view();
+  r.ok(count(o.calls, 'online') === 1 && count(o.calls, 'coins') === 0, 'نهاية شاردة بعد الانسحاب لا تغيّر شيئاً مسجّلاً');
+
+  // د) المنسحب بالزر (الجماعي): آخر مركز وخسارة
+  const three = mp(['u1', 1, 'أحمد'], ['u2', 2, 'باسل'], ['u3', 3, 'كريم']);
+  env = await loadGameEnd();
+  await env.ns.recordForfeit(online(1, 3, three), { 1: 4, 2: 1, 3: 0 });
+  o = env.view();
+  r.ok(same(pick(o.calls, 'multi'), ['multi', 3, 3, 4]) && same(pick(o.calls, 'history')?.slice(0, 3), ['history', 'multi', 'loss']),
+    `الجماعي: المنسحب آخر المراكز حتى لو كان متقدّماً (${JSON.stringify(pick(o.calls, 'multi'))})`);
+
+  // هـ) آخر الباقين بالجماعي: الخارجون من القائمة (active:false) بشارة "انسحب" والفوز له
+  const outs = mp(['u1', 1, 'أحمد'], ['u2', 2, 'باسل', false], ['u3', 3, 'كريم', false]);
+  o = await runEndGame(online(1, 3, outs), { 1: 2, 2: 3, 3: 1 }, { forced: true, opts: { title: '🏆 فزت بالمباراة! انسحب جميع خصومك' } });
+  r.ok(same(pick(o.calls, 'multi'), ['multi', 1, 3, 2]) && same(pick(o.calls, 'streak'), ['streak', 'win']), `آخر الباقين: مركز 1 وفوز (${JSON.stringify(pick(o.calls, 'multi'))})`);
+  r.ok(o.rows.filter(t => /انسحب/.test(t)).length === 2 && o.message.includes('جميع خصومك'), `الترتيب: ${o.rows.join(' | ')}`);
+
+  // ز) غادر اللاعب قبل ظهور النافذة (displayIf=false): تسجيل وعملات بلا عرض فوق القائمة
+  env = await loadGameEnd();
+  await env.ns.endGame(duo(1), { 1: 1, 2: 3 }, true, null, { 2: 'انسحب' }, { title: '🏆 فزت!', displayIf: () => false });
+  o = env.view();
+  r.ok(count(o.calls, 'online') === 1 && count(o.calls, 'coins') === 1 && o.message === '', 'غادر قبل ظهور النافذة: فوزه وعملاته مسجّلة، بلا نافذة فوق القائمة');
+
+  // ح) نهايتان متزامنتان فعلاً (لا تنتظر إحداهما الأخرى): تسجيل واحد، عملات مرة، والمربع ظاهر
+  env = await loadGameEnd();
+  await Promise.all([
+    env.ns.endGame(duo(1), { 1: 6, 2: 3 }, false, null, null),
+    env.ns.endGame(duo(1), { 1: 6, 2: 3 }, true, null, { 2: 'انسحب' }, { title: '🏆 فزت! انسحب المنضم' }),
+  ]);
+  o = env.view();
+  r.ok(count(o.calls, 'online') === 1 && count(o.calls, 'coins') === 1, 'نهايتان متزامنتان: تسجيل واحد وعملات مرة واحدة');
+  r.ok(!o.h2hHidden && /المنضم/.test(o.h2h), 'والنافذة الثانية تنتظر نتيجة الأولى فيبقى مربع "إحصائياتك" ظاهراً');
+
+  // ط) بدأت مباراة جديدة أثناء تسجيل نتيجة السابقة (رحلات شبكة بطيئة) — مراجعة v35.6:
+  //    عملات السابقة تُثبَّت قبل الانتظار، ونافذتها لا تُعرض فوق الجديدة، وحارس الجديدة سليم
+  env = await loadGameEnd();
+  const open = env.hold();
+  const pending = env.ns.endGame(duo(1), { 1: 1, 2: 3 }, true, null, { 2: 'انسحب' }, { title: '🏆 فزت! انسحب المنضم' });
+  await new Promise(res => setImmediate(res));
+  r.ok(count(env.calls, 'coins') === 1, 'عملات المباراة المنتهية ثُبّتت قبل انتظار التسجيل');
+  env.ns.resetMatchTimer();   // "العب مجدداً" → مباراة جديدة قبل أن يكتمل التسجيل
+  open(); await pending; await new Promise(res => setImmediate(res));
+  o = env.view();
+  r.ok(o.message === '' && o.rows.length === 0, 'نافذة المباراة السابقة لا تُعرض فوق الجديدة');
+  await env.ns.endGame(duo(1), { 1: 6, 2: 3 }, false, null, null);
+  o = env.view();
+  r.ok(count(o.calls, 'online') === 2 && count(o.calls, 'coins') === 2 && /فاز/.test(o.message),
+    'المباراة الجديدة تُسجَّل وتُثبَّت عملاتها وتُعرض نافذتها كالمعتاد');
+
+  // و) الضيف بلا حساب والمشاهد: الانسحاب لا يسجّل شيئاً
+  env = await loadGameEnd({ user: null });
+  await env.ns.recordForfeit(duo(1), { 1: 1, 2: 1 });
+  r.ok(env.calls.length === 0, 'بلا تسجيل دخول: لا شيء يُسجَّل');
+  env = await loadGameEnd();
+  await env.ns.recordForfeit({ ...duo(null), spectator: true }, { 1: 1, 2: 1 });
+  r.ok(env.calls.length === 0, 'المشاهد: لا شيء يُسجَّل');
   return r;
 }

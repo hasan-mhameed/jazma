@@ -14,6 +14,8 @@ export const state = {
 export function initState(cfg) {
   state.lines = new Set();
   state.currentPlayer = 1;
+  // (gameFinished لا يُصفَّر هنا: initState تُستدعى أيضاً عند الخروج (resetState) — والمباراة
+  //  المنتهية تبقى "منتهية" حتى تبدأ لوحة جديدة (startBoard) وإلا تعود معالجاتها للعمل)
   state.scores = {};
   for (let i = 1; i <= (cfg.players || 2); i++) state.scores[i] = 0;
   state.rows = cfg.rows;

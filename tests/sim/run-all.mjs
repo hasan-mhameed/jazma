@@ -18,7 +18,10 @@ const sections = [
     () => S.codeSeatReuse(verbose), () => S.codeExHostRejoins(verbose), () => S.codeHostClosesTab(verbose),
     () => S.abandonedRoomIgnored(verbose)]],
   ['⚔️ البحث الثنائي', [() => S.duoBasics(verbose), () => S.duoCancel(verbose), () => S.duoRaces(verbose)]],
-  ['🏁 نافذة نهاية المباراة', [() => RS.resultsPure(verbose), () => RS.resultsEndGame(verbose)]],
+  ['🚪 نهايات الانسحاب', [
+    () => S.duoWithdrawEnding(verbose), () => S.duoDropEnding(verbose), () => S.duoRealDrop(verbose), () => S.duoLongDrop(verbose),
+    () => S.duoSecondMatch(verbose), () => S.multiLastStanding(verbose), () => S.multiLateMark(verbose)]],
+  ['🏁 نافذة نهاية المباراة', [() => RS.resultsPure(verbose), () => RS.resultsEndGame(verbose), () => RS.resultsExitEndings(verbose)]],
 ];
 
 for (const [title, runs] of sections) {

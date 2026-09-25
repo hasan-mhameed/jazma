@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1789998455";
+import { getCurrentUser }   from "./auth.js?v=1790013057";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -116,7 +116,9 @@ export class OnlineManager {
       status: "playing",
     });
 
-    onDisconnect(ref(db, `rooms/${code}/status`)).set("finished");
+    // الانقطاع ينهي المباراة ويسجّل من انقطع (droppedN) في كتابة واحدة ذرّية —
+    // فيعرف الطرف الآخر أنه فاز، ويعرف المنقطع (لو عاد) أنه هو من خرج (v35.6)
+    this._armDuoDisconnect(code);
     this._listenForMoves(code);
     this._listenBankUpdate(code);
     this._listenClock(code);
@@ -156,7 +158,8 @@ export class OnlineManager {
       await update(ref(db, `rooms/${joinCode}`), {
         p2name: name, p2uid: myUid, status: "playing", public: false,
       });
-      onDisconnect(ref(db, `rooms/${joinCode}/status`)).set("finished");
+      // انقطاع = إنهاء + تسجيل من انقطع (ذرّياً) — انظر joinRoom
+      this._armDuoDisconnect(joinCode);
       this._listenForMoves(joinCode);
       this._listenBankUpdate(joinCode);
       this._listenClock(joinCode);
@@ -239,22 +242,43 @@ export class OnlineManager {
     } catch {}
   }
 
+  // ══ الثنائي: من انقطع؟ (v35.6) ══════════════════════════════
+  // الانقطاع ينهي المباراة ويعلّم **مقعدي** (dropped1/dropped2) في كتابة ذرّية واحدة.
+  // علم لكل مقعد (لا حقل مشترك): انقطاع لاحق للطرف الآخر لا يمحو علامتي.
+  // مهم: Firebase يطبّق أوامر onDisconnect **محلياً** على جهاز من انقطع لحظة يكتشف انقطاعه —
+  // فيرى "انتهت" قبل الجميع؛ علامته في نفس اللقطة تمنعه من إعلان فوز ليس له.
+  _armDuoDisconnect(code) {
+    try {
+      onDisconnect(ref(db, `rooms/${code}`)).update({ status: "finished", ["dropped" + this.playerNum]: true });
+    } catch {}
+  }
+  // نهاية المباراة عندي: لا نكتب شيئاً بعدها لو أغلقتُ الصفحة (كانت تبقى مسلّحة للأبد)
+  // المشاهد لا يملك أمراً على مستوى الغرفة — والإلغاء عليها يلغي معه تنظيف حضوره (spectators/uid)
+  disarmDuoDisconnect() {
+    if (!this.roomCode || this._isMulti || this.isSpectator) return;
+    try { onDisconnect(ref(db, `rooms/${this.roomCode}`)).cancel(); } catch {}
+  }
+  // آخر لقطة للغرفة من مستمعها (تشمل ما طبّقه Firebase محلياً عند انقطاعي) — بلا قراءة من الشبكة
+  lastRoom() { return this._lastRoom || null; }
+  isOnline() { return this._online; }
+
   // ══ الاستماع لانضمام اللاعب 2 ══════════════════════════════
   _listenForPlayer2(code) {
     const unsub = onValue(ref(db, `rooms/${code}`), (snap) => {
       if (!snap.exists()) return;
       const room = snap.val();
+      this._lastRoom = room;
       if (room.status === "playing" && !this._gameStarted && room.p2name) {
         this._gameStarted = true;
         // بدأ اللعب: نغيّر سلوك الانقطاع من "مسح" إلى "إنهاء" (ليصل إشعار للخصم)
-        try {
-          onDisconnect(ref(db, `rooms/${code}`)).cancel();
-          onDisconnect(ref(db, `rooms/${code}/status`)).set("finished");
-        } catch {}
+        // + تسجيل من انقطع (droppedN) في نفس الكتابة الذرّية (v35.6)
+        try { onDisconnect(ref(db, `rooms/${code}`)).cancel(); } catch {}
+        this._armDuoDisconnect(code);
         this._cbJoined && this._cbJoined(room.p2name);
       }
       if (room.status === "finished" && this._gameStarted) {
-        this._cbLeft && this._cbLeft();
+        // نمرّر اللقطة نفسها: القرار (من خرج؟) يُتّخذ منها لا من قراءة شبكة قد تتأخر أو تتقادم
+        this._cbLeft && this._cbLeft(room);
       }
     });
     this._unsubs.push(unsub);
@@ -363,6 +387,8 @@ export class OnlineManager {
     this._pendingMove = null; this._pendingMoves = [];
     this._lastClock = null; this._cbMove = null; this._cbClock = null;
     this._cbLobby = null; this._cbPlayerLeft = null;
+    // v35.6: معالجات المباراة السابقة لا تبقى لتلتقط أحداث الغرفة التالية
+    this._cbLeft = null; this._cbRestart = null; this._lastRoom = null;
   }
 
   async getRoomType(code) {
@@ -909,19 +935,27 @@ export class OnlineManager {
   }
 
   // ══ الاستماع لمغادرة الخصم (للاعب 2) ════════════════════════
+  // v35.6: على الغرفة كلها (كان على status وحده) — فتصل مع "انتهت" علامةُ من خرج
+  // (leftBy/droppedN) في نفس اللقطة، بما فيها ما طبّقه Firebase محلياً عند انقطاعي أنا
   _listenForOpponentLeave(code) {
     let firstCall = true; // تجاهل أول استدعاء (القيمة الحالية)
-    const unsub = onValue(ref(db, `rooms/${code}/status`), (snap) => {
+    const unsub = onValue(ref(db, `rooms/${code}`), (snap) => {
+      if (!snap.exists()) return;
+      const room = snap.val();
+      this._lastRoom = room;
       if (firstCall) { firstCall = false; return; }
-      if (snap.val() === "finished") {
-        this._cbLeft && this._cbLeft();
+      if (room.status === "finished") {
+        this._cbLeft && this._cbLeft(room);
       }
     });
     this._unsubs.push(unsub);
   }
 
   // ══ مغادرة ══════════════════════════════════════════════════
-  async leaveRoom() {
+  // announce (الثنائي): نعلن الخروج (status: finished + leftBy) فقط لو خرجنا من مباراة جارية.
+  // بعد نهاية المباراة عندي: مغادرة صامتة — وإلا يكتب الفائز leftBy فوق غرفة انتهت فيقرأها
+  // من انقطع ثم عاد كأن خصمه انسحب (v35.6). الافتراضي true للمستدعين القدامى.
+  async leaveRoom({ announce = true } = {}) {
     // 👁️ حماية: المشاهد لا يغادر عبر مسار اللاعبين إطلاقاً (وإلا تُنهى المباراة)
     if (this.isSpectator) return this.leaveSpectator();
     // نتذكّر الغرفة التي نغادرها: لا نعود إليها فوراً في بحث جديد
@@ -929,12 +963,16 @@ export class OnlineManager {
     if (this.roomCode) this._recentlyLeft = { code: this.roomCode, at: Date.now() };
     this._unsubs.forEach(u => u());
     this._unsubs = [];
+    this._lastRoom = null;
     // إلغاء أي onDisconnect مسجّل للغرفة القديمة (وإلا يكتب فيها بعد مغادرتنا)
+    // مستوى الغرفة يُلغى دائماً (الثنائي لا يضبط _myUid — كان يبقى مسلّحاً بعد المغادرة)
+    if (this.roomCode) {
+      try { await onDisconnect(ref(db, `rooms/${this.roomCode}`)).cancel(); } catch {}
+    }
     if (this.roomCode && this._myUid) {
       try {
         await onDisconnect(ref(db, `rooms/${this.roomCode}/players/${this._myUid}`)).cancel();
         await onDisconnect(ref(db, `rooms/${this.roomCode}/players/${this._myUid}/disconnectedAt`)).cancel();
-        await onDisconnect(ref(db, `rooms/${this.roomCode}`)).cancel();
       } catch {}
     }
     if (this.roomCode) {
@@ -963,7 +1001,7 @@ export class OnlineManager {
       } else {
         // الثنائي: ننهي المباراة فقط إذا كنّا لاعبين فيها فعلاً
         // (leaveRoom تُستدعى أيضاً كتنظيف قبل البحث — يجب ألّا تُنهي غرفة غيرنا)
-        if (this.playerNum) {
+        if (this.playerNum && announce) {
           await update(ref(db, `rooms/${this.roomCode}`), {
             status: "finished", leftBy: this.playerNum,
           });
@@ -989,6 +1027,12 @@ export class OnlineManager {
     this._cbLobby = null;
     this._cbMultiStart = null;
     this._cbPlayerLeft = null;
+    // v35.6 (مراجعة): معالجات نهاية المباراة والحركات تُفصل مع المغادرة — وإلا تلتقط أحداث
+    // الغرفة التالية قبل أن تسجّل مباراتها معالجاتها (فوز يُسجَّل مرتين، أو حركات أولى تضيع
+    // في معالج قديم بدل أن تنتظر في الطابور). ما يصل قبل التسجيل يُسلَّم عنده (onOpponentLeft).
+    this._cbLeft = null;
+    this._cbRestart = null;
+    this._cbMove = null;
   }
 
   // ══ إرسال إشعار restart ═════════════════════════════════════
@@ -1032,7 +1076,15 @@ export class OnlineManager {
     }
   }
   onOpponentJoined(cb){ this._cbJoined  = cb; }
-  onOpponentLeft(cb)  { this._cbLeft    = cb; }
+  onOpponentLeft(cb)  {
+    this._cbLeft = cb;
+    // "انتهت" وصلت قبل تسجيل المعالج (أول لحظات المباراة، قبل اكتمال تحميلها) → نسلّمها الآن
+    // بدل أن تضيع (المعالج يقرّر من اللقطة نفسها؛ ويتجاهلها لو كانت المباراة منتهية عنده) — v35.6
+    const r = this._lastRoom;
+    if (cb && r && r.status === "finished") {
+      setTimeout(() => { if (this._cbLeft === cb && this._lastRoom === r) cb(r); }, 0);
+    }
+  }
   onConnectionChange(cb) { this._cbConnection = cb; }
   isMyTurn(cp)        { return !this.isSpectator && cp === this.playerNum; }
 
@@ -1041,6 +1093,7 @@ export class OnlineManager {
     const connRef = ref(db, ".info/connected");
     const unsub   = onValue(connRef, snap => {
       const connected = snap.val();
+      this._online = connected;   // v35.6: من كان غير متصل لحظة النهاية لا يعلن فوزاً
       this._cbConnection && this._cbConnection(connected);
     });
     this._unsubs.push(unsub);

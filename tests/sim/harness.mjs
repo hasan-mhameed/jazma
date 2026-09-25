@@ -102,6 +102,7 @@ class Server {
   notify() {
     for (const L of this.valueL) {
       if (L.dead) continue;
+      if (!L.client.connected) continue;   // غير المتصل لا يستلم؛ يُعاد تزامنه عند عودته (drop)
       const v = toRead(clone(this.getAt(L.path)));
       const ser = JSON.stringify(v);
       if (ser === L.lastSer) continue;       // لا حدث بلا تغيير (سلوك Firebase)
@@ -168,14 +169,25 @@ class Server {
   }
 }
 
+// تنفيذ أوامر onDisconnect على خادم (حقيقي أو نسخة ظلّ محلية)
+function applyOps(srv, ops) {
+  for (const o of ops) {
+    if (o.op === 'remove') srv.setAt(o.path, null);
+    else if (o.op === 'set') srv.setAt(o.path, resolveSV(clone(o.v), clock.now));
+    else if (o.op === 'update') for (const [k, v] of Object.entries(o.v)) srv.setAt(o.path + '/' + k, resolveSV(clone(v), clock.now));
+  }
+}
+
 function makeFdb(server, client) {
   const cleanPath = p => String(p || '').replace(/^\/+|\/+$/g, '');
   return {
     getDatabase: () => ({}),
     ref: (db, p = '') => { const path = cleanPath(p); return { path, key: path.split('/').pop() || null }; },
     serverTimestamp: () => ({ '.sv': 'timestamp' }),
+    // get() أثناء الانقطاع ينتظر العودة ثم يقرأ من الخادم (كـ Firebase: لا جواب من شبكة غائبة)
     get: (r) => new Promise(res => {
-      clock.setTimeout(() => { const v = toRead(clone(server.getAt(r.path))); clock.setTimeout(() => res(makeSnap(r.key, v)), client.down); }, client.up);
+      const go = () => clock.setTimeout(() => { const v = toRead(clone(server.getAt(r.path))); clock.setTimeout(() => res(makeSnap(r.key, v)), client.down); }, client.up);
+      if (client.connected || client.dead) go(); else (client.waiters ||= []).push(go);
     }),
     set: (r, v) => server.write(client, () => server.setAt(r.path, resolveSV(clone(v), clock.now))),
     update: (r, obj) => server.write(client, () => {
@@ -276,6 +288,10 @@ const STUBS = {
   'turnTimer.js': `export function setBank() {} export function applyClockState() {} export function stopTurnTimer() {}`,
   'state.js': `export const state = {};`,
   'auth.js': `export function getCurrentUser() { return globalThis.__user; }`,
+  // نافذة النهاية: نلتقط كل نهاية (ومعها من خرج والعنوان) وكل تسجيل انسحاب — v35.6
+  'gameEnd.js': `export function endGame(cfg, scores, forced, loser, exitInfo, opts) {
+      globalThis.__onEnd({ kind: 'end', forced: !!forced, exitInfo: exitInfo || null, title: (opts && opts.title) || null }); }
+    export async function recordForfeit(cfg) { globalThis.__onEnd({ kind: 'forfeit', me: cfg ? cfg.onlinePlayerNum : null }); }`,
   'firebase-app.js': `export function initializeApp() { return {}; } export function getApps() { return []; }`,
   'firebase-database.js': `const F = globalThis.__fdb; export const { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp } = F;`,
 };
@@ -300,7 +316,7 @@ class Client {
   constructor(world, name, { up = 30, down = 30, uid } = {}) {
     this.world = world; this.name = name; this.uid = uid || ('uid_' + name);
     this.up = up; this.down = down; this.connected = true; this.connL = []; this.onDisc = [];
-    this.last = ''; this.matches = [];
+    this.last = ''; this.matches = []; this.ends = [];
   }
   event(kind, msg) { this.world.log(this.name, kind, msg); }
   safe(fn) {
@@ -330,6 +346,11 @@ class Client {
       console: { log() {}, warn() {}, info() {}, debug() {}, error: (...a) => self.event('cerr', a.map(String).join(' ').slice(0, 200)) },
       __fdb: makeFdb(this.world.server, this),
       __user: { uid: this.uid, displayName: this.name },
+      __onEnd: (e) => {
+        if (self.dead) return;
+        self.ends.push({ at: clock.now, ...e });
+        self.event('END', e.kind === 'end' ? `نافذة النتيجة: "${e.title || 'نهاية طبيعية'}" خرج=${JSON.stringify(e.exitInfo)}` : 'تسجيل خسارة الانسحاب');
+      },
     };
     g.window = g; g.globalThis = g;
     this.doc = doc;
@@ -353,6 +374,8 @@ class Client {
     const client = this;
     this.mods.og.initOnlineGame({
       onGameStart: () => {
+        // كما يفعل main.js (launchGame) عند بدء كل مباراة: مباراة جديدة = غير منتهية
+        client.mods.state.gameFinished = false;
         const cfg = client.mods.config;
         const nums = client.om._isMulti
           ? Object.values(cfg.multiPlayers || {}).map(p => p.num).sort()
@@ -437,17 +460,59 @@ class Client {
   closeTab(serverDetectMs = 150) {
     this.event('act', 'إغلاق التبويب');
     this.dead = true; this.connected = false;
+    this.fireOnDisconnect(serverDetectMs);
+  }
+  // انقطاع عابر: الخادم يلاحظ الانقطاع وينفّذ أوامر onDisconnect (تُستهلك كما في Firebase)،
+  // والصفحة تبقى مفتوحة وتستقبل ما بعده (كأنها عادت للاتصال) — v35.6
+  blip(serverDetectMs = 150) {
+    this.event('act', 'انقطاع عابر للشبكة');
+    this.fireOnDisconnect(serverDetectMs);
+  }
+  fireOnDisconnect(serverDetectMs) {
     const ops = this.onDisc.slice(); this.onDisc = [];
     const srv = this.world.server;
-    clock.setTimeout(() => {
-      for (const o of ops) {
-        if (o.op === 'remove') srv.setAt(o.path, null);
-        else if (o.op === 'set') srv.setAt(o.path, resolveSV(clone(o.v), clock.now));
-        else if (o.op === 'update') for (const [k, v] of Object.entries(o.v)) srv.setAt(o.path + '/' + k, resolveSV(clone(v), clock.now));
-      }
-      srv.notify();
-    }, serverDetectMs);
+    clock.setTimeout(() => { applyOps(srv, ops); srv.notify(); }, serverDetectMs);
   }
+  // انقطاع حقيقي كما يفعل Firebase SDK (اكتشفه مراجع v35.6):
+  // 1) لحظة يكتشف الجهاز انقطاعه: .info/connected = false، ثم يطبّق أوامر onDisconnect الخاصة به
+  //    **محلياً** على مستمعيه (يرى "انتهت" قبل الجميع) — دون أن يصل شيء للخادم.
+  // 2) الخادم يلاحظ الانقطاع لاحقاً (serverDetectMs) فينفّذ الأوامر للجميع.
+  // 3) العودة (offlineMs): الاتصال يرجع ويُعاد تزامن مستمعيه مع حالة الخادم الحقيقية،
+  //    وتكتمل قراءات get() المعلّقة.
+  drop({ offlineMs = 3000, serverDetectMs = 1500 } = {}) {
+    this.event('act', `انقطاع شبكة (${offlineMs / 1000}ث، الخادم يلاحظ بعد ${serverDetectMs / 1000}ث)`);
+    const ops = this.onDisc.slice(); this.onDisc = [];
+    const srv = this.world.server;
+    this.connected = false;
+    this.connL.forEach(L => { if (!L.dead) this.safe(() => L.cb(makeSnap('connected', false))); });
+    const shadow = new Server(this.world); shadow.root = clone(srv.root);
+    applyOps(shadow, ops);
+    for (const L of srv.valueL) {
+      if (L.dead || L.client !== this) continue;
+      const v = toRead(clone(shadow.getAt(L.path))); const ser = JSON.stringify(v);
+      if (ser === L.lastSer) continue;
+      L.lastSer = ser;
+      clock.setTimeout(() => { if (!L.dead) this.safe(() => L.cb(makeSnap(L.key, v))); }, 1);
+    }
+    clock.setTimeout(() => { applyOps(srv, ops); srv.notify(); }, serverDetectMs);
+    clock.setTimeout(() => {
+      if (this.dead) return;
+      this.connected = true;
+      this.connL.forEach(L => { if (!L.dead) this.safe(() => L.cb(makeSnap('connected', true))); });
+      for (const L of srv.valueL) {
+        if (L.dead || L.client !== this) continue;
+        const v = toRead(clone(srv.getAt(L.path))); const ser = JSON.stringify(v);
+        if (ser === L.lastSer) continue;
+        L.lastSer = ser;
+        this.safe(() => L.cb(makeSnap(L.key, v)));
+      }
+      (this.waiters || []).splice(0).forEach(go => go());
+    }, offlineMs);
+  }
+  // زر الخروج أثناء المباراة — نفس ما يستدعيه main.js (تسجيل الخسارة ثم المغادرة)
+  withdraw() { this.event('act', 'انسحاب بالزر'); this.safe(() => this.mods.og.leaveOnlineMatch()); }
+  // نصوص الرسائل المنبثقة التي ظهرت لهذا اللاعب (من سجل الأحداث)
+  toasts() { return this.world.timeline.filter(l => l.includes(` ${this.name.padEnd(6)} toast`)).join('\n'); }
   approvalVisible() { return !this.hidden('approval-modal'); }
 }
 
