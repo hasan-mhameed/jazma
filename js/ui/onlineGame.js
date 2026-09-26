@@ -1,15 +1,15 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1790013057";
-import { setMyPresence } from "../presence.js?v=1790013057";
-import { updateScoreboard } from "./scoreboard.js?v=1790013057";
-import { config } from "../config/config.js?v=1790013057";
-import { onlineManager } from "../firebase.js?v=1790013057";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1790013057";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1790013057";
-import { state } from "../core/state.js?v=1790013057";
-import { getCurrentUser } from "../auth.js?v=1790013057";
-import { endGame, recordForfeit } from "./gameEnd.js?v=1790013057";
+import { audioManager } from "../audio/audioManager.js?v=1790376125";
+import { setMyPresence } from "../presence.js?v=1790376125";
+import { updateScoreboard } from "./scoreboard.js?v=1790376125";
+import { config } from "../config/config.js?v=1790376125";
+import { onlineManager } from "../firebase.js?v=1790376125";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1790376125";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1790376125";
+import { state } from "../core/state.js?v=1790376125";
+import { getCurrentUser } from "../auth.js?v=1790376125";
+import { endGame, recordForfeit, recordElimination } from "./gameEnd.js?v=1790376125";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1352,7 +1352,7 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
       nums.forEach(p => {
         const was = Object.values(prev).find(q => q?.num === p.num);
         if (was && was.active !== false && p.active === false) {
-          showLeaveToast(`🚪 ${p.name || 'لاعب'} خرج من المباراة`);
+          showLeaveToast(exitToastText(p));   // بسببه: نفد وقته / انقطع / انسحب (v35.7)
         }
       });
       config.multiPlayers = players;
@@ -1375,6 +1375,7 @@ export async function launchSpectator(code, onlineTurnInd, onGameStart) {
 
 export function launchOnlineMultiGame(myPlayerNum, onlineTurnInd, onGameStart) {
   config.spectator = false;   // ضمان: لا تبقى حالة مشاهدة عالقة تمنع اللعب
+  resetMyExitState();         // مباراة جديدة: لا خروج سابق ولا بطاقته
   config.online = true;
   config.aiMode = "online";
   config.onlinePlayerNum = myPlayerNum;
@@ -1429,7 +1430,10 @@ export function launchOnlineMultiGame(myPlayerNum, onlineTurnInd, onGameStart) {
     onlineManager.onConnectionChange(connected => {
       if (onlineTurnInd && connected) updateOnlineTurnIndicator(onlineTurnInd);
       // عدنا للاتصال ضمن مهلة السماح → نمسح ختم الانقطاع لنبقى في المباراة
-      if (connected) onlineManager.clearMyDisconnectMark();
+      // (من خرج من المباراة لا يعنيه ختم: لا نعيد تسليح أمر الانقطاع على مقعد خارج — v35.7)
+      // ولا بعد انتهاء المباراة عندي أو أثناء انسحابي: الكتابة على مقعدي تُلغي معاملة انسحاب تنتظر
+      // عودة الشبكة (زر الخروج بلا شبكة — مراجعة v35.7 الثانية)
+      if (connected && !isOutOfMatch() && !state.gameFinished) onlineManager.clearMyDisconnectMark();
       try { setMyPresence(connected ? "playing" : "away"); } catch {}
     });
   }, 800);
@@ -1449,12 +1453,32 @@ const _graceNotified = {}; // منع تكرار إشعار الانقطاع لك
 let _staleMarkCleared = null; // آخر ختم انقطاع متأخر مسحتُه عن مقعدي (منع تكرار الكتابة)
 function handleMultiPlayerLeft(players, onlineTurnInd) {
   // المباراة انتهت طبيعياً؟ مغادرة الآخرين بعدها ليست انسحاباً — نتجاهل بصمت
-  if (state.gameFinished) { config.multiPlayers = players; return; }
+  if (state.gameFinished) {
+    // …إلا خروجي أنا وقد وصل مع النهاية في دفعة واحدة (عودة من انقطاع: الحركات أولاً ثم القائمة —
+    // مراجعة v35.7): يُسجَّل الآن، قبل أن تحسب النهاية المؤجّلة لحظةً نتيجتي، فلا يُسجَّل لي فوز
+    // وأنا خارجها. (بلا بطاقة: نافذة النتيجة النهائية آتية)
+    // وأثناء مغادرتي بزر الخروج: يصل صدى الخادم لخروجي قبل تأكيد المعاملة نفسها — فيُسجَّل من هنا،
+    // **بصمت** كما في مسار الانسحاب (لا خبرة ولا إنجازات تقفز فوق القائمة — مراجعة v35.7 الثانية)
+    const myNow = myPlayerIn(players), myWas = myPlayerIn(config.multiPlayers);
+    config.multiPlayers = players;
+    if (myNow && myNow.active === false && myWas && myWas.active !== false) {
+      if (_leavingMatch && myNow.outReason === "left") {
+        // انسحابي أنا: القائمة من الخادم (لحظة خروجي الحقيقية) — مرة واحدة (حارس gameEnd)
+        _myExitRecorded = true;
+        recordForfeit(config, state.scores).catch(() => {});
+      } else {
+        recordMyExit(myNow, { silent: _leavingMatch });
+      }
+    }
+    return;
+  }
 
   // ══ مهلة السماح: من عنده disconnectedAt ولم يخرج بعد = منقطع مؤقتاً ══
   const GRACE_MS = 10000; // 10 ثوانٍ للعودة قبل الخروج النهائي
   const nowSrv = onlineManager.serverNow ? onlineManager.serverNow() : Date.now();
   Object.values(players || {}).forEach(p => {
+    // عقدة بلا رقم مقعد (شبح: ختم انقطاع كُتب على مقعد حُذف) ليست لاعباً — لا إشعار ولا إخراج
+    if (!p || !Number.isInteger(p.num)) return;
     // ختم انقطاع على مقعدي وأنا متصل = متأخر: الخادم نفّذ onDisconnect اتصالي القديم بعد
     // عودتي (بعد انقطاع قصير)، فلا أحد يمسحه وكنت أُخرَج بعد 10ث وتُسجَّل خسارتي بلا ذنب →
     // أمسحه فوراً ولا أحسبه انقطاعاً (مراجعة v35.6)
@@ -1466,7 +1490,10 @@ function handleMultiPlayerLeft(players, onlineTurnInd) {
       }
       return;
     }
-    if (p.active !== false && typeof p.disconnectedAt === 'number') {
+    // مهلة الآخرين فقط: لا يُخرج جهازٌ صاحبَه بناءً على رؤيته المحلية وهو منقطع (مراجعة v35.7) —
+    // كان ختمي المطبَّق محلياً عند انقطاعي يُطلق إخراجي عند عودتي حتى لو لم يلاحظ أحد غيابي.
+    // المهلة قرار من ينتظرون (والبنك يحميهم إن جاء دوري وأنا غائب).
+    if (p.num !== config.onlinePlayerNum && p.active !== false && typeof p.disconnectedAt === 'number') {
       const gone = nowSrv - p.disconnectedAt;
       if (gone >= GRACE_MS) {
         // تجاوز المهلة → خروج نهائي (أي جهاز متصل ينفّذها؛ الحساب حتمي)
@@ -1494,18 +1521,16 @@ function handleMultiPlayerLeft(players, onlineTurnInd) {
       if (p.num !== config.onlinePlayerNum) showLeaveToast(`✅ ${p.name} عاد للمباراة`);
     }
   });
-  // إشعار "اللاعب X انسحب" — نكتشف من تحوّل لغير نشط (مقارنة بالحالة السابقة)
+  // إشعار "اللاعب X خرج" — نكتشف من تحوّل لغير نشط (مقارنة بالحالة السابقة)
   const prev = config.multiPlayers || {};
   const me = config.onlinePlayerNum;
+  let myExit = null;   // خرجتُ أنا الآن (نفد وقتي / انقطعت ولم أعد) — يُعالَج بعد تحديث القائمة
   Object.values(players || {}).forEach(p => {
     const was = Object.values(prev).find(q => q.num === p.num);
     if (was && was.active !== false && p.active === false) {
-      if (p.num === me) {
-        // أنا الذي خرجت (غالباً بانقطاع الشبكة) — نوضّح وضعي بدل الغموض
-        showLeaveToast("😔 انقطع اتصالك — خرجت من المباراة (يمكنك المشاهدة فقط)");
-      } else {
-        showLeaveToast(`🚪 ${p.name} انسحب من المباراة`);
-      }
+      if (p.num === me) myExit = p;
+      // نفاد الوقت أعلنه عدّاد البنك لحظة حدوثه عند الجميع (main.js) — لا توست ثانٍ
+      else if (p.outReason !== "time") showLeaveToast(exitToastText(p));
     }
   });
   // نحدّث حالة اللاعبين النشطين (المنسحب active:false)
@@ -1518,6 +1543,10 @@ function handleMultiPlayerLeft(players, onlineTurnInd) {
   if (Object.keys(liveNames).length) config.onlinePlayerNames = liveNames;
   // لو الدور الحالي عند لاعب منسحب → ننقله لأول نشط (حساب متطابق عند الجميع)
   try { skipInactiveTurn(config); } catch {}
+  // v35.7: خروجي يُسجَّل لحظة حدوثه — قبل أي نهاية، فالمركز والعملات من هذه اللحظة، ولا تضيع
+  // الخسارة لو أُغلقت الصفحة بعدها. (النهاية اللاحقة تعرض النتيجة النهائية بلا تسجيل ثانٍ)
+  // (وأنا أغادر بزر الخروج: بصمت وبلا بطاقة — أترك الصفحة إلى القائمة)
+  const myRecord = myExit ? recordMyExit(myExit, { silent: _leavingMatch }) : null;
   updateOnlineTurnIndicator(onlineTurnInd);
   // لو بقي لاعب واحد فقط نشط → فوز بانسحاب الخصوم
   // فوز بانسحاب الخصوم: فقط إذا كنتُ أنا اللاعب النشط المتبقّي
@@ -1535,11 +1564,147 @@ function handleMultiPlayerLeft(players, onlineTurnInd) {
         ? (goneName ? `🏆 فزت بالمباراة! انسحب ${goneName}` : "🏆 فزت بالمباراة! انسحب خصمك")
         : "🏆 فزت بالمباراة! انسحب جميع خصومك");
     } else {
-      // أنا خارج (نفد وقتي أو انقطعت ثم عدت): المباراة انتهت، وتُسجَّل خسارتي كما في النهاية الطبيعية
+      // أنا خارج (نفد وقتي أو انقطعت ثم عدت): المباراة انتهت — نتيجتي سُجّلت لحظة خروجي،
+      // والنافذة تعرض الترتيب النهائي
       finishMatchByExit("🏁 انتهت المباراة — كنت خارجها");
     }
   }
+  // خرجتُ والمباراة مستمرة للباقين: بطاقة واضحة (مركزي + خياران) بدل توست عابر
+  if (myRecord && !state.gameFinished && !_leavingMatch) showOutCard(myRecord);
   // (تخطّي أدوار المنسحب يُدار في منطق الدور)
+}
+
+// ── 🚪 خروجي من مباراة جماعية جارية (v35.7) ──────────────────────
+let _pendingExit = null;      // نفد وقتي للتو والخادم لم يؤكّد خروجي بعد (رحلة واحدة)
+let _myExitRecorded = false;  // سُجّل خروجي في هذه المباراة (مرة واحدة)
+let _leavingMatch = false;    // أغادر بزر الخروج الآن: كل تسجيل بعده صامت (لا نوافذ فوق القائمة)
+function resetMyExitState() { _pendingExit = null; _myExitRecorded = false; _leavingMatch = false; hideOutCard(); }
+
+function myPlayerIn(players) {
+  const me = config.onlinePlayerNum;
+  return Object.values(players || {}).find(p => p && p.num === me) || null;
+}
+
+// main.js عند نفاد بنكي: خروجي مؤكّد محلياً قبل أن يؤكّده الخادم — فلا يظهر خلال تلك الرحلة
+// تحذير "الانسحاب = خسارة" ولا يتحوّل ضغط الخروج فيها إلى انسحاب (يُسقط عملات نفاد الوقت).
+// promise: كتابة خروجي (تُرجع قائمة اللاعبين كما اعتمدها الخادم) — لمركزي لو غادرت قبل وصولها
+export function noteMyExitPending(reason, promise = null) {
+  if (!_myExitRecorded) _pendingExit = { reason, promise: Promise.resolve(promise).catch(() => null) };
+}
+
+// لقطة من الإعدادات لتسجيل مؤجَّل: المغادرة تصفّرها بعد لحظات
+function snapshotConfig() {
+  return {
+    ...config,
+    onlinePlayerNames: { ...(config.onlinePlayerNames || {}) },
+    multiPlayers: config.multiPlayers ? JSON.parse(JSON.stringify(config.multiPlayers)) : null,
+    colors: [...(config.colors || [])],
+  };
+}
+
+// هل أنا خارج مباراة ما زالت جارية؟ (نفد وقتي / انقطعت ولم أعد) — زر الخروج بعدها هادئ
+export function isOutOfMatch() {
+  const mp = config.multiPlayers;
+  if (!config.online || config.spectator || !mp || typeof mp !== "object") return false;
+  if (_pendingExit || _myExitRecorded) return true;
+  const mine = myPlayerIn(mp);
+  return !!(mine && mine.active === false);
+}
+
+// نصّ إشعار خروج لاعب آخر حسب سببه (الغرف القديمة بلا سبب = انسحب)
+function exitToastText(p) {
+  const n = (p && p.name) || "لاعب";
+  if (p && p.outReason === "time")    return `⏳ نفد وقت ${n} — خرج من المباراة`;
+  if (p && p.outReason === "dropped") return `📡 انقطع ${n} ولم يعد — خرج من المباراة`;
+  return `🚪 ${n} انسحب من المباراة`;
+}
+
+// تسجيل خروجي فوراً (مرة واحدة لكل مباراة — وحارس gameEnd أيضاً) + لا ختم انقطاع بعده.
+// المركز من قائمة الخادم التي حملت خروجي: فيها كل خروج سبقه، فلا يتكرّر مركز.
+function recordMyExit(p, { silent = false } = {}) {
+  _pendingExit = null;
+  if (_myExitRecorded) return null;
+  _myExitRecorded = true;
+  try { onlineManager.disarmMyDisconnectMark(); } catch {}
+  const reason = p.outReason || "unknown";
+  let rec = null;
+  try { rec = recordElimination(config, state.scores, reason, { silent }); }
+  catch (e) { console.error("recordElimination", e); }
+  return { ...(rec || {}), reason };
+}
+
+// خروجي في القائمة التي اعتمدتها معاملة انسحابي: كل خروج فيها سبقه (الخادم رتّبها واحداً بعد الآخر)،
+// لكن لحظته عندي تقدير محلي لختم الخادم — نضمن أنه الأحدث فيها فلا يتقدّم عليه بفارق التقدير
+// خروجٌ سبقه (وإلا تكرّر مركز). يرجع نسخة.
+function asLatestExit(players, myNum) {
+  const copy = JSON.parse(JSON.stringify(players || {}));
+  const mine = Object.values(copy).find(p => p && p.num === myNum);
+  if (mine && mine.active === false) {
+    const before = Object.values(copy)
+      .filter(p => p && p !== mine && p.active === false && typeof p.outAt === "number")
+      .map(p => p.outAt + 1);
+    mine.outAt = Math.max(typeof mine.outAt === "number" ? mine.outAt : 0, ...before);
+  }
+  return copy;
+}
+
+let _outCard = null;
+function hideOutCard() {
+  if (_outCard) { try { _outCard.remove(); } catch {} _outCard = null; }
+}
+function showOutCard(rec) {
+  hideOutCard();
+  const reason = rec.reason;
+  const title = reason === "time"    ? "⏳ نفد وقتك — خرجت من المباراة"
+              : reason === "dropped" ? "📡 انقطع اتصالك ولم تعد خلال المهلة — خرجت من المباراة"
+              :                        "🚪 خرجت من المباراة";
+  const R = rec.R;
+  const box = document.createElement("div");
+  box.id = "out-card";
+  box.style.cssText = `
+    position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(92vw,420px);
+    background:#1e1e2e;border:2px solid #f87171;border-radius:16px;padding:22px 24px;direction:rtl;
+    text-align:center;z-index:9998;box-shadow:0 8px 40px #0008;`;
+  const h = document.createElement("p");
+  h.style.cssText = "font-size:1.12rem;font-weight:700;margin:0 0 10px;line-height:1.5;";
+  h.textContent = title;
+  const sub = document.createElement("p");
+  sub.style.cssText = "font-size:0.98rem;margin:0 0 6px;color:#cbd5e1;";
+  sub.textContent = R && R.myRank ? `سُجّلت نتيجتك: المركز ${R.myRank} من ${R.count}` : "سُجّلت نتيجتك";
+  const note = document.createElement("p");
+  note.style.cssText = "font-size:0.9rem;margin:0 0 16px;color:#94a3b8;min-height:1em;";
+  if (reason === "dropped") {
+    note.textContent = rec.lost > 0
+      ? `💎 ضاعت ${rec.lost} عملة من جواهر هذه المباراة — الخروج بالانقطاع بلا عودة يُحسب انسحاباً`
+      : "الخروج بالانقطاع بلا عودة يُحسب انسحاباً";
+  }
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;gap:10px;justify-content:center;flex-wrap:wrap;";
+  const btn = (text, bg) => {
+    const b = document.createElement("button");
+    b.textContent = text;
+    b.style.cssText = `background:${bg};color:#fff;border:none;padding:10px 18px;border-radius:8px;cursor:pointer;font-size:1rem;`;
+    return b;
+  };
+  const watch = btn("👁️ تابع المشاهدة", "#334155");
+  const home  = btn("🏠 العودة للقائمة", "#7c6af7");
+  watch.addEventListener("click", hideOutCard);
+  // نفس زر الخروج (main.js): بعد خروجي صار هادئاً بلا تحذير ولا تسجيل ثانٍ
+  home.addEventListener("click", () => { hideOutCard(); document.getElementById("restart")?.click(); });
+  row.append(watch, home);
+  box.append(h, sub, note, row);
+  _outCard = box;
+  document.body.appendChild(box);
+  // عملات نفاد الوقت محفوظة: نُظهرها حين يكتمل تثبيتها
+  if (reason !== "dropped" && rec.coins && typeof rec.coins.then === "function") {
+    rec.coins.then(res => {
+      const earned = res && res.earned;
+      if (earned > 0 && _outCard === box) {
+        note.style.color = "#fcd34d";
+        note.textContent = `💎 ربحت ${earned} عملة من هذه المباراة`;
+      }
+    }).catch(() => {});
+  }
 }
 
 // ── نهاية المباراة بخروج اللاعبين: نفس نافذة النتيجة والتسجيل (v35.6) ──
@@ -1549,12 +1714,8 @@ function handleMultiPlayerLeft(players, onlineTurnInd) {
 function finishMatchByExit(title, exitInfo = null) {
   state.gameFinished = true;             // لا حركات ولا أدوار بعدها (ويمنع معالجة ثانية)
   try { stopTurnTimer(); } catch {}
-  const cfg = {
-    ...config,
-    onlinePlayerNames: { ...(config.onlinePlayerNames || {}) },
-    multiPlayers: config.multiPlayers ? JSON.parse(JSON.stringify(config.multiPlayers)) : null,
-    colors: [...(config.colors || [])],
-  };
+  hideOutCard();                         // نافذة النتيجة النهائية تحلّ محلّ بطاقة الخروج
+  const cfg = snapshotConfig();
   const scores = { ...(state.scores || {}) };
   Promise.resolve(endGame(cfg, scores, true, null, exitInfo, { title, displayIf: () => config.online === true }))
     .catch(e => console.error("endGame", e));
@@ -1600,15 +1761,63 @@ export async function leaveOnlineMatch() {
   // نترك الأحداث المعلّقة تُعالَج أولاً (نافذة التأكيد تحجب الصفحة: قد تكون آخر حركة
   // أو خروج الخصم وصلت أثناءها فانتهت المباراة فعلاً)
   await new Promise(r => setTimeout(r, 0));
-  const live = !state.gameFinished;
+  hideOutCard();
+  // v35.7: من خرج من مباراة جماعية (نفد وقته/انقطع ولم يعد) سُجّلت نتيجته لحظة خروجه —
+  // مغادرته الآن هادئة: لا خسارة ثانية ولا إعادة كتابة سبب خروجه
+  const live = !state.gameFinished && !isOutOfMatch();
+  // من هنا كل تسجيل صامت: اللاعب يغادر إلى القائمة (لا خبرة ولا إنجازات تقفز فوقها — مراجعة v35.7 الثانية)
+  _leavingMatch = true;
+  const waitMs = onlineManager.isOnline() === false ? 0 : 4000;   // بلا شبكة لا نعلّق زر الخروج
+  // نفد وقتي للتو وأغادر قبل أن يصل تأكيد الخادم: ننتظر خروجي المعتمد (قليلاً) ثم نسجّله بسببه (لا كانسحاب)
+  if (_pendingExit && !_myExitRecorded && !state.gameFinished) {
+    const { reason, promise } = _pendingExit;
+    const cfg = snapshotConfig(), scores = { ...(state.scores || {}) };
+    const players = await Promise.race([promise, new Promise(r => setTimeout(() => r(null), waitMs))]);
+    if (!_myExitRecorded) {            // (قد يصل التأكيد أثناء الانتظار فيُسجَّل من هناك)
+      _pendingExit = null; _myExitRecorded = true;
+      if (players) cfg.multiPlayers = asLatestExit(players, cfg.onlinePlayerNum);
+      try { recordElimination(cfg, scores, reason, { pending: !players, silent: true }); }
+      catch (e) { console.error("recordElimination", e); }
+    }
+  }
+  if (live && config.multiPlayers) {
+    // جماعي: نعلّم أنفسنا منسحبين (المباراة تكمل للباقين). مركز المنسحب من ترتيب الخروج كما اعتمده
+    // الخادم لا من رؤيتي لحظة الضغط — خروجان متقاربان كانا يأخذان المركز نفسه (مراجعة v35.7).
+    // اللقطة الآن (المغادرة تصفّر الإعدادات والنقاط بعد لحظات)، والقائمة من الخادم بعد خروجي.
+    // (غالباً يسبق صدى الخادم لخروجي تأكيدَ المعاملة فيُسجَّل من مستمع القائمة — بنفس الطريقة وبصمت)
+    state.gameFinished = true;
+    const cfg = snapshotConfig(), scores = { ...(state.scores || {}) };
+    const res = await onlineManager.leaveRoom({ announce: true });
+    const w = res && res.withdraw;
+    const mineThere = w && w.players ? myPlayerIn(w.players) : null;
+    if (_myExitRecorded) {
+      // سجّله مستمع القائمة من صدى الخادم (يسبق تأكيد المعاملة عادةً) — بلحظة خروجي الحقيقية
+    } else if (w && w.ok) {
+      // اعتُمد انسحابي: مركزي من ترتيب الخروج كما اعتمده الخادم
+      cfg.multiPlayers = asLatestExit(w.players, cfg.onlinePlayerNum);
+      _myExitRecorded = true;
+      recordForfeit(cfg, scores).catch(() => {});
+    } else if (mineThere && mineThere.active === false) {
+      // كنتُ خارجاً قبل أن يصل انسحابي (أُخرجت بعد مهلة الانقطاع، أو نفد وقتي): النتيجة كما اعتمدها الخادم
+      _myExitRecorded = true;
+      cfg.multiPlayers = w.players;
+      try { recordElimination(cfg, scores, mineThere.outReason || "unknown", { silent: true }); }
+      catch (e) { console.error("recordElimination", e); }
+    } else {
+      // لم يُحسم بعد (بلا شبكة): مركزي من رؤيتي الآن وخروجي "الآن" — ومهمة الانسحاب تكمل وحدها
+      _myExitRecorded = true;
+      recordForfeit(cfg, scores).catch(() => {});
+    }
+    return true;
+  }
   if (live) {
     // اللقطة تُؤخذ فوراً داخل recordForfeit (قبل أن تصفّر المغادرة النقاط والإعدادات)
     recordForfeit(config, state.scores).catch(() => {});
     state.gameFinished = true;
   }
   if (config.multiPlayers) {
-    // جماعي: نعلّم أنفسنا منسحبين فقط (المباراة تكمل للباقين)
-    await onlineManager.leaveRoom();
+    // جماعي بعد خروجنا منها أو نهايتها: مغادرة هادئة
+    await onlineManager.leaveRoom({ announce: false });
   } else {
     // ثنائي أثناء مباراة جارية: إشارة إنهاء ثم مغادرة معلنة (leftBy) — الخصم يرى فوزه.
     // بعد نهايتها: مغادرة صامتة (لا إشارة ولا leftBy فوق غرفة انتهت)
@@ -1622,7 +1831,13 @@ export async function leaveOnlineMatch() {
 }
 
 export function updateOnlineTurnIndicator(el) {
+  if (state.gameFinished) hideOutCard();   // انتهت: نافذة النتيجة تحلّ محلّ بطاقة الخروج
   if (!el) return;
+  if (isOutOfMatch()) {                     // خرجتُ وأتابع الباقين (لا "دور خصمك" بلا معنى)
+    el.textContent = "👁️ تشاهد — خرجت من المباراة";
+    el.style.color = "#94a3b8";
+    return;
+  }
   const isMyTurn = state.currentPlayer === config.onlinePlayerNum;
   el.textContent = isMyTurn ? "🟢 دورك!" : "⏳ دور خصمك...";
   el.style.color = isMyTurn ? "#4ade80" : "#f87171";

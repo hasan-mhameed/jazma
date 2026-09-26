@@ -21,7 +21,13 @@ const sections = [
   ['🚪 نهايات الانسحاب', [
     () => S.duoWithdrawEnding(verbose), () => S.duoDropEnding(verbose), () => S.duoRealDrop(verbose), () => S.duoLongDrop(verbose),
     () => S.duoSecondMatch(verbose), () => S.multiLastStanding(verbose), () => S.multiLateMark(verbose)]],
-  ['🏁 نافذة نهاية المباراة', [() => RS.resultsPure(verbose), () => RS.resultsEndGame(verbose), () => RS.resultsExitEndings(verbose)]],
+  ['🚷 الخروج من مباراة جماعية جارية', [
+    () => S.multiOutDropped(verbose), () => S.multiOutTime(verbose), () => S.multiExitOrder(verbose),
+    () => S.multiOutWatchToEnd(verbose), () => S.multiOutNaturalEndWhileAway(verbose), () => S.multiNearSimultaneousExits(verbose),
+    () => S.multiTimeoutThenQuickExit(verbose), () => S.multiNoSelfExpiry(verbose),
+    () => S.multiCreatorDrops(verbose), () => S.multiWithdrawSilent(verbose)]],
+  ['🏁 نافذة نهاية المباراة', [() => RS.resultsPure(verbose), () => RS.resultsEndGame(verbose), () => RS.resultsExitEndings(verbose),
+    () => RS.resultsElimination(verbose)]],
 ];
 
 for (const [title, runs] of sections) {

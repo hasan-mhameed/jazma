@@ -95,6 +95,7 @@ class El {
   get textContent() { return this._t; } set textContent(v) { this._t = String(v); this.children = []; }
   get innerHTML() { return this._h; } set innerHTML(v) { this._h = String(v); }
   appendChild(c) { this.children.push(c); return c; }
+  remove() { this.removed = true; }   // كالـDOM الحقيقي (v35.7: إزالة بطاقة الخروج قبل النافذة)
 }
 const STUBS = {
   'audioManager.js': `export const audioManager = new Proxy({}, { get: () => () => {} });`,
@@ -114,7 +115,8 @@ const STUBS = {
     export async function addXP() { return null; }`,
   'xpUI.js': `export function showXPGain() {}`,
   'dailyChallengeUI.js': `export function isDailyActive() { return false; } export async function finishDailyChallenge() {}`,
-  'wallet.js': `export async function commitMatchCoins() { globalThis.__calls.push(['coins']); return { earned: 0, total: 0 }; }`,
+  'wallet.js': `export async function commitMatchCoins() { globalThis.__calls.push(['coins']); return { earned: 0, total: 0 }; }
+    export function getMatchCoins() { return globalThis.__matchCoins || 0; }`,
 };
 const REAL = { 'gameEnd.js': '/js/ui/gameEnd.js', 'matchResult.js': '/js/core/matchResult.js' };
 
@@ -122,7 +124,9 @@ const REAL = { 'gameEnd.js': '/js/ui/gameEnd.js', 'matchResult.js': '/js/core/ma
 export async function loadGameEnd({ user = { uid: 'uid_me' } } = {}) {
   const calls = [], els = new Map();
   const document = { getElementById: id => { if (!els.has(id)) els.set(id, new El(id)); return els.get(id); }, createElement: () => new El() };
-  const g = { document, console, setTimeout: () => 0, clearTimeout: () => {}, __calls: calls, __user: user };
+  // المؤقّتات المؤجّلة (إشعارات الواجهة بعد ثوانٍ) لا تُشغَّل؛ أما "بعد لحظة" (0ms) فتُشغَّل كما في المتصفح
+  // — v35.7: النهاية الطبيعية في الجماعي أونلاين تُحسب بعد لحظة
+  const g = { document, console, setTimeout: (f, ms) => { if (!ms) setImmediate(f); return 0; }, clearTimeout: () => {}, __calls: calls, __user: user };
   g.window = g;
   const ctx = vm.createContext(g);
   const cache = new Map();
@@ -148,7 +152,8 @@ export async function loadGameEnd({ user = { uid: 'uid_me' } } = {}) {
   };
   // بوابة تحبس التسجيل في منتصفه (كرحلة شبكة بطيئة) حتى نفتحها
   const hold = () => { let open; g.__gate = new Promise(res => { open = res; }); return () => { g.__gate = null; open(); }; };
-  return { ns: root.namespace, calls, view, hold };
+  const setMatchCoins = n => { g.__matchCoins = n; };   // عملات جواهر المباراة الحالية (ما يضيع عند الانسحاب)
+  return { ns: root.namespace, calls, view, hold, setMatchCoins };
 }
 
 export async function runEndGame(cfg, scores, { user = { uid: 'uid_me' }, forced = false, loser = null, exitInfo = null, opts = {} } = {}) {
@@ -292,5 +297,104 @@ export async function resultsExitEndings(verbose = false) {
   env = await loadGameEnd();
   await env.ns.recordForfeit({ ...duo(null), spectator: true }, { 1: 1, 2: 1 });
   r.ok(env.calls.length === 0, 'المشاهد: لا شيء يُسجَّل');
+  return r;
+}
+
+// ═════════ 4) الخروج من مباراة جماعية جارية (v35.7) ═════════
+// السبب (نفد وقته/انقطع/انسحب) والمركز بترتيب الخروج في الدالة النقية، ثم gameEnd.js الحقيقي:
+// التسجيل لحظة الخروج، العملات حسب السبب، والنهاية اللاحقة عرض فقط.
+export async function resultsElimination(verbose = false) {
+  const r = suite('الخروج من مباراة جماعية جارية: سببه، مركزه بترتيب الخروج، وعملاته'); r.verbose = verbose;
+  const M = await import(pathToFileURL(PROJECT + '/js/core/matchResult.js').href);
+  const count = (calls, kind) => calls.filter(c => c[0] === kind).length;
+  const out = (uid, num, name, outReason, outAt) =>
+    [uid, { name, num, active: false, ...(outReason ? { outReason } : {}), ...(outAt != null ? { outAt } : {}) }];
+  const inn = (uid, num, name) => [uid, { name, num, active: true }];
+  const pl = (...e) => Object.fromEntries(e);
+  const ranks = R => R.ranking.map(x => [x.player, x.rank]);
+
+  // أ) شارة الخروج حسب السبب (والغرف القديمة بلا سبب = انسحب)
+  const lab = M.getExited({ multiPlayers: pl(out('a', 1, 'أ', 'time', 1), out('b', 2, 'ب', 'dropped', 2), out('c', 3, 'ج', 'left', 3), out('d', 4, 'د')) });
+  r.ok(same(lab, { 1: 'نفد وقته', 2: 'انقطع', 3: 'انسحب', 4: 'انسحب' }), `الشارات حسب السبب: ${JSON.stringify(lab)}`);
+
+  // ب) فحصك 6: كريم (3) انسحب أولاً متقدّماً بالنقاط، ثم باسل (2) انقطع — أحمد آخر الباقين.
+  //    بترتيب الخروج: باسل 2 وكريم 3 (كان بالنقاط: كريم 2 وباسل 3، ومسجَّل لكريم 3 عند انسحابه = تكرار)
+  let R = M.computeMatchResult(online(1, 3, pl(inn('u1', 1, 'أحمد'), out('u2', 2, 'باسل', 'dropped', 2000), out('u3', 3, 'كريم', 'left', 1000))),
+    { 1: 3, 2: 1, 3: 5 });
+  r.ok(same(ranks(R), [[1, 1], [2, 2], [3, 3]]), `الترتيب بالخروج لا بالنقاط: ${JSON.stringify(ranks(R))}`);
+  r.ok(R.winnerNum === 1 && R.myResult === 'win', 'الفوز لآخر الباقين');
+
+  // ج) المنسحب الآن (قبل كتابة ختمه) = الأحدث خروجاً → فوق من خرج قبله
+  R = M.computeMatchResult(online(2, 4, pl(inn('u1', 1, 'أحمد'), inn('u2', 2, 'باسل'), inn('u4', 4, 'دانة'), out('u3', 3, 'كريم', 'left', 1000))),
+    { 1: 1, 2: 0, 3: 8, 4: 0 }, { exitInfo: { 2: 'انسحب' } });
+  r.ok(R.myRank === 3 && R.ranking.find(x => x.player === 3).rank === 4, `المنسحب الآن مركزه 3 ومن خرج قبله 4 (${R.myRank})`);
+
+  // د) بلا أختام (غرف قديمة): الخارجون بالنقاط كما كانوا
+  R = M.computeMatchResult(online(1, 3, pl(inn('u1', 1, 'أ'), out('u2', 2, 'ب'), out('u3', 3, 'ج'))), { 1: 1, 2: 2, 3: 6 });
+  r.ok(same(ranks(R), [[1, 1], [3, 2], [2, 3]]), `بلا أختام: الخارجون بالنقاط (${JSON.stringify(ranks(R))})`);
+
+  // هـ) احتياط "خرج الجميع": الفوز لأعلى نقاط لا لأحدث خارج
+  R = M.computeMatchResult(online(1, 3, pl(out('u1', 1, 'أ', 'time', 3000), out('u2', 2, 'ب', 'dropped', 1000), out('u3', 3, 'ج', 'left', 2000))),
+    { 1: 1, 2: 7, 3: 1 });
+  r.ok(R.winnerNum === 2, `خرج الجميع: الفائز أعلى نقاط (${R.winnerNum})`);
+
+  // و) gameEnd.js الحقيقي — نفد وقته: خسارة تُسجَّل لحظة خروجه، وعملاته محفوظة
+  let env = await loadGameEnd();
+  if (typeof env.ns.recordElimination !== 'function') { r.ok(false, 'recordElimination غير موجودة في gameEnd.js'); return r; }
+  const t3 = pl(inn('u1', 1, 'أحمد'), inn('u2', 2, 'باسل'), out('u3', 3, 'كريم', 'time', 1000));
+  env.setMatchCoins(6);
+  let rec = env.ns.recordElimination(online(3, 3, t3), { 1: 2, 2: 1, 3: 4 }, 'time');
+  r.ok(rec.lost === 0, `نفاد الوقت: لا شيء يضيع (${rec.lost})`);
+  await rec.recorded; await new Promise(res => setImmediate(res));
+  let o = env.view();
+  r.ok(same(pick(o.calls, 'multi'), ['multi', 3, 3, 4]) && same(pick(o.calls, 'history')?.slice(0, 3), ['history', 'multi', 'loss']),
+    `نفد وقته: خسارة بمركزه 3 لحظة خروجه (${JSON.stringify(pick(o.calls, 'multi'))})`);
+  r.ok(count(o.calls, 'coins') === 1, 'نفاد الوقت: عملات المباراة محفوظة (تُثبَّت الآن)');
+  r.ok(rec.R.myRank === 3 && rec.R.count === 3 && o.message === '', 'للبطاقة: المركز 3 من 3 — وبلا نافذة نتيجة (المباراة مستمرة)');
+  // النهاية اللاحقة (آخر الباقين) على نفس الجهاز: عرض فقط
+  const t3end = pl(inn('u1', 1, 'أحمد'), out('u2', 2, 'باسل', 'left', 2000), out('u3', 3, 'كريم', 'time', 1000));
+  await env.ns.endGame(online(3, 3, t3end), { 1: 2, 2: 1, 3: 4 }, true, null, null, { title: '🏁 انتهت المباراة — كنت خارجها' });
+  o = env.view();
+  r.ok(count(o.calls, 'multi') === 1 && count(o.calls, 'coins') === 1, 'النهاية اللاحقة: لا تسجيل ثانٍ ولا عملات مرتين');
+  r.ok(o.message.includes('كنت خارجها') && o.rows.length === 3 && /انسحب/.test(o.rows[1]) && /نفد وقته/.test(o.rows[2]),
+    `النافذة النهائية بالشارات الدقيقة وترتيب الخروج: ${o.rows.join(' | ')}`);
+
+  // ز) انقطع ولم يعد خلال المهلة = كالانسحاب: خسارة بلا عملات المباراة (ولا في النافذة لاحقاً)
+  const d3 = pl(inn('u1', 1, 'أحمد'), inn('u2', 2, 'باسل'), out('u3', 3, 'كريم', 'dropped', 1000));
+  env = await loadGameEnd();
+  env.setMatchCoins(9);
+  rec = env.ns.recordElimination(online(3, 3, d3), { 1: 2, 2: 1, 3: 4 }, 'dropped');
+  r.ok(rec.lost === 9, `انقطع ولم يعد: البطاقة تذكر ما ضاع بالرقم (${rec.lost} من 9)`);
+  await rec.recorded; await new Promise(res => setImmediate(res));
+  await env.ns.endGame(online(3, 3, d3), { 1: 4, 2: 1, 3: 4 }, false, null, null);   // اكتملت اللوحة لاحقاً
+  o = env.view();
+  r.ok(same(pick(o.calls, 'multi'), ['multi', 3, 3, 4]) && count(o.calls, 'multi') === 1, 'انقطع ولم يعد: خسارة واحدة بمركزه 3');
+  r.ok(count(o.calls, 'coins') === 0, 'بلا عملات المباراة — لا عند الخروج ولا في النافذة النهائية');
+
+  // ط) مراجعة v35.7: اكتملت اللوحة وخروجي وصلا في دفعة واحدة (عودة من انقطاع — الحركات أولاً):
+  //    النهاية الطبيعية بالجماعي تُحسب بعد لحظة، فيُسجَّل خروجي أولاً ولا يُسجَّل لي فوز وأنا خارجها
+  env = await loadGameEnd();
+  const liveCfg = online(3, 3, pl(inn('u1', 1, 'أحمد'), inn('u2', 2, 'باسل'), inn('u3', 3, 'كريم')));
+  const pend = env.ns.endGame(liveCfg, { 1: 2, 2: 1, 3: 6 });          // اكتملت اللوحة وأنا متقدّم "بقائمتي القديمة"
+  liveCfg.multiPlayers = pl(inn('u1', 1, 'أحمد'), inn('u2', 2, 'باسل'), out('u3', 3, 'كريم', 'dropped', 1000));   // القائمة تصل بعدها مباشرة
+  env.ns.recordElimination(liveCfg, { 1: 2, 2: 1, 3: 6 }, 'dropped');   // كما يفعل onlineGame عند وصولها
+  await pend; await new Promise(res => setImmediate(res));
+  o = env.view();
+  r.ok(same(pick(o.calls, 'multi'), ['multi', 3, 3, 6]) && count(o.calls, 'multi') === 1, `لا فوز لمن خرج: خسارة واحدة بمركزه 3 (${JSON.stringify(pick(o.calls, 'multi'))})`);
+  r.ok(count(o.calls, 'coins') === 0 && /انقطع/.test(o.rows[2] || ''), `بلا عملات، والنافذة تُظهره خارجاً (${o.rows.join(' | ')})`);
+
+  // ي) نسخ مختلطة (مراجعة v35.7): خروج كتبه جهاز بنسخة أقدم (بلا ختم) = الأقدم، لا "الأحدث للأبد"
+  R = M.computeMatchResult(online(1, 4, pl(inn('u1', 1, 'أ'), out('u2', 2, 'ب', 'time', 5000), out('u3', 3, 'ج'), inn('u4', 4, 'د'))),
+    { 1: 1, 2: 0, 3: 9, 4: 2 });
+  r.ok(R.ranking.find(x => x.player === 2).rank === 3 && R.ranking.find(x => x.player === 3).rank === 4,
+    `الخروج القديم بلا ختم تحت المختوم بعده (${JSON.stringify(ranks(R))})`);
+
+  // ح) المشاهد والضيف: لا شيء يُسجَّل
+  env = await loadGameEnd();
+  r.ok(env.ns.recordElimination({ ...online(null, 3, d3), spectator: true }, {}, 'dropped') === null && env.calls.length === 0, 'المشاهد: لا تسجيل');
+  env = await loadGameEnd({ user: null });
+  rec = env.ns.recordElimination(online(3, 3, d3), {}, 'dropped');
+  await rec?.recorded;
+  r.ok(env.calls.length === 0, 'بلا حساب: لا تسجيل');
   return r;
 }

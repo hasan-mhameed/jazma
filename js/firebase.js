@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1790013057";
+import { getCurrentUser }   from "./auth.js?v=1790376125";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -67,6 +67,9 @@ export class OnlineManager {
     this._cbLobby     = null;  // تحديث قائمة اللاعبين في اللوبي
     this._cbMultiStart= null;  // بدء المباراة المتعددة
     this._cbPlayerLeft= null;  // خروج لاعب (تعدد)
+    this._leaving     = false; // انسحاب من مباراة جماعية جارٍ: لا كتابة على مقعدي حتى يُحسم (v35.7)
+    this._leavePromise = null; // المغادرة الجارية (نقرة ثانية تنتظرها)
+    this._rearmPending = false; // عدنا للاتصال ومقعدي لم يظهر بعد: التسليح مع أول لقطة تُظهره
   }
 
   // ══ إنشاء غرفة ══════════════════════════════════════════════
@@ -379,14 +382,15 @@ export class OnlineManager {
     const code = this.roomCode, uid = this._myUid;
     this._unsubs.forEach(u => u()); this._unsubs = [];
     if (code && uid) {
-      try { await onDisconnect(ref(db, `rooms/${code}/spectators/${uid}`)).cancel(); } catch {}
-      try { await remove(ref(db, `rooms/${code}/spectators/${uid}`)); } catch {}
+      // بلا انتظار الردود (مراجعة v35.7 الرابعة): انقطاع أثناء الانتظار كان يعلّق زر الخروج — والترتيب محفوظ
+      try { onDisconnect(ref(db, `rooms/${code}/spectators/${uid}`)).cancel().catch(() => {}); } catch {}
+      try { remove(ref(db, `rooms/${code}/spectators/${uid}`)).catch(() => {}); } catch {}
     }
     this.roomCode = null; this.isSpectator = false; this._isMulti = false;
     this._gameStarted = false; this._lastApplied = null;
     this._pendingMove = null; this._pendingMoves = [];
     this._lastClock = null; this._cbMove = null; this._cbClock = null;
-    this._cbLobby = null; this._cbPlayerLeft = null;
+    this._cbLobby = null; this._cbPlayerLeft = null; this._lastPlayers = null;
     // v35.6: معالجات المباراة السابقة لا تبقى لتلتقط أحداث الغرفة التالية
     this._cbLeft = null; this._cbRestart = null; this._lastRoom = null;
   }
@@ -551,6 +555,12 @@ export class OnlineManager {
       if (!snap.exists()) { this._cbPlayerLeft && this._cbPlayerLeft("host_left"); return; }
       const room = snap.val();
       const players = room.players || {};
+      this._lastPlayers = players;   // v35.7: هل خرجتُ؟ (لا يُعاد إخراج من خرج)
+      // عدنا للاتصال ومقعدي لم يظهر حيّاً بعد في نسختنا المحلية: نسلّح الختم مع أول لقطة تُظهره (مراجعة v35.7 الثالثة)
+      if (this._rearmPending && this._gameStarted && !this._leaving && this._mySeatLive()) {
+        this._rearmPending = false;
+        this._armMyStamp(code);
+      }
       // أُزلنا من الغرفة (كنّا منتظرين والمباراة بدأت بالمصوّتين) → نبحث من جديد
       if (this._myUid && !this._gameStarted && players && !players[this._myUid]
           && Object.keys(players).length > 0) {
@@ -563,14 +573,19 @@ export class OnlineManager {
       if (room.status === "playing" && !this._gameStarted) {
         this._gameStarted = true;
         // عند بدء اللعب: نبدّل سلوك الانقطاع من "إزالة فورية" (المناسب للوبي)
-        // إلى "ختم انقطاع" (مهلة السماح) — لكل اللاعبين، لا المضيف وحده
+        // إلى "ختم انقطاع" (مهلة السماح) — لكل اللاعبين، لا المضيف وحده.
+        // الترتيب مهم (مراجعة v35.7): إلغاء أوامر مسار يلغي معها كل ما تحته — فالإلغاءات أولاً ثم الختم.
+        // كان المنشئ يسلّح ختمه ثم يلغي أوامر الغرفة كلها فيُمسح الختم معها: لا يُخرَج بانقطاعه أبداً.
+        // تُرسل الثلاثة معاً بترتيبها بلا انتظار: الخادم ينفّذ طلبات الاتصال الواحد بترتيبها، وانتظار
+        // تأكيد الإلغاءات كان يُسقط التسليح كلياً لو انقطعنا قبل وصول التأكيد (مراجعة v35.7 الثالثة).
+        // (وعودة الاتصال أثناء المباراة تعيد تسليحه على الاتصال الجديد — _monitorConnection)
         try {
-          if (this._myUid) {
-            onDisconnect(ref(db, `rooms/${code}/players/${this._myUid}`)).cancel();
-            onDisconnect(ref(db, `rooms/${code}/players/${this._myUid}/disconnectedAt`)).set(serverTimestamp());
+          const uid = this._myUid;
+          if (this.playerNum === 1) onDisconnect(ref(db, `rooms/${code}`)).cancel().catch(() => {});   // مسح الغرفة (قديم)
+          if (uid) {
+            onDisconnect(ref(db, `rooms/${code}/players/${uid}`)).cancel().catch(() => {});             // إزالة اللوبي
+            onDisconnect(ref(db, `rooms/${code}/players/${uid}/disconnectedAt`)).set(serverTimestamp()).catch(() => {});
           }
-          // المنشئ يلغي مسح الغرفة كاملة عند انقطاعه
-          if (this.playerNum === 1) onDisconnect(ref(db, `rooms/${code}`)).cancel();
         } catch {}
         this._cbMultiStart && this._cbMultiStart(room);
       }
@@ -649,23 +664,94 @@ export class OnlineManager {
     return { role: "creator", code };
   }
 
+  // ══ الخروج من مباراة جماعية جارية (v35.7) ══
+  // كل إخراج يكتب مع active:false **سببه** (outReason) و**لحظته** (outAt، ختم الخادم):
+  // السبب للشارة ولقاعدة العملات، واللحظة لترتيب الخارجين بترتيب خروجهم (أول من خرج = آخر مركز).
+  // **ذرّياً ومرة واحدة**: من خرج لا يُعاد إخراجه — كتابة ثانية (جهاز آخر أنقذ نافد الوقت، أو
+  // كتابة جهاز كان منقطعاً ووصلت متأخرة) كانت ستغيّر سببه ولحظته فيتغيّر مركزه عند الآخرين.
+  // applyLocally:false: لا يرى أحد إلا ما اعتمده الخادم (لا لاعب يختفي لحظياً من القائمة).
+  // المعاملة على قائمة اللاعبين كلها (لا مقعد واحد): الخادم يرتّب الخروجات المتزامنة واحداً بعد
+  // الآخر، ويرجع القائمة كما اعتمدها — فيها كل خروج سبق خروجنا، فمركزنا منها لا يتكرّر مع أحد.
+  // pick(uid, player) يختار المقعد. محاولة واحدة، ونتيجتها تميّز ثلاث حالات (مراجعة v35.7 الثانية):
+  //   { ok: true,  players } — اعتُمد الإخراج، والقائمة كما اعتمدها الخادم
+  //   { ok: false, players } — لا شيء يُكتب: لا مقعد بهذا الوصف، أو خرج قبلنا (القائمة كما هي عند الخادم)
+  //   { ok: false, error: true } — أُلغيت المعاملة أو فشلت: كتابة محلية على المسار نفسه (مسح ختم
+  //     الانقطاع مثلاً)، أو تطبيق Firebase أوامر انقطاعنا محلياً لحظة انقطاعنا — يستحق إعادة المحاولة.
+  // code: غرفة محدّدة (مهمة انسحاب تكمل بعد مغادرتنا لها)
+  async _markOutAttempt(pick, reason, extra = {}, code = this.roomCode) {
+    if (!code) return { ok: false, error: true };
+    try {
+      const res = await runTransaction(ref(db, `rooms/${code}/players`), (cur) => {
+        // ذاكرة محلية باردة: null لا يُلغي (الإلغاء كان سيُسقط الإخراج بصمت) — الخادم يرفضها
+        // لاختلاف القيمة فتُعاد المحاولة بالقيمة الحقيقية؛ ولو القائمة غير موجودة فعلاً: لا شيء
+        if (cur === null) return null;
+        const hit = Object.entries(cur).find(([uid, p]) => p && pick(uid, p));
+        if (!hit) return;                                   // لا مقعد بهذا الوصف
+        const [uid, p] = hit;
+        if (p.active === false) return;                     // خرج قبلنا: لا نعيد إخراجه
+        cur[uid] = { ...p, ...extra, active: false, outReason: reason, outAt: serverTimestamp() };
+        return cur;
+      }, { applyLocally: false });
+      const players = res && res.snapshot ? (res.snapshot.val() || null) : null;
+      return res && res.committed && players ? { ok: true, players } : { ok: false, players };
+    } catch { return { ok: false, error: true }; }
+  }
+  // الواجهة القديمة: القائمة المعتمدة أو null (لإخراج الآخرين: تتكرّر من كل جهاز ومع كل لقطة)
+  async _markOutWhere(pick, reason, extra = {}) {
+    const r = await this._markOutAttempt(pick, reason, extra);
+    return r.ok ? r.players : null;
+  }
+  // لخروجي أنا: نعيد المحاولة إن أُلغيت المعاملة (بعد عودة الاتصال) — خروجي لا يكرّره جهاز غيري
+  async _markOutReliably(pick, reason, extra = {}, { code = this.roomCode, tries = 3, onRetry = null } = {}) {
+    let r = { ok: false, error: true };
+    for (let i = 0; i < tries; i++) {
+      r = await this._markOutAttempt(pick, reason, extra, code);
+      if (!r.error) return r;
+      await this._waitOnline();
+      if (onRetry) { try { onRetry(); } catch {} }
+      await new Promise(res => setTimeout(res, 300 * (i + 1)));
+    }
+    return r;
+  }
+  // ينتظر اتصالاً بالخادم (مستمع مستقل: مستمعات الغرفة قد تُفصل بالمغادرة قبل أن ينتهي من يحتاجه)
+  _waitOnline() {
+    return new Promise(resolve => {
+      let unsub = null, done = false;
+      const finish = () => { if (done) return; done = true; resolve(); if (unsub) { try { unsub(); } catch {} } };
+      try {
+        unsub = onValue(ref(db, ".info/connected"), snap => { if (snap.val() === true) finish(); });
+        if (done && unsub) { try { unsub(); } catch {} }
+      } catch { finish(); }
+    });
+  }
+  // هل مقعدي خارج في آخر قائمة وصلتنا؟ (اختصار محلي قبل المعاملة)
+  _iAmOutLocally() {
+    const me = this._lastPlayers && this._myUid ? this._lastPlayers[this._myUid] : null;
+    return !!(me && me.active === false);
+  }
+  // مقعدي موجود ونشط في آخر قائمة وصلتنا؟ — شرط تسليح ختم الانقطاع: ختمٌ على مقعد غير موجود يكتب
+  // عند إغلاق الصفحة مقعداً شبحاً بلا رقم ولا اسم (مقعد حذفه أمر "إزالة اللوبي" قبل إلغائه — موثّق لـ3.6).
+  // (قد تُظهر النسخة المحلية مقعدي محذوفاً وهو باقٍ عند الخادم: Firebase يطبّق محلياً أمر إزالة لم يصله
+  //  تأكيد إلغائه — لذلك ننتظر لقطة الخادم بعد العودة بدل الحكم لحظة الاتصال)
+  _mySeatLive() {
+    const me = this._lastPlayers && this._myUid ? this._lastPlayers[this._myUid] : null;
+    return !!(me && me.active !== false && Number.isInteger(me.num));
+  }
+  _armMyStamp(code = this.roomCode) {
+    if (!code || !this._myUid) return;
+    try { onDisconnect(ref(db, `rooms/${code}/players/${this._myUid}/disconnectedAt`)).set(serverTimestamp()).catch(() => {}); } catch {}
+  }
+
   // تعليم نفسي/لاعب آخر خارج المباراة (نفاد بنك الوقت — نمط bank)
+  // يرجع قائمة اللاعبين كما اعتمدها الخادم بعد خروجي (أو null)
   async markSelfInactive() {
-    if (!this.roomCode || !this._myUid) return;
-    try { await update(ref(db, `rooms/${this.roomCode}/players/${this._myUid}`), { active: false }); } catch {}
+    if (!this.roomCode || !this._myUid || this._iAmOutLocally()) return null;
+    const me = this._myUid;
+    const r = await this._markOutReliably(uid => uid === me, "time");
+    return r.ok ? r.players : null;
   }
   async markPlayerInactiveByNum(num) {
-    if (!this.roomCode) return;
-    try {
-      const snap = await get(ref(db, `rooms/${this.roomCode}/players`));
-      if (!snap.exists()) return;
-      for (const [uid, p] of Object.entries(snap.val())) {
-        if (p && p.num === num && p.active !== false) {
-          await update(ref(db, `rooms/${this.roomCode}/players/${uid}`), { active: false });
-          return;
-        }
-      }
-    } catch {}
+    return this._markOutWhere((uid, p) => p.num === num, "time");
   }
 
   // بثّ فوري لتحديث بنك لاعب (عند شراء أداة وقت بين الحركات — لا ننتظر الحركة التالية)
@@ -800,27 +886,29 @@ export class OnlineManager {
   // ══ مهلة السماح عند الانقطاع (Grace Period) ══
   // عند عودة الاتصال: نمسح ختم الانقطاع (اللاعب رجع ضمن المهلة)
   async clearMyDisconnectMark() {
-    if (!this.roomCode || !this._myUid) return;
+    // أثناء انسحابي: لا كتابة على مقعدي — كتابة محلية على المسار تُلغي معاملة الانسحاب المنتظرة
+    // (زر الخروج بلا شبكة ثم العودة: كان المقعد يبقى "نشطاً" بلا ختم ولا أوامر — مراجعة v35.7 الثانية)
+    if (!this.roomCode || !this._myUid || this._iAmOutLocally() || this._leaving) return;
+    const code = this.roomCode;
     try {
-      await update(ref(db, `rooms/${this.roomCode}/players/${this._myUid}`), { disconnectedAt: null });
+      await update(ref(db, `rooms/${code}/players/${this._myUid}`), { disconnectedAt: null });
+      // خرجتُ خلال انتظار الكتابة (وصلت قائمة الخادم بعد العودة)، أو غادرت الغرفة: لا نعيد التسليح
+      // — وإلا يكتب إغلاق الصفحة لاحقاً ختم انقطاع على مقعد خارج (مراجعة v35.7)؛ ولا على مقعد غير ظاهر
+      if (this.roomCode !== code || this._iAmOutLocally() || this._leaving || !this._mySeatLive()) return;
       // مهم: onDisconnect يُستهلك بعد انطلاقه — نعيد تسجيله ليعمل في الانقطاعات التالية
-      onDisconnect(ref(db, `rooms/${this.roomCode}/players/${this._myUid}/disconnectedAt`)).set(serverTimestamp());
+      onDisconnect(ref(db, `rooms/${code}/players/${this._myUid}/disconnectedAt`)).set(serverTimestamp());
     } catch {}
+  }
+
+  // خرجتُ من المباراة (v35.7): حضوري لم يعد يعني أحداً — لا ختم انقطاع يُكتب على مقعد خارج
+  async disarmMyDisconnectMark() {
+    if (!this.roomCode || !this._myUid) return;
+    try { await onDisconnect(ref(db, `rooms/${this.roomCode}/players/${this._myUid}/disconnectedAt`)).cancel(); } catch {}
   }
 
   // إخراج لاعب تجاوز مهلة السماح (يُنفّذها أي جهاز متصل — الحساب حتمي فالتكرار غير ضار)
   async expirePlayerByNum(num) {
-    if (!this.roomCode) return;
-    try {
-      const snap = await get(ref(db, `rooms/${this.roomCode}/players`));
-      if (!snap.exists()) return;
-      for (const [uid, p] of Object.entries(snap.val())) {
-        if (p && p.num === num && p.active !== false) {
-          await update(ref(db, `rooms/${this.roomCode}/players/${uid}`), { active: false, disconnectedAt: null });
-          return;
-        }
-      }
-    } catch {}
+    return this._markOutWhere((uid, p) => p.num === num, "dropped", { disconnectedAt: null });
   }
 
   // ══ جولة الموافقة (المطابقة العشوائية الجماعية بعدد ناقص) ══
@@ -955,30 +1043,63 @@ export class OnlineManager {
   // announce (الثنائي): نعلن الخروج (status: finished + leftBy) فقط لو خرجنا من مباراة جارية.
   // بعد نهاية المباراة عندي: مغادرة صامتة — وإلا يكتب الفائز leftBy فوق غرفة انتهت فيقرأها
   // من انقطع ثم عاد كأن خصمه انسحب (v35.6). الافتراضي true للمستدعين القدامى.
-  async leaveRoom({ announce = true } = {}) {
+  leaveRoom(opts = {}) {
+    // انسحاب جارٍ ينتظر حسم خروجي: نقرة خروج ثانية (المسار الهادئ) كانت تلغي أوامر الانقطاع كلها —
+    // ومعها ختمي الذي يضمن خروجي لو أُغلقت الصفحة قبل الحسم (مقعد عالق). الآن تنتظر المغادرة نفسها.
+    // (مراجعة v35.7 الثالثة)
+    if (this._leaving && this._leavePromise) return this._leavePromise;
+    const p = this._leaveRoomOnce(opts);
+    this._leavePromise = p;
+    p.then(() => { if (this._leavePromise === p) this._leavePromise = null; },
+           () => { if (this._leavePromise === p) this._leavePromise = null; });
+    return p;
+  }
+  async _leaveRoomOnce({ announce = true } = {}) {
     // 👁️ حماية: المشاهد لا يغادر عبر مسار اللاعبين إطلاقاً (وإلا تُنهى المباراة)
     if (this.isSpectator) return this.leaveSpectator();
     // نتذكّر الغرفة التي نغادرها: لا نعود إليها فوراً في بحث جديد
     // (وإلا يعود الرافض لجولته نفسها فيُحبس كمنتظر — حلقة مغلقة)
     if (this.roomCode) this._recentlyLeft = { code: this.roomCode, at: Date.now() };
+    // غرفة جماعية أثناء اللعب: نعلّم أنفسنا منسحبين — المباراة تكمل للباقين. (v35.7)
+    // أولاً وقبل أي شيء، والمستمع ما زال متصلاً: الذاكرة المحلية دافئة فتنجح المعاملة من أول رحلة
+    // (بعد فصل المستمعين كانت تُرفض وتُعاد)، فيُختم خروجنا بأقرب لحظة لضغط الزر — ولو أُغلقت الصفحة
+    // قبل أن تكتمل تبقى أوامر الانقطاع مسلّحة فيُخرجنا الباقون بعد المهلة بدل مقعد عالق.
+    // فقط لو خرجنا من مباراة جارية (announce) ولم نكن خارجها أصلاً: من خرج (نفد وقته/انقطع)
+    // أو انتهت مباراته يغادر بصمت — لا سبب ولا لحظة خروج تُكتب فوق ما حدث.
+    // مراجعة v35.7 الثانية: المعاملة قد تُلغى (كتابة محلية على مقعدي، أو انقطاع لحظي يطبّق فيه Firebase
+    // أوامر انقطاعي محلياً) فتُعاد؛ وأمر ختم انقطاعي يبقى مسلّحاً حتى يُعتمد خروجي — لو أُغلقت الصفحة
+    // قبلها يُخرجنا الباقون بعد المهلة ("انقطع") بدل مقعد عالق "نشط" ينتظرون بنكه كاملاً.
+    // وبلا شبكة لا نعلّق زر الخروج: ننتظر قليلاً فقط، والمهمة تكمل وحدها بعد مغادرتنا.
+    let withdraw = null;           // نتيجة الانسحاب إن حُسمت خلال الانتظار (القائمة كما اعتمدها الخادم)
+    let exitUnsettled = false;     // انسحاب لم يُحسم بعد: لا نلغي أوامر الانقطاع (تُلغى عند حسمه)
+    if (this.roomCode && this._isMulti && this._gameStarted && this._myUid && announce && !this._iAmOutLocally()) {
+      this._leaving = true;
+      const task = this._withdrawTask(this.roomCode, this._myUid);
+      const waitMs = this._online === false ? 0 : 4000;
+      withdraw = await Promise.race([task, new Promise(res => setTimeout(() => res(null), waitMs))]);
+      exitUnsettled = !withdraw || !!withdraw.error;
+    }
     this._unsubs.forEach(u => u());
     this._unsubs = [];
     this._lastRoom = null;
     // إلغاء أي onDisconnect مسجّل للغرفة القديمة (وإلا يكتب فيها بعد مغادرتنا)
     // مستوى الغرفة يُلغى دائماً (الثنائي لا يضبط _myUid — كان يبقى مسلّحاً بعد المغادرة)
-    if (this.roomCode) {
-      try { await onDisconnect(ref(db, `rooms/${this.roomCode}`)).cancel(); } catch {}
+    // (الإلغاء على مسار يشمل كل ما تحته — فلا شيء منه وانسحابنا لم يُحسم: ختم انقطاعنا هو ضمانه)
+    // تُرسل بترتيبها بلا انتظار ردودها (مراجعة v35.7 الرابعة): انقطاع أثناء انتظار الرد يُسقط الرد نهائياً
+    // فلا ينتهي الانتظار أبداً — وزر الخروج يبقى معلّقاً حتى إعادة تحميل الصفحة. الخادم ينفّذها بترتيبها.
+    const quiet = p => { try { p.catch(() => {}); } catch {} };
+    if (this.roomCode && !exitUnsettled) {
+      try { quiet(onDisconnect(ref(db, `rooms/${this.roomCode}`)).cancel()); } catch {}
     }
-    if (this.roomCode && this._myUid) {
+    if (this.roomCode && this._myUid && !exitUnsettled) {
       try {
-        await onDisconnect(ref(db, `rooms/${this.roomCode}/players/${this._myUid}`)).cancel();
-        await onDisconnect(ref(db, `rooms/${this.roomCode}/players/${this._myUid}/disconnectedAt`)).cancel();
+        quiet(onDisconnect(ref(db, `rooms/${this.roomCode}/players/${this._myUid}`)).cancel());
+        quiet(onDisconnect(ref(db, `rooms/${this.roomCode}/players/${this._myUid}/disconnectedAt`)).cancel());
       } catch {}
     }
     if (this.roomCode) {
       if (this._isMulti && this._gameStarted) {
-        // غرفة جماعية أثناء اللعب: نعلّم أنفسنا منسحبين فقط — المباراة تكمل للباقين
-        try { await update(ref(db, `rooms/${this.roomCode}/players/${this._myUid}`), { active: false }); } catch {}
+        // غرفة جماعية أثناء اللعب: خروجنا (إن كان انسحاباً) كُتب أعلاه قبل فصل المستمعين
       } else if (this._isMulti && !this._gameStarted) {
         // في اللوبي الجماعي: نزيل أنفسنا فقط. لو كنا المنشئ وبقي آخرون → الغرفة تستمر لهم
         // (نقل الملكية: أصغر رقم حاضر يتولّى المسؤولية — يُحسب عند العملاء)
@@ -1019,6 +1140,7 @@ export class OnlineManager {
     this._pendingMoves = [];
     // تصفير كل الحالة المخزّنة والمستمعات (وإلا تُسلَّم بيانات غرفة قديمة للبحث الجديد)
     this._lastClock = null;
+    this._lastPlayers = null;
     this._lastApproval = null;
     this._lastBankSeq = null;
     this._cbClock = null;
@@ -1033,6 +1155,28 @@ export class OnlineManager {
     this._cbLeft = null;
     this._cbRestart = null;
     this._cbMove = null;
+    this._leaving = false;
+    this._rearmPending = false;
+    // withdraw: { ok, players } حُسم الانسحاب (ok = اعتُمد؛ وإلا كنّا خارجين قبله)، أو null (لم يُحسم بعد)
+    return { withdraw: withdraw && !withdraw.error ? withdraw : null };
+  }
+
+  // ══ مهمة الانسحاب من مباراة جماعية جارية (v35.7، مراجعة ثانية) ══
+  // مستقلة عن حالة الغرفة الحالية (قد نغادر قبل اكتمالها، وقد تبدأ مباراة جديدة): تعيد المحاولة حتى
+  // يُعتمد خروجنا "انسحب" أو نجد أنفسنا خارجين أصلاً (أخرجنا غيرنا بعد المهلة / نفد وقتنا) —
+  // وعندها فقط نلغي أمر ختم انقطاعنا. بعد انقطاع يكون الخادم قد استهلك ذلك الأمر: نعيد تسليحه قبل كل
+  // محاولة جديدة (تسجيله لا يكتب بيانات فلا يُلغي المعاملة) — فلو أُغلقت الصفحة قبل الحسم يُخرجنا الباقون.
+  _withdrawTask(code, uid) {
+    const stampRef = ref(db, `rooms/${code}/players/${uid}/disconnectedAt`);
+    return (async () => {
+      const r = await this._markOutReliably(u => u === uid, "left", { disconnectedAt: null }, {
+        code, tries: 8,
+        onRetry: () => { onDisconnect(stampRef).set(serverTimestamp()).catch(() => {}); },
+      });
+      // (بلا انتظار الرد: انقطاع أثناء انتظاره يُسقطه فتبقى المهمة معلّقة — مراجعة v35.7 الخامسة)
+      if (!r.error) { try { onDisconnect(stampRef).cancel().catch(() => {}); } catch {} }
+      return r;
+    })();
   }
 
   // ══ إرسال إشعار restart ═════════════════════════════════════
@@ -1094,6 +1238,14 @@ export class OnlineManager {
     const unsub   = onValue(connRef, snap => {
       const connected = snap.val();
       this._online = connected;   // v35.6: من كان غير متصل لحظة النهاية لا يعلن فوزاً
+      // مباراة جماعية جارية وأنا فيها: أوامر الانقطاع تخصّ الاتصال الذي سُجّلت عليه (يستهلكها الخادم
+      // عند سقوطه، وقد يضيع تسجيلها لو سقط قبل تأكيدها) — نعيد تسليح ختمي على كل اتصال جديد.
+      // (لا على مقعد خارج أو غير ظاهر، ولا أثناء انسحابي — مراجعة v35.7 الثالثة)
+      if (connected === true && this._isMulti && this._gameStarted && this.roomCode && this._myUid
+          && !this.isSpectator && !this._leaving && !this._iAmOutLocally()) {
+        if (this._mySeatLive()) this._armMyStamp();
+        else this._rearmPending = true;      // النسخة المحلية لا تُظهر مقعدي بعد: أول لقطة من الخادم تقرّر
+      }
       this._cbConnection && this._cbConnection(connected);
     });
     this._unsubs.push(unsub);

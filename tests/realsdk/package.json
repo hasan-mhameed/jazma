@@ -1,0 +1,13 @@
+{
+  "name": "jazam-realsdk",
+  "private": true,
+  "type": "module",
+  "description": "فحوص بحزمة Firebase الحقيقية (نفس نسخة الموقع 10.12.0) فوق خادم RTDB وهمي — لسلوك الحزمة الداخلي: إلغاء المعاملات، تطبيق أوامر الانقطاع محلياً، ونطاق الإلغاء",
+  "scripts": {
+    "pretest": "node prepare.mjs",
+    "test": "node run.mjs"
+  },
+  "dependencies": {
+    "firebase": "10.12.0"
+  }
+}

@@ -112,6 +112,7 @@ class Server {
     }
     for (const C of this.childL) {
       if (C.dead) continue;
+      if (!C.client.connected) continue;   // غير المتصل لا يستلم؛ يستلم ما فاته عند عودته (drop) — مراجعة v35.7
       const cur = this.getAt(C.path);
       if (!cur || typeof cur !== 'object') continue;
       for (const k of Object.keys(cur).sort()) if (!C.seen.has(k)) {
@@ -284,18 +285,40 @@ const STUBS = {
   'presence.js': `export function setMyPresence() {}`,
   'scoreboard.js': `export function updateScoreboard() {}`,
   'config.js': `export const config = {};`,
-  'boardRenderer.js': `export function applyOnlineMove() {} export function skipInactiveTurn() {} export function waitForRender() { return Promise.resolve(); }`,
+  // اللوحة: الحركة الخاصة "__final__" تكمل اللوحة (كما يفعل boardRenderer عند آخر مربع: تُعلَّم
+  // المباراة منتهية ثم تُستدعى النهاية الطبيعية مباشرة) — v35.7
+  'boardRenderer.js': `import { state } from './state.js'; import { endGame } from './gameEnd.js';
+    export function applyOnlineMove(key, cfg) {
+      if (key === '__final__' && !state.gameFinished) { state.gameFinished = true; endGame(cfg, state.scores || {}); } }
+    export function skipInactiveTurn() {} export function waitForRender() { return Promise.resolve(); }`,
   'turnTimer.js': `export function setBank() {} export function applyClockState() {} export function stopTurnTimer() {}`,
   'state.js': `export const state = {};`,
   'auth.js': `export function getCurrentUser() { return globalThis.__user; }`,
   // نافذة النهاية: نلتقط كل نهاية (ومعها من خرج والعنوان) وكل تسجيل انسحاب — v35.6
-  'gameEnd.js': `export function endGame(cfg, scores, forced, loser, exitInfo, opts) {
-      globalThis.__onEnd({ kind: 'end', forced: !!forced, exitInfo: exitInfo || null, title: (opts && opts.title) || null }); }
-    export async function recordForfeit(cfg) { globalThis.__onEnd({ kind: 'forfeit', me: cfg ? cfg.onlinePlayerNum : null }); }`,
+  // + v35.7: تسجيل الخروج من مباراة جماعية جارية (السبب والمركز)، والترتيب النهائي من
+  //   matchResult الحقيقي (المركز الذي يُسجَّل ويُعرض فعلاً)
+  'gameEnd.js': `import { computeMatchResult } from './matchResult.js';
+    const rk = R => R.ranking.map(r => ({ player: r.player, rank: r.rank, exited: r.exited }));
+    export async function endGame(cfg, scores, forced, loser, exitInfo, opts) {
+      // كـgameEnd.js الحقيقي (v35.7): النهاية الطبيعية بالجماعي أونلاين تُحسب بعد لحظة (يُفحص في results.mjs)
+      if (!forced && cfg.aiMode === 'online' && cfg.multiPlayers) await new Promise(res => setTimeout(res, 0));
+      const R = computeMatchResult(cfg, scores || {}, { exitInfo, loserPlayer: loser });
+      globalThis.__onEnd({ kind: 'end', forced: !!forced, exitInfo: exitInfo || null, title: (opts && opts.title) || null,
+        myRank: R.myRank, myResult: R.myResult, ranking: rk(R) }); }
+    export async function recordForfeit(cfg, scores) {
+      const me = cfg ? cfg.onlinePlayerNum : null;
+      const R = computeMatchResult(cfg, scores || {}, { exitInfo: { [me]: 'انسحب' } });
+      globalThis.__onEnd({ kind: 'forfeit', me, myRank: R.myRank }); }
+    export function recordElimination(cfg, scores, reason, opts) {
+      const pend = opts && opts.pending ? { exitInfo: { [cfg.onlinePlayerNum]: 'x' } } : {};
+      const R = computeMatchResult(cfg, scores || {}, pend);
+      if (R.me == null) return null;
+      globalThis.__onEnd({ kind: 'elim', reason, silent: !!(opts && opts.silent), me: R.me, myRank: R.myRank, count: R.count, ranking: rk(R) });
+      return { R, coins: Promise.resolve({ earned: 0, total: null }), recorded: Promise.resolve(null) }; }`,
   'firebase-app.js': `export function initializeApp() { return {}; } export function getApps() { return []; }`,
   'firebase-database.js': `const F = globalThis.__fdb; export const { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp } = F;`,
 };
-const REAL = { 'firebase.js': '/js/firebase.js', 'onlineGame.js': '/js/ui/onlineGame.js' };
+const REAL = { 'firebase.js': '/js/firebase.js', 'onlineGame.js': '/js/ui/onlineGame.js', 'matchResult.js': '/js/core/matchResult.js' };
 
 export class World {
   constructor() { this.server = new Server(this); this.clients = []; this.timeline = []; this.errors = []; this.quiet = false; }
@@ -349,7 +372,9 @@ class Client {
       __onEnd: (e) => {
         if (self.dead) return;
         self.ends.push({ at: clock.now, ...e });
-        self.event('END', e.kind === 'end' ? `نافذة النتيجة: "${e.title || 'نهاية طبيعية'}" خرج=${JSON.stringify(e.exitInfo)}` : 'تسجيل خسارة الانسحاب');
+        self.event('END', e.kind === 'end' ? `نافذة النتيجة: "${e.title || 'نهاية طبيعية'}" خرج=${JSON.stringify(e.exitInfo)} مركزي=${e.myRank}`
+          : e.kind === 'elim' ? `تسجيل خروجي (${e.reason}) — المركز ${e.myRank} من ${e.count}`
+          : `تسجيل خسارة الانسحاب — المركز ${e.myRank}`);
       },
     };
     g.window = g; g.globalThis = g;
@@ -499,6 +524,16 @@ class Client {
       if (this.dead) return;
       this.connected = true;
       this.connL.forEach(L => { if (!L.dead) this.safe(() => L.cb(makeSnap('connected', true))); });
+      // ما فات يُسلَّم دفعةً واحدة، وكما في Firebase SDK: أحداث الأبناء (child_added على moves) قبل
+      // حدث القيمة على الأصل (الغرفة/قائمة اللاعبين) — مراجعة v35.7
+      for (const C of srv.childL) {
+        if (C.dead || C.client !== this) continue;
+        const cur = srv.getAt(C.path);
+        if (!cur || typeof cur !== 'object') continue;
+        for (const k of Object.keys(cur).sort()) if (!C.seen.has(k)) {
+          C.seen.add(k); const v = clone(cur[k]); this.safe(() => C.cb(makeSnap(k, v)));
+        }
+      }
       for (const L of srv.valueL) {
         if (L.dead || L.client !== this) continue;
         const v = toRead(clone(srv.getAt(L.path))); const ser = JSON.stringify(v);

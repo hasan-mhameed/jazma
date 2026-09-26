@@ -1,4 +1,4 @@
-// 📄 matchResult.js — v35.5
+// 📄 matchResult.js — v35.5 (+ v35.7: سبب الخروج وترتيب الخارجين بترتيب خروجهم)
 // نتيجة المباراة من مصدر واحد: من لعب فعلاً، ومن "أنا"، ومركز كل لاعب.
 // دالة نقية (بلا DOM ولا Firebase): تستعملها نافذة النهاية وشريط النقاط، ويختبرها المحاكي.
 //
@@ -44,7 +44,10 @@ export function getPlayerUid(cfg, num, myUid = null) {
   return me != null ? (cfg.onlineOpponentUid || null) : null;
 }
 
-/** الخارجون وسبب خروجهم: { رقم المقعد: "نفد وقته" | "انسحب" } */
+// سبب خروج لاعب من مباراة جماعية جارية — يكتبه من نفّذ الإخراج مع active:false (v35.7)
+export const OUT_LABELS = { time: "نفد وقته", dropped: "انقطع", left: "انسحب" };
+
+/** الخارجون وسبب خروجهم: { رقم المقعد: "نفد وقته" | "انقطع" | "انسحب" } */
 export function getExited(cfg, { exitInfo = null, loserPlayer = null } = {}) {
   const exited = {};
   if (exitInfo && typeof exitInfo === "object") Object.assign(exited, exitInfo);
@@ -52,16 +55,38 @@ export function getExited(cfg, { exitInfo = null, loserPlayer = null } = {}) {
   const mp = cfg && cfg.multiPlayers;
   if (mp && typeof mp === "object") {
     Object.values(mp).forEach(p => {
-      if (p && p.active === false && Number.isInteger(p.num) && !exited[p.num]) exited[p.num] = "انسحب";
+      if (p && p.active === false && Number.isInteger(p.num) && !exited[p.num]) {
+        exited[p.num] = OUT_LABELS[p.outReason] || "انسحب";   // غرف قديمة بلا سبب = انسحب
+      }
     });
   }
   return exited;
 }
 
 /**
+ * لحظة خروج كل مقعد (ختم الخادم outAt) — لترتيب الخارجين بترتيب خروجهم (v35.7).
+ * - خروج مخزَّن بختم: لحظته.
+ * - خروج مخزَّن بلا ختم (كتبه جهاز بنسخة أقدم): الأقدم (−∞) — لا "الأحدث للأبد" فيتقدّم على كل من خرج بعده.
+ * - خارج لم يُخزَّن خروجه بعد (المنسحب الآن قبل كتابة ختمه، نفاد الوقت بالثنائي عبر exitInfo/loserPlayer): الآن (+∞).
+ */
+function exitTimes(cfg) {
+  const t = {};
+  const mp = cfg && cfg.multiPlayers;
+  if (mp && typeof mp === "object") {
+    Object.values(mp).forEach(p => {
+      if (!p || !Number.isInteger(p.num) || p.active !== false) return;
+      t[p.num] = typeof p.outAt === "number" ? p.outAt : -Infinity;
+    });
+  }
+  return n => (n in t ? t[n] : Infinity);
+}
+
+/**
  * النتيجة الكاملة للمباراة.
  * ranking: [{ player, score, exited, rank }] — المتنافسون بالنقاط ثم الخارجون بالأسفل
  * المركز يتشاركه المتعادلون (1، 1، 3)، والخارج دائماً بعد كل المتنافسين.
+ * الخارجون بترتيب خروجهم (v35.7): أول من خرج = آخر مركز، فمركز كلٍّ منهم يثبت لحظة خروجه
+ * (يُسجَّل حينها) ولا يتكرّر — والنقاط تفصل فقط بين من لا نعرف ترتيب خروجهم.
  * me/myResult/myRank/myScore: null للمشاهد (لا يُسجَّل له شيء).
  * category: 'ai' | 'local' | 'online' (واحد ضد واحد) | 'multi' (3 فأكثر)
  *   — مباراة لاعبَين من غرفة جماعية تُعدّ واحداً ضد واحد.
@@ -72,24 +97,32 @@ export function computeMatchResult(cfg, scores, opts = {}) {
   const exited = {};
   participants.forEach(n => { if (exitedAll[n]) exited[n] = exitedAll[n]; });
   const scoreOf = n => Number(scores && scores[n]) || 0;
+  const outAt = exitTimes(cfg);
+  // خارج x قبل خارج r بالترتيب؟ الأحدث خروجاً أعلى؛ ونفس اللحظة (أو بلا أختام) → النقاط
+  const exitedAbove = (x, r) => {
+    const ox = outAt(x.player), or = outAt(r.player);
+    return ox !== or ? ox > or : x.score > r.score;
+  };
 
   const ranking = participants.map(n => ({ player: n, score: scoreOf(n), exited: exited[n] || null }));
   ranking.sort((a, b) =>
-    (a.exited ? 1 : 0) - (b.exited ? 1 : 0) || b.score - a.score || a.player - b.player);
+    (a.exited ? 1 : 0) - (b.exited ? 1 : 0)
+    || (a.exited && b.exited ? (exitedAbove(a, b) ? -1 : exitedAbove(b, a) ? 1 : 0) : 0)
+    || b.score - a.score || a.player - b.player);
 
   // الخارجون خسروا مؤكّداً: الفوز والتعادل بين المتنافسين فقط
   const contenders = ranking.filter(r => !r.exited);
   const outs       = ranking.filter(r => r.exited);
   const pool       = contenders.length ? contenders : ranking;   // احتياط: خرج الجميع
-  const maxScore   = pool.length ? pool[0].score : 0;
+  const maxScore   = pool.length ? Math.max(...pool.map(r => r.score)) : 0;   // لا pool[0]: الخارجون مرتّبون بالخروج لا بالنقاط
   const top        = pool.filter(r => r.score === maxScore).map(r => r.player);
   const isDraw     = top.length > 1;
   const winnerNum  = isDraw ? null : (top.length ? top[0] : null);
 
   ranking.forEach(r => {
-    const group  = r.exited ? outs : contenders;
-    const offset = r.exited ? contenders.length : 0;
-    r.rank = offset + 1 + group.filter(x => x.score > r.score).length;
+    r.rank = r.exited
+      ? contenders.length + 1 + outs.filter(x => exitedAbove(x, r)).length
+      : 1 + contenders.filter(x => x.score > r.score).length;
   });
 
   const me   = getMyNum(cfg);

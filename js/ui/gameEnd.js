@@ -1,17 +1,18 @@
-// 📄 gameEnd.js — v35.6 (النتيجة من مصدر واحد + كل النهايات تمرّ من هنا)
+// 📄 gameEnd.js — v35.7 (النتيجة من مصدر واحد + كل النهايات تمرّ من هنا)
 // النهايات: اكتمال اللوحة، نفاد بنك الوقت، انسحاب/انقطاع الخصوم (نافذة النتيجة + التسجيل)،
-// والانسحاب بالزر (تسجيل الخسارة فقط — recordForfeit).
-import { audioManager } from "../audio/audioManager.js?v=1790013057";
+// والانسحاب بالزر (تسجيل الخسارة فقط — recordForfeit)، والخروج من مباراة جماعية جارية
+// (نفاد الوقت أو الانقطاع بلا عودة — recordElimination، v35.7).
+import { audioManager } from "../audio/audioManager.js?v=1790376125";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1790013057";
-import { saveMatch } from "../history.js?v=1790013057";
-import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1790013057";
-import { showNewAchievements } from "./achievementsUI.js?v=1790013057";
-import { calcXP, addXP } from "../xp.js?v=1790013057";
-import { showXPGain } from "./xpUI.js?v=1790013057";
-import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1790013057";
-import { commitMatchCoins } from "../core/wallet.js?v=1790013057";
-import { computeMatchResult, multiHistoryResult, getMyNum } from "../core/matchResult.js?v=1790013057";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1790376125";
+import { saveMatch } from "../history.js?v=1790376125";
+import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1790376125";
+import { showNewAchievements } from "./achievementsUI.js?v=1790376125";
+import { calcXP, addXP } from "../xp.js?v=1790376125";
+import { showXPGain } from "./xpUI.js?v=1790376125";
+import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1790376125";
+import { commitMatchCoins, getMatchCoins } from "../core/wallet.js?v=1790376125";
+import { computeMatchResult, multiHistoryResult, getMyNum, OUT_LABELS } from "../core/matchResult.js?v=1790376125";
 
 export let _matchStartTime = Date.now();
 // مرة واحدة لكل مباراة: نهايتان متزامنتان (مثلاً آخر حركة + خروج خصم) لا تسجّلان مرتين
@@ -195,22 +196,54 @@ async function doRecord(cfg, R, scores, { silent = false, startedAt, daily }) {
   return headToHead;
 }
 
+// لقطة من الإعدادات: المغادرة تصفّرها بعد لحظات، والتسجيل يمرّ بعدة رحلات شبكة
+function snapshotCfg(cfg) {
+  return {
+    ...cfg,
+    onlinePlayerNames: { ...(cfg.onlinePlayerNames || {}) },
+    localPlayerNames:  cfg.localPlayerNames ? { ...cfg.localPlayerNames } : cfg.localPlayerNames,
+    multiPlayers:      cfg.multiPlayers ? JSON.parse(JSON.stringify(cfg.multiPlayers)) : null,
+  };
+}
+
 // ── 🚪 الانسحاب بالزر أثناء مباراة جارية = خسارة مسجّلة (قرار "المنسحب يخسر") ──
 // بلا نافذة نتيجة (اللاعب يغادر)، وبلا عملات المباراة (الانسحاب يخسرها).
 // تؤخذ لقطة فورية: المغادرة تصفّر الإعدادات والنقاط بعد لحظات.
 export async function recordForfeit(cfg, scores) {
   const me = getMyNum(cfg);
   if (me == null || !currentUser) return;
-  const snap = {
-    ...cfg,
-    onlinePlayerNames: { ...(cfg.onlinePlayerNames || {}) },
-    localPlayerNames:  cfg.localPlayerNames ? { ...cfg.localPlayerNames } : cfg.localPlayerNames,
-    multiPlayers:      cfg.multiPlayers ? JSON.parse(JSON.stringify(cfg.multiPlayers)) : null,
-  };
+  const snap = snapshotCfg(cfg);
   const sc = { ...(scores || {}) };
   const R  = computeMatchResult(snap, sc, { exitInfo: { [me]: "انسحب" } });
   _forfeited = true;   // عملات المباراة لا تُضاف للمنسحب
   await recordMyResult(snap, R, sc, { silent: true });
+}
+
+// ── 🚪 خرجتُ من مباراة جماعية ما زالت جارية للباقين (v35.7) ──
+// reason: "time" (نفد وقتي) | "dropped" (انقطعت ولم أعد خلال المهلة) — كما في الغرفة (outReason).
+// النتيجة تُسجَّل لحظة الخروج لا في نهاية المباراة: إغلاق الصفحة بعدها لا يُسقط الخسارة،
+// والمركز يثبت بترتيب الخروج. العملات حسب السبب:
+//   نفاد الوقت قاعدة لعب عادية → عملات المباراة محفوظة (تُثبَّت الآن، كالثنائي)؛
+//   الانقطاع بلا عودة خلال المهلة يُعامَل كالانسحاب → بلا عملات المباراة
+//   (المهلة هي فرصة العودة؛ وإلا صار قطع الشبكة أربح من الانسحاب لمن يخسر).
+// النهاية اللاحقة (آخر الباقين أو اكتمال اللوحة) تعرض النتيجة النهائية بلا تسجيل ثانٍ.
+// cfg يحمل عادةً قائمة اللاعبين التي فيها خروجي (active:false + outAt، كما أكّدها الخادم).
+// pending: خروجي لم يصل من الخادم بعد (نفد وقتي وأغادر قبل تأكيده) — يُعدّ خروج "الآن".
+// silent: التسجيل لحظة المغادرة بزر الخروج — بلا إشعارات خبرة وإنجازات فوق القائمة (كالانسحاب)
+export function recordElimination(cfg, scores, reason, { pending = false, silent = false } = {}) {
+  const snap = snapshotCfg(cfg);
+  const sc = { ...(scores || {}) };
+  const me = getMyNum(snap);
+  if (me == null) return null;
+  const R  = computeMatchResult(snap, sc, pending ? { exitInfo: { [me]: OUT_LABELS[reason] || "انسحب" } } : {});
+  if (R.me == null) return null;
+  // (سبب غير معروف — أخرجني جهاز بنسخة أقدم لا تكتب السبب: لا نعاقب بلا دليل)
+  // lost: عملات جواهر المباراة التي ضاعت (تُعرض بالرقم على البطاقة — شفافية كالألعاب العالمية)
+  let lost = 0;
+  if (reason === "dropped" || reason === "left") { lost = _coinsPromise ? 0 : (getMatchCoins() || 0); _forfeited = true; }
+  const coins = commitCoinsOnce();
+  const recorded = recordMyResult(snap, R, sc, { silent });
+  return { R, coins, recorded, lost };
 }
 
 // 💎 عملات المباراة: تُضاف مرة واحدة لكل مباراة (والمنسحب لا يأخذها)
@@ -229,6 +262,14 @@ export async function endGame(cfg, scores, forced = false, loserPlayer = null, e
   const filled = Object.values(scores).reduce((a, b) => (+a||0) + (+b||0), 0);
   // النهاية الطبيعية تتطلب اكتمال اللوحة؛ الإجبارية (نفاد بنك الوقت/خروج الخصوم) تتخطّاه
   if (!forced && filled < totalSquares) return;
+
+  // v35.7 (مراجعة): النهاية الطبيعية في الجماعي أونلاين تُحسب بعد لحظة لا فوراً — عند العودة من
+  // انقطاع يسلّم Firebase ما فات دفعةً واحدة: الحركات أولاً (فتكتمل اللوحة هنا) ثم قائمة اللاعبين
+  // (وفيها خروجي أثناء غيابي). الحساب الفوري كان يعدّني ما زلت في المباراة فيسجّل لي فوزاً وأنا خارجها.
+  // (cfg هنا هو الإعدادات الحيّة نفسها: تُحدَّث قائمتها قبل أن نكمل)
+  if (!forced && cfg.aiMode === "online" && cfg.multiPlayers) {
+    await new Promise(res => setTimeout(res, 0));
+  }
 
   // النتيجة من مصدر واحد (core/matchResult.js):
   // - من لعب فعلاً فقط: المقعد الفارغ (غادر صاحبه قبل البدء) لا يظهر كلاعب برصيد 0
@@ -348,6 +389,8 @@ export async function endGame(cfg, scores, forced = false, loserPlayer = null, e
     }
   }
 
+  // بطاقة "خرجت من المباراة" (v35.7) لا تبقى تحت نافذة النتيجة النهائية
+  document.getElementById("out-card")?.remove();
   winnerScreen.classList.remove("hidden");
   setTimeout(() => audioManager.playWin(), 300);
 }

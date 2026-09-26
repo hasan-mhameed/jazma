@@ -526,20 +526,27 @@ async function duoMatch(w) {
   return { A, B };
 }
 
-// ── 19) الثنائي: الانسحاب بالزر ──
+// ── 19) الثنائي: الانسحاب بالزر — بالاتجاهين (المنضم ينسحب، ثم المنشئ) ──
+// المنشئ والمنضم مستمعاتهما مختلفة (المنشئ على الغرفة مرتين، المنضم مرة) — نفحص الاتجاهين
 export async function duoWithdrawEnding(verbose = false) {
   const r = suite('الثنائي: المنسحب بالزر تُسجَّل خسارته، وخصمه يرى فوزه بنافذة النتيجة'); r.verbose = verbose;
-  const w = new World(); w.quiet = true; w.startSampler(100);
-  const { A, B } = await duoMatch(w);
-  r.ok(A.matches.length && B.matches.length, 'بدأت المباراة');
-  B.withdraw(); await w.run(4000);
-  const e = endsOf(A, 'end');
-  r.ok(e.length === 1, `نافذة نتيجة واحدة عند الفائز (${e.length}) — إشارتا "أنهى" و"غادر" لا تكرّرانها`);
-  r.ok(e[0]?.forced && e[0]?.exitInfo?.[2] === 'انسحب', `المنسحب بشارة "انسحب" (${JSON.stringify(e[0]?.exitInfo)})`);
-  r.ok(/فزت/.test(e[0]?.title || '') && /انسحب باسل/.test(e[0]?.title || ''), `العنوان: "${e[0]?.title}"`);
-  r.ok(endsOf(B, 'forfeit').length === 1 && endsOf(B, 'end').length === 0, 'المنسحب: خسارته مسجّلة ولا نافذة فوز عنده');
-  r.ok(!/الخصم أنهى اللعبة/.test(A.toasts()), 'لا رسالة "الخصم أنهى اللعبة" القديمة');
-  noErr(r, w); w.dispose(); return r;
+  for (const who of ['المنضم', 'المنشئ']) {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const { A, B } = await duoMatch(w);
+    const L = who === 'المنضم' ? B : A;        // المنسحب
+    const S = who === 'المنضم' ? A : B;        // الباقي (الفائز)
+    const lNum = who === 'المنضم' ? 2 : 1;
+    r.ok(A.matches.length && B.matches.length, `${who} ينسحب: بدأت المباراة`);
+    L.withdraw(); await w.run(4000);
+    const e = endsOf(S, 'end');
+    r.ok(e.length === 1, `${who}: نافذة نتيجة واحدة عند الفائز (${e.length}) — إشارتا "أنهى" و"غادر" لا تكرّرانها`);
+    r.ok(e[0]?.forced && e[0]?.exitInfo?.[lNum] === 'انسحب', `${who}: بشارة "انسحب" (${JSON.stringify(e[0]?.exitInfo)})`);
+    r.ok(/فزت/.test(e[0]?.title || '') && new RegExp('انسحب ' + L.name).test(e[0]?.title || ''), `${who}: العنوان "${e[0]?.title}"`);
+    r.ok(endsOf(L, 'forfeit').length === 1 && endsOf(L, 'end').length === 0, `${who}: خسارته مسجّلة ولا نافذة فوز عنده`);
+    r.ok(!/الخصم أنهى اللعبة/.test(S.toasts()), `${who}: لا رسالة "الخصم أنهى اللعبة" القديمة`);
+    noErr(r, w); w.dispose();
+  }
+  return r;
 }
 
 // ── 20) الثنائي: الخصم يغلق تبويبه ──
@@ -667,5 +674,267 @@ export async function multiLastStanding(verbose = false) {
   r.ok(endsOf(B, 'end').length === 0, 'المنسحب بالزر لا تصله نافذة (غادر الغرفة)');
   await w.run(5000);
   r.ok(endsOf(A, 'end').length === 1 && endsOf(C, 'end').length === 1, 'لا تكرار للنهاية مع تحديثات الغرفة اللاحقة');
+  noErr(r, w); w.dispose(); return r;
+}
+
+// ═════════ 🚪 الخروج من مباراة جماعية جارية (v35.7) ═════════
+// فحصك 6: من خرج (انقطع ولم يعد خلال المهلة) يعود مشاهداً، وزر الخروج كان يحذّره من خسارة وقعت
+// أصلاً. ووراءها: خسارته تُسجَّل فقط لو بقي للنهاية أو ضغط خروج (إغلاق الصفحة يُسقطها)، وعملاته
+// تتبع صبره، والخارجون يُرتَّبون بالنقاط في النهاية فتتكرّر المراكز. الإصلاح: التسجيل لحظة الخروج،
+// بطاقة واضحة، خروج هادئ بعدها، سبب ولحظة الخروج في الغرفة، والمراكز بترتيب الخروج.
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const cardOf = c => c.toasts().split('\n').filter(l => /خرجت من المباراة/.test(l) && /تابع المشاهدة/.test(l));
+const setScores = (cs, sc) => cs.forEach(c => { c.mods.state.scores = { ...sc }; });
+const seat = (w, code, c) => w.server.getAt(`rooms/${code}/players/${c.uid}`) || {};
+async function codeMatch3(w) {
+  const A = await w.client('أحمد'), B = await w.client('باسل'), C = await w.client('كريم');
+  const code = await makeCodeRoom(w, A, 3);
+  B.joinCode(code); await w.run(600); C.joinCode(code); await w.run(800);
+  A.startCode();
+  const ok = await waitFor(w, () => A.matches.length && B.matches.length && C.matches.length, 8000);
+  await w.run(6000);
+  return { A, B, C, code, ok };
+}
+
+// ── 23) انقطع ولم يعد: خسارته لحظة خروجه + بطاقة، ثم خروج هادئ (فحصك 6 بالضبط) ──
+export async function multiOutDropped(verbose = false) {
+  const r = suite('الجماعي: انقطع ولم يعد → خروجه يُسجَّل فوراً مع بطاقة، وزر الخروج بعدها هادئ'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const { A, B, C, code, ok } = await codeMatch3(w);
+  r.ok(ok, 'بدأت المباراة للثلاثة');
+  setScores([A, B, C], { 1: 2, 2: 1, 3: 3 });
+  C.drop({ offlineMs: 16000, serverDetectMs: 1500 });
+  await w.run(14000);   // الخادم لاحظ بعد 1.5ث، ومهلة 10ث انقضت عند الباقين
+  const s = seat(w, code, C);
+  r.ok(s.active === false && s.outReason === 'dropped' && typeof s.outAt === 'number',
+    `المقعد: خارج بسبب "انقطع" مع لحظة الخروج (${JSON.stringify({ active: s.active, why: s.outReason ?? null, at: typeof s.outAt })})`);
+  r.ok(/انقطع كريم ولم يعد/.test(A.toasts()) && !/كريم انسحب/.test(A.toasts()), 'الباقون يرون "انقطع كريم ولم يعد" لا "انسحب"');
+  await w.run(4000);    // عاد كريم
+  const e = endsOf(C, 'elim');
+  r.ok(e.length === 1 && e[0].reason === 'dropped' && e[0].myRank === 3 && e[0].count === 3,
+    `عند عودته: خروجه مسجّل فوراً (${JSON.stringify(e[0] ? { why: e[0].reason, rank: e[0].myRank, of: e[0].count } : null)})`);
+  r.ok(e.length === 1 && e[0].silent === false, 'تسجيل عادي (هو في الصفحة ويرى بطاقته — لا مغادرة)');
+  const card = cardOf(C);
+  r.ok(card.length === 1 && /انقطع اتصالك ولم تعد خلال المهلة/.test(card[0]) && /المركز 3 من 3/.test(card[0]) && /العودة للقائمة/.test(card[0]),
+    `بطاقة بمركزه وخيارين: ${card[0] ? card[0].replace(/^.*toast\s+/, '').slice(0, 150) : '—'}`);
+  r.ok(C.mods.og.isOutOfMatch?.() === true, 'حالته: خارج المباراة (يشاهد)');
+  r.ok(!C.onDisc.some(o => o.path.endsWith(`${C.uid}/disconnectedAt`)), 'لا أمر انقطاع مسلّح على مقعده الخارج (مراجعة v35.7)');
+  r.ok(/تشاهد/.test(C.el('online-turn-indicator').textContent), `المؤشر فوق اللوحة: "${C.el('online-turn-indicator').textContent}"`);
+  r.ok([A, B, C].every(c => endsOf(c, 'end').length === 0), 'المباراة مستمرة لأحمد وباسل');
+  // زر الخروج بعد خروجه: هادئ — لا خسارة ثانية ولا كتابة فوق سبب خروجه ولحظته
+  const before = JSON.stringify(seat(w, code, C));
+  C.withdraw(); await w.run(3000);
+  r.ok(endsOf(C, 'forfeit').length === 0, 'الخروج بعدها: لا "خسارة انسحاب" ثانية (ولا تحذير منها)');
+  r.ok(JSON.stringify(seat(w, code, C)) === before, 'ولا تُعاد كتابة سبب خروجه ولحظته');
+  r.ok(endsOf(C, 'elim').length === 1, 'وتسجيل الخروج بقي مرة واحدة');
+  noErr(r, w); w.dispose(); return r;
+}
+
+// ── 24) نفد وقته: سبب "نفد وقته"، ولا إخراج ثانٍ يغيّر سببه أو لحظته ──
+export async function multiOutTime(verbose = false) {
+  const r = suite('الجماعي: نفد وقته → خروجه مسجّل بسببه ومركزه، وإخراج متأخر لا يكتب فوقه'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const { A, B, C, code, ok } = await codeMatch3(w);
+  r.ok(ok, 'بدأت المباراة للثلاثة');
+  setScores([A, B, C], { 1: 1, 2: 1, 3: 5 });
+  C.safe(() => C.om.markSelfInactive());   // ما يفعله main.js عند نفاد بنك كريم
+  await w.run(1500);
+  const s = seat(w, code, C);
+  r.ok(s.active === false && s.outReason === 'time' && typeof s.outAt === 'number', `المقعد: "نفد وقته" مع لحظة الخروج (${s.outReason ?? null})`);
+  const e = endsOf(C, 'elim');
+  r.ok(e.length === 1 && e[0].reason === 'time' && e[0].myRank === 3,
+    `كريم: خروجه مسجّل فوراً بالمركز 3 رغم تقدّمه بالنقاط (${JSON.stringify(e[0] ? { why: e[0].reason, rank: e[0].myRank } : null)})`);
+  r.ok(cardOf(C).some(l => /نفد وقتك — خرجت من المباراة/.test(l)), 'بطاقة "نفد وقتك — خرجت من المباراة"');
+  r.ok(!/كريم انسحب/.test(A.toasts() + B.toasts()), 'الباقون لا يرون "كريم انسحب" (السبب نفاد الوقت)');
+  // أجهزة أخرى "تنقذ" متأخرة (ظنّته منقطعاً): لا تغيّر سبب خروجه ولا لحظته
+  B.safe(() => B.om.markPlayerInactiveByNum(3)); A.safe(() => A.om.expirePlayerByNum(3));
+  await w.run(1500);
+  const s2 = seat(w, code, C);
+  r.ok(s2.outReason === 'time' && s2.outAt === s.outAt, `إخراج ثانٍ لا يكتب فوق الأول (${s2.outReason}، ${s2.outAt === s.outAt ? 'نفس اللحظة' : 'تغيّرت اللحظة'})`);
+  r.ok(endsOf(C, 'elim').length === 1, 'وتسجيل الخروج مرة واحدة');
+  // جهاز منقطع (قائمته قديمة: يظن نفسه ما زال في المباراة) يعلن نفاد وقته بعد أن أخرجه غيره —
+  // الفحص المسبق لا يكفي هنا؛ المعاملة الذرّية ترفض الإخراج الثاني فلا تتغيّر لحظة خروجه
+  B.drop({ offlineMs: 8000, serverDetectMs: 30000 });
+  A.safe(() => A.om.markPlayerInactiveByNum(2)); await w.run(1500);
+  const b1 = seat(w, code, B);
+  B.safe(() => B.om.markSelfInactive()); await w.run(1500);
+  const b2 = seat(w, code, B);
+  r.ok(b1.active === false && b2.outReason === 'time' && b2.outAt === b1.outAt,
+    `إخراج من جهاز بقائمة قديمة لا يكتب فوق الأول (${b2.outAt === b1.outAt ? 'نفس اللحظة' : 'تغيّرت اللحظة'})`);
+  noErr(r, w); w.dispose(); return r;
+}
+
+// ── 25) أربعة لاعبين: المراكز بترتيب الخروج، كل مركز لواحد فقط ──
+export async function multiExitOrder(verbose = false) {
+  const r = suite('الجماعي: المراكز بترتيب الخروج — أول من خرج آخرها، بلا تكرار (4 لاعبين)'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const A = await w.client('أحمد'), B = await w.client('باسل'), C = await w.client('كريم'), D = await w.client('دانة');
+  const code = await makeCodeRoom(w, A, 4);
+  B.joinCode(code); await w.run(600); C.joinCode(code); await w.run(600); D.joinCode(code); await w.run(800);
+  A.startCode();
+  r.ok(await waitFor(w, () => [A, B, C, D].every(c => c.matches.length), 8000), 'بدأت المباراة للأربعة');
+  await w.run(6000);
+  setScores([A, B, C, D], { 1: 1, 2: 2, 3: 8, 4: 0 });   // كريم متقدّم بفارق وسيخرج أولاً
+  C.withdraw(); await w.run(2000);
+  B.withdraw(); await w.run(2000);
+  const fC = endsOf(C, 'forfeit')[0], fB = endsOf(B, 'forfeit')[0];
+  r.ok(fC?.myRank === 4, `كريم (خرج أولاً، متقدّم بالنقاط): المركز 4 (${fC?.myRank})`);
+  r.ok(fB?.myRank === 3, `باسل (خرج ثانياً): المركز 3 — لا يتكرّر مع كريم (${fB?.myRank})`);
+  D.drop({ offlineMs: 16000, serverDetectMs: 1500 }); await w.run(19000);   // دانة لا تعود بالمهلة → أحمد آخر الباقين
+  const eA = endsOf(A, 'end')[0];
+  const order = eA ? eA.ranking.map(x => `${x.player}:${x.rank}`).join(' ') : '—';
+  r.ok(eA && same(eA.ranking.map(x => [x.player, x.rank]), [[1, 1], [4, 2], [2, 3], [3, 4]]), `نافذة أحمد بترتيب الخروج (${order})`);
+  const eD = endsOf(D, 'elim')[0], endD = endsOf(D, 'end')[0];
+  r.ok(eD?.reason === 'dropped' && eD?.myRank === 2 && endD?.myRank === 2, `دانة: خروجها مسجّل بالمركز 2 ونافذتها تطابقه (${eD?.myRank}/${endD?.myRank})`);
+  r.ok(cardOf(D).length === 0, 'دانة: خروجها أنهى المباراة → نافذة النتيجة وحدها بلا بطاقة');
+  const ranks = [eA?.myRank, eD?.myRank, fB?.myRank, fC?.myRank];
+  r.ok(same([...ranks].sort(), [1, 2, 3, 4]), `كل مركز لواحد فقط (${ranks})`);
+  noErr(r, w); w.dispose(); return r;
+}
+
+// ── 26) الخارج يتابع حتى النهاية: النافذة النهائية بمركزه نفسه، بلا تسجيل ثانٍ ──
+export async function multiOutWatchToEnd(verbose = false) {
+  const r = suite('الجماعي: الخارج يتابع حتى النهاية → النافذة النهائية بمركزه نفسه، بلا تسجيل ثانٍ'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const { A, B, C, ok } = await codeMatch3(w);
+  r.ok(ok, 'بدأت المباراة للثلاثة');
+  setScores([A, B, C], { 1: 1, 2: 0, 3: 6 });
+  C.drop({ offlineMs: 16000, serverDetectMs: 1500 }); await w.run(18000);
+  r.ok(endsOf(C, 'elim')[0]?.myRank === 3, `كريم خرج (انقطع) ومركزه 3 (${endsOf(C, 'elim')[0]?.myRank})`);
+  B.withdraw(); await w.run(3000);
+  const fB = endsOf(B, 'forfeit')[0];
+  r.ok(fB?.myRank === 2, `باسل انسحب بعد خروج كريم: المركز 2 (${fB?.myRank})`);
+  const eA = endsOf(A, 'end')[0], eC = endsOf(C, 'end')[0];
+  r.ok(eA && /جميع خصومك/.test(eA.title || '') && eA.myRank === 1, 'أحمد آخر الباقين: فاز');
+  r.ok(eC && /كنت خارجها/.test(eC.title || '') && eC.myRank === 3, `كريم يرى النتيجة النهائية بمركزه نفسه (${eC?.myRank})`);
+  r.ok(endsOf(C, 'elim').length === 1 && endsOf(C, 'forfeit').length === 0, 'بلا تسجيل ثانٍ لكريم');
+  noErr(r, w); w.dispose(); return r;
+}
+
+// ═════════ مراجعة v35.7: حالات كشفها المراجع المستقل ═════════
+
+// ── 27) أُخرج أثناء غيابه واكتملت اللوحة قبل عودته: لا فوز له (الحركات تصل قبل القائمة) ──
+export async function multiOutNaturalEndWhileAway(verbose = false) {
+  const r = suite('الجماعي: أُخرج أثناء غيابه واكتملت اللوحة قبل عودته → خسارته لا فوز'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const { A, B, C, code, ok } = await codeMatch3(w);
+  r.ok(ok, 'بدأت المباراة للثلاثة');
+  setScores([A, B, C], { 1: 2, 2: 1, 3: 6 });   // كريم متقدّم بالنقاط
+  C.drop({ offlineMs: 30000, serverDetectMs: 1500 });
+  await w.run(14000);                            // أُخرج كريم بعد المهلة ("انقطع")
+  r.ok(seat(w, code, C).outReason === 'dropped', 'كريم أُخرج أثناء غيابه');
+  A.safe(() => A.om.pushMultiMove('__final__', 2, Date.now()));   // اكتملت اللوحة وكريم غائب
+  await w.run(2000);
+  const eB = endsOf(B, 'end')[0];
+  r.ok(eB && eB.ranking.find(x => x.player === 3)?.exited === 'انقطع', 'عند باسل: كريم خارج ("انقطع")');
+  await w.run(16000);                            // عاد كريم: الحركات ثم القائمة في دفعة واحدة
+  const eC = endsOf(C, 'end')[0], xC = endsOf(C, 'elim');
+  r.ok(xC.length === 1 && xC[0].reason === 'dropped' && xC[0].myRank === 3, `خروجه مسجّل قبل النهاية (${JSON.stringify(xC[0] ? { why: xC[0].reason, rank: xC[0].myRank } : null)})`);
+  r.ok(eC && eC.myResult === 'loss' && eC.myRank === 3, `نافذته: خسارة بالمركز 3 لا فوز (${eC?.myResult}/${eC?.myRank})`);
+  r.ok(cardOf(C).length === 0, 'بلا بطاقة (نافذة النتيجة النهائية وحدها)');
+  noErr(r, w); w.dispose(); return r;
+}
+
+// ── 28) انسحاب ونفاد وقت شبه متزامنين (المنسحب على شبكة أبطأ): مركزان مختلفان يطابقان النافذة ──
+export async function multiNearSimultaneousExits(verbose = false) {
+  const r = suite('الجماعي: خروجان متقاربان (انسحاب على شبكة بطيئة + نفاد وقت) → مركزان مختلفان'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const A = await w.client('أحمد'), B = await w.client('باسل'), C = await w.client('كريم', { up: 250, down: 30 }), D = await w.client('دانة');
+  const code = await makeCodeRoom(w, A, 4);
+  B.joinCode(code); await w.run(600); C.joinCode(code); await w.run(800); D.joinCode(code); await w.run(800);
+  A.startCode();
+  r.ok(await waitFor(w, () => [A, B, C, D].every(c => c.matches.length), 8000), 'بدأت المباراة للأربعة');
+  await w.run(6000);
+  setScores([A, B, C, D], { 1: 3, 2: 2, 3: 1, 4: 0 });
+  C.withdraw();                                                              // كريم يضغط خروج
+  await w.run(100);
+  D.safe(() => D.mods.og.noteMyExitPending('time', D.om.markSelfInactive()));   // بعد 100ms ينفد وقت دانة
+  await w.run(3000);
+  const fC = endsOf(C, 'forfeit')[0], xD = endsOf(D, 'elim')[0];
+  const sC = seat(w, code, C), sD = seat(w, code, D);
+  r.ok(sC.outAt > sD.outAt, 'الخادم اعتمد خروج دانة أولاً (شبكة كريم أبطأ)');
+  r.ok(xD?.myRank === 4 && fC?.myRank === 3, `المركزان من ترتيب الخادم: دانة 4 وكريم 3 (${xD?.myRank}/${fC?.myRank})`);
+  B.withdraw(); await w.run(3000);                                            // أحمد آخر الباقين
+  const eA = endsOf(A, 'end')[0];
+  const got = eA ? Object.fromEntries(eA.ranking.map(x => [x.player, x.rank])) : {};
+  r.ok(eA && got[3] === fC?.myRank && got[4] === xD?.myRank && got[2] === endsOf(B, 'forfeit')[0]?.myRank,
+    `نافذة أحمد تطابق ما سُجّل لكلٍّ منهم (${eA ? eA.ranking.map(x => `${x.player}:${x.rank}`).join(' ') : '—'})`);
+  noErr(r, w); w.dispose(); return r;
+}
+
+// ── 29) نفد وقتي وضغطت خروج قبل أن يؤكّده الخادم: لا تحذير ولا انسحاب — خروج "نفد وقته" ──
+export async function multiTimeoutThenQuickExit(verbose = false) {
+  const r = suite('الجماعي: نفد وقته وضغط خروج خلال رحلة التأكيد → خروج بسبب الوقت لا انسحاب'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const { A, B, C, code, ok } = await codeMatch3(w);
+  r.ok(ok, 'بدأت المباراة للثلاثة');
+  setScores([A, B, C], { 1: 1, 2: 1, 3: 4 });
+  C.safe(() => C.mods.og.noteMyExitPending('time', C.om.markSelfInactive()));   // ما يفعله main.js عند نفاد بنكه
+  await w.run(5);
+  r.ok(C.mods.og.isOutOfMatch() === true, 'خارج فوراً قبل تأكيد الخادم (فلا تحذير "الانسحاب = خسارة")');
+  C.withdraw(); await w.run(3000);
+  r.ok(endsOf(C, 'forfeit').length === 0, 'لا "خسارة انسحاب"');
+  const x = endsOf(C, 'elim');
+  r.ok(x.length === 1 && x[0].reason === 'time' && x[0].myRank === 3, `خروجه مسجّل مرة بسبب الوقت (${JSON.stringify(x.map(e => e.reason + ':' + e.myRank))})`);
+  r.ok(x.length === 1 && x[0].silent === true, 'وبصمت: سُجّل لحظة المغادرة (لا إشعارات فوق القائمة — مراجعة v35.7 الثانية)');
+  r.ok(seat(w, code, C).outReason === 'time', `الغرفة: "نفد وقته" (${seat(w, code, C).outReason})`);
+  noErr(r, w); w.dispose(); return r;
+}
+
+// ── 30) انقطاع لم يلاحظه أحد (الخادم لم يكتشفه): العائد لا يُخرج نفسه ──
+export async function multiNoSelfExpiry(verbose = false) {
+  const r = suite('الجماعي: انقطاع 12ث لم يلاحظه الخادم → العائد يكمل، لا يُخرج جهازه نفسه'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const { A, B, C, code, ok } = await codeMatch3(w);
+  r.ok(ok, 'بدأت المباراة للثلاثة');
+  C.drop({ offlineMs: 12000, serverDetectMs: 60000 });   // كنمط الطيران: الخادم لا يلاحظ خلال الغياب
+  await w.run(16000);
+  r.ok(seat(w, code, C).active !== false, 'كريم ما زال في المباراة');
+  r.ok(!/انقطع كريم/.test(A.toasts() + B.toasts()), 'لا "انقطع كريم" عند الباقين');
+  r.ok(endsOf(C, 'elim').length === 0 && C.mods.og.isOutOfMatch() === false, 'لا خروج مسجّل عند كريم');
+  noErr(r, w); w.dispose(); return r;
+}
+
+// ═════════ مراجعة v35.7 الثانية ═════════
+
+// ── 31) المنشئ (المقعد 1) ينقطع أثناء المباراة: يُخرَج بعد المهلة كغيره ──
+// كان يسلّح ختم انقطاعه ثم يلغي أوامر الغرفة كلها (والإلغاء يشمل ما تحت المسار) فيُمسح الختم:
+// لا يُخرَج بانقطاعه أبداً، والباقون ينتظرون بنكه كاملاً.
+export async function multiCreatorDrops(verbose = false) {
+  const r = suite('الجماعي: المنشئ ينقطع ولا يعود → يُخرَج بعد المهلة كغيره (ختمه لا يُمسح)'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const { A, B, C, code, ok } = await codeMatch3(w);
+  r.ok(ok, 'بدأت المباراة للثلاثة');
+  r.ok(A.onDisc.some(o => o.path.endsWith(`${A.uid}/disconnectedAt`) && o.op === 'set'), 'المنشئ: أمر ختم الانقطاع مسلّح بعد البدء');
+  setScores([A, B, C], { 1: 3, 2: 1, 3: 1 });
+  A.drop({ offlineMs: 16000, serverDetectMs: 1500 });
+  await w.run(14000);
+  const s = seat(w, code, A);
+  r.ok(s.active === false && s.outReason === 'dropped', `المقعد 1: خارج بسبب "انقطع" بعد المهلة (${JSON.stringify({ active: s.active, why: s.outReason ?? null })})`);
+  r.ok(/انقطع أحمد ولم يعد/.test(B.toasts()), 'الباقون يرون "انقطع أحمد ولم يعد"');
+  await w.run(4000);   // عاد أحمد
+  const e = endsOf(A, 'elim');
+  r.ok(e.length === 1 && e[0].reason === 'dropped' && e[0].myRank === 3, `عند عودته: خروجه مسجّل بالمركز 3 رغم تقدّمه (${JSON.stringify(e[0] ? { why: e[0].reason, rank: e[0].myRank } : null)})`);
+  r.ok(cardOf(A).length === 1, 'وبطاقة "خرجت من المباراة"');
+  noErr(r, w); w.dispose(); return r;
+}
+
+// ── 32) الانسحاب بالزر يُسجَّل بصمت ومرة واحدة، أياً كان المسار الذي سجّله ──
+// صدى الخادم لخروجي يصل قبل تأكيد المعاملة: كان مستمع القائمة يسجّله كـ"خروج" عادي (خبرة وإنجازات
+// تقفز فوق القائمة) بدل الانسحاب الصامت. والمركز من لحظة الخروج الحقيقية عند الخادم.
+export async function multiWithdrawSilent(verbose = false) {
+  const r = suite('الجماعي: الانسحاب بالزر يُسجَّل بصمت كانسحاب (لا "خروج" بإشعارات)، وأمر الانقطاع يُلغى بعده'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const { A, B, C, code, ok } = await codeMatch3(w);
+  r.ok(ok, 'بدأت المباراة للثلاثة');
+  setScores([A, B, C], { 1: 1, 2: 4, 3: 2 });
+  B.withdraw(); await w.run(3000);
+  const s = seat(w, code, B);
+  r.ok(s.active === false && s.outReason === 'left' && typeof s.outAt === 'number', `المقعد: "انسحب" مع لحظة الخروج (${s.outReason ?? null})`);
+  const elims = endsOf(B, 'elim'), fs = endsOf(B, 'forfeit');
+  r.ok(elims.length === 0, `لا تسجيل "خروج" بإشعارات للمنسحب (${JSON.stringify(elims.map(x => x.reason))})`);
+  r.ok(fs.length >= 1 && fs.every(f => f.myRank === 3), `خسارة انسحاب صامتة بالمركز 3 رغم تقدّمه (${JSON.stringify(fs.map(f => f.myRank))})`);
+  r.ok(!B.onDisc.some(o => o.path.includes(`/players/${B.uid}`)), 'لا أمر انقطاع باقٍ على مقعده بعد اعتماد انسحابه');
+  r.ok(/باسل انسحب/.test(A.toasts()) && endsOf(A, 'end').length === 0, 'أحمد يرى "باسل انسحب" والمباراة مستمرة');
   noErr(r, w); w.dispose(); return r;
 }
