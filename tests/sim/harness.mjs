@@ -291,7 +291,8 @@ const STUBS = {
     export function applyOnlineMove(key, cfg) {
       if (key === '__final__' && !state.gameFinished) { state.gameFinished = true; endGame(cfg, state.scores || {}); } }
     export function skipInactiveTurn() {} export function waitForRender() { return Promise.resolve(); }`,
-  'turnTimer.js': `export function setBank() {} export function applyClockState() {} export function stopTurnTimer() {}`,
+  'turnTimer.js': `export function setBank() {} export function applyClockState() {} export function stopTurnTimer() {}
+    export function isTimerEnabled() { return false; } export function startTurnTimer() {}`,
   'state.js': `export const state = {};`,
   'auth.js': `export function getCurrentUser() { return globalThis.__user; }`,
   // نافذة النهاية: نلتقط كل نهاية (ومعها من خرج والعنوان) وكل تسجيل انسحاب — v35.6
@@ -318,7 +319,8 @@ const STUBS = {
   'firebase-app.js': `export function initializeApp() { return {}; } export function getApps() { return []; }`,
   'firebase-database.js': `const F = globalThis.__fdb; export const { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp } = F;`,
 };
-const REAL = { 'firebase.js': '/js/firebase.js', 'onlineGame.js': '/js/ui/onlineGame.js', 'matchResult.js': '/js/core/matchResult.js' };
+const REAL = { 'firebase.js': '/js/firebase.js', 'onlineGame.js': '/js/ui/onlineGame.js', 'matchResult.js': '/js/core/matchResult.js',
+  'turnManager.js': '/js/ui/turnManager.js' };   // النص الظاهر فوق اللوحة (فحص v35.7)
 
 export class World {
   constructor() { this.server = new Server(this); this.clients = []; this.timeline = []; this.errors = []; this.quiet = false; }

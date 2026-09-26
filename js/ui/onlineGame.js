@@ -1,15 +1,16 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1790376125";
-import { setMyPresence } from "../presence.js?v=1790376125";
-import { updateScoreboard } from "./scoreboard.js?v=1790376125";
-import { config } from "../config/config.js?v=1790376125";
-import { onlineManager } from "../firebase.js?v=1790376125";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1790376125";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1790376125";
-import { state } from "../core/state.js?v=1790376125";
-import { getCurrentUser } from "../auth.js?v=1790376125";
-import { endGame, recordForfeit, recordElimination } from "./gameEnd.js?v=1790376125";
+import { audioManager } from "../audio/audioManager.js?v=1790420518";
+import { setMyPresence } from "../presence.js?v=1790420518";
+import { updateScoreboard } from "./scoreboard.js?v=1790420518";
+import { config } from "../config/config.js?v=1790420518";
+import { onlineManager } from "../firebase.js?v=1790420518";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1790420518";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1790420518";
+import { state } from "../core/state.js?v=1790420518";
+import { getCurrentUser } from "../auth.js?v=1790420518";
+import { endGame, recordForfeit, recordElimination } from "./gameEnd.js?v=1790420518";
+import { renderTurnText } from "./turnManager.js?v=1790420518";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1548,6 +1549,8 @@ function handleMultiPlayerLeft(players, onlineTurnInd) {
   // (وأنا أغادر بزر الخروج: بصمت وبلا بطاقة — أترك الصفحة إلى القائمة)
   const myRecord = myExit ? recordMyExit(myExit, { silent: _leavingMatch }) : null;
   updateOnlineTurnIndicator(onlineTurnInd);
+  // النص الظاهر فوق اللوحة: خرجتُ → "👁️ خرجت من المباراة — تشاهد · دور فلان" فوراً (لا حتى الحركة التالية)
+  if (myExit) { try { renderTurnText(config); } catch {} }
   // لو بقي لاعب واحد فقط نشط → فوز بانسحاب الخصوم
   // فوز بانسحاب الخصوم: فقط إذا كنتُ أنا اللاعب النشط المتبقّي
   // (الخارج/المنقطع لا يفوز لو خرج خصومه بعده — هو خارج المنافسة أصلاً)

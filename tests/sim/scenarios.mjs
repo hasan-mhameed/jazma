@@ -719,7 +719,9 @@ export async function multiOutDropped(verbose = false) {
     `بطاقة بمركزه وخيارين: ${card[0] ? card[0].replace(/^.*toast\s+/, '').slice(0, 150) : '—'}`);
   r.ok(C.mods.og.isOutOfMatch?.() === true, 'حالته: خارج المباراة (يشاهد)');
   r.ok(!C.onDisc.some(o => o.path.endsWith(`${C.uid}/disconnectedAt`)), 'لا أمر انقطاع مسلّح على مقعده الخارج (مراجعة v35.7)');
-  r.ok(/تشاهد/.test(C.el('online-turn-indicator').textContent), `المؤشر فوق اللوحة: "${C.el('online-turn-indicator').textContent}"`);
+  // النص الظاهر فوق اللوحة (nat-turn-text) — كان الفحص على عنصر شاشة الأونلاين المخفي أثناء اللعب فنجح والمستخدم لا يرى شيئاً
+  const shown = C.el('nat-turn-text').textContent || '';
+  r.ok(/خرجت من المباراة/.test(shown) && /تشاهد/.test(shown) && /دور /.test(shown), `فوق اللوحة: "${shown}"`);
   r.ok([A, B, C].every(c => endsOf(c, 'end').length === 0), 'المباراة مستمرة لأحمد وباسل');
   // زر الخروج بعد خروجه: هادئ — لا خسارة ثانية ولا كتابة فوق سبب خروجه ولحظته
   const before = JSON.stringify(seat(w, code, C));
@@ -745,6 +747,7 @@ export async function multiOutTime(verbose = false) {
   r.ok(e.length === 1 && e[0].reason === 'time' && e[0].myRank === 3,
     `كريم: خروجه مسجّل فوراً بالمركز 3 رغم تقدّمه بالنقاط (${JSON.stringify(e[0] ? { why: e[0].reason, rank: e[0].myRank } : null)})`);
   r.ok(cardOf(C).some(l => /نفد وقتك — خرجت من المباراة/.test(l)), 'بطاقة "نفد وقتك — خرجت من المباراة"');
+  r.ok(/خرجت من المباراة — تشاهد/.test(C.el('nat-turn-text').textContent || ''), `فوق اللوحة: "${C.el('nat-turn-text').textContent}"`);
   r.ok(!/كريم انسحب/.test(A.toasts() + B.toasts()), 'الباقون لا يرون "كريم انسحب" (السبب نفاد الوقت)');
   // أجهزة أخرى "تنقذ" متأخرة (ظنّته منقطعاً): لا تغيّر سبب خروجه ولا لحظته
   B.safe(() => B.om.markPlayerInactiveByNum(3)); A.safe(() => A.om.expirePlayerByNum(3));

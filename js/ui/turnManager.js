@@ -1,7 +1,7 @@
 // 📄 turnManager.js — v15.8
-import { state }  from "../core/state.js?v=1790376125";
-import { config } from "../config/config.js?v=1790376125";
-import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1790376125";
+import { state }  from "../core/state.js?v=1790420518";
+import { config } from "../config/config.js?v=1790420518";
+import { isTimerEnabled, startTurnTimer, stopTurnTimer } from "./turnTimer.js?v=1790420518";
 
 export function updateTurn(cfg) { updateTurnUI(cfg); }
 
@@ -32,21 +32,37 @@ export function updateTurnUI(cfg) {
     else stopTurnTimer();
   }
 
-  // نصّ الدور — يتغيّر حسب صاحب الدور (كان ثابتاً "دورك" دائماً)
+  renderTurnText(cfg);
+}
+
+// من يشاهد ولا يلعب؟ المشاهد، أو لاعب خرج من مباراة جماعية ما زالت جارية (نفد وقته / انقطع ولم يعد)
+// — يرى فوق اللوحة أنه يشاهد، لا "دور فلان" وكأنه ما زال في اللعب (فحص v35.7: لم يكن يظهر شيء)
+function watchingPrefix(cfg) {
+  if (cfg.spectator) return "👁️ تشاهد";
+  const mp = cfg.multiPlayers;
+  if (cfg.aiMode === "online" && mp && typeof mp === "object" && Number.isInteger(cfg.onlinePlayerNum)) {
+    const me = Object.values(mp).find(p => p && p.num === cfg.onlinePlayerNum);
+    if (me && me.active === false) return "👁️ خرجت من المباراة — تشاهد";
+  }
+  return null;
+}
+
+// نصّ الدور فوق اللوحة — يتغيّر حسب صاحب الدور (كان ثابتاً "دورك" دائماً)
+// (مستقل عن updateTurnUI: يُحدَّث وحده لحظة خروجي بلا لمس المؤقّت)
+export function renderTurnText(cfg) {
   const turnText = document.getElementById("nat-turn-text");
-  if (turnText) {
-    const cp = state.currentPlayer;
-    if (cfg.aiMode === "online") {
-      if (cp === cfg.onlinePlayerNum) turnText.textContent = "🟢 دورك — ارسم خطاً";
-      else {
-        const oppName = cfg.onlinePlayerNames?.[cp] || `اللاعب ${cp}`;
-        turnText.textContent = `⏳ دور ${oppName}...`;
-      }
-    } else if (cfg.aiMode === "ai") {
-      turnText.textContent = cp === 1 ? "🟢 دورك — ارسم خطاً" : "🤖 دور الكمبيوتر...";
-    } else {
-      const pName = cfg.localPlayerNames?.[cp] || `اللاعب ${cp}`;
-      turnText.textContent = `🎯 دور ${pName} — ارسم خطاً`;
-    }
+  if (!turnText) return;
+  const cp = state.currentPlayer;
+  if (cfg.aiMode === "online") {
+    const name = cfg.onlinePlayerNames?.[cp] || `اللاعب ${cp}`;
+    const watching = watchingPrefix(cfg);
+    if (watching) turnText.textContent = `${watching} · دور ${name}`;
+    else if (cp === cfg.onlinePlayerNum) turnText.textContent = "🟢 دورك — ارسم خطاً";
+    else turnText.textContent = `⏳ دور ${name}...`;
+  } else if (cfg.aiMode === "ai") {
+    turnText.textContent = cp === 1 ? "🟢 دورك — ارسم خطاً" : "🤖 دور الكمبيوتر...";
+  } else {
+    const pName = cfg.localPlayerNames?.[cp] || `اللاعب ${cp}`;
+    turnText.textContent = `🎯 دور ${pName} — ارسم خطاً`;
   }
 }
