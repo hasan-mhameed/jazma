@@ -1,16 +1,16 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1790420518";
-import { setMyPresence } from "../presence.js?v=1790420518";
-import { updateScoreboard } from "./scoreboard.js?v=1790420518";
-import { config } from "../config/config.js?v=1790420518";
-import { onlineManager } from "../firebase.js?v=1790420518";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1790420518";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1790420518";
-import { state } from "../core/state.js?v=1790420518";
-import { getCurrentUser } from "../auth.js?v=1790420518";
-import { endGame, recordForfeit, recordElimination } from "./gameEnd.js?v=1790420518";
-import { renderTurnText } from "./turnManager.js?v=1790420518";
+import { audioManager } from "../audio/audioManager.js?v=1790462091";
+import { setMyPresence } from "../presence.js?v=1790462091";
+import { updateScoreboard } from "./scoreboard.js?v=1790462091";
+import { config } from "../config/config.js?v=1790462091";
+import { onlineManager } from "../firebase.js?v=1790462091";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1790462091";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1790462091";
+import { state } from "../core/state.js?v=1790462091";
+import { getCurrentUser } from "../auth.js?v=1790462091";
+import { endGame, recordForfeit, recordElimination } from "./gameEnd.js?v=1790462091";
+import { renderTurnText } from "./turnManager.js?v=1790462091";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -289,6 +289,8 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       _aiSuggestDismissed = false; _lastLobbyCount = 1; stopLoneWaitTimer(); startLoneWaitTimer();
 
       const result = await onlineManager.findRandomMatch(config, name);
+      // أُلغي البحث وهو جارٍ (زر الإلغاء أو مغادرة): الواجهة رجعت للقائمة، ولا غرفة ولا مباراة لنا (v35.8)
+      if (!result || result.role === "cancelled") return;
       // مراقبة الانقطاع أثناء البحث الثنائي — نفس منطق الجماعي
       onlineManager.onConnectionChange(async (connected) => {
         if (connected) return;
@@ -895,6 +897,8 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   // ── إلغاء البحث العشوائي ────────────────────────────────────
   cancelSearchBtn?.addEventListener("click", async () => {
+    // نقرة وصلت بعد أن تحوّل البحث لمباراة (شاشة البحث اختفت): لا إلغاء لمباراة بدأت (v35.8)
+    if (stepSearching?.classList.contains("hidden")) return;
     stopSearchCountdown();
     stopLoneWaitTimer();
     closeApproval();
@@ -1112,12 +1116,21 @@ export function launchOnlineGame(myPlayerNum, onlineTurnInd, onGameStart) {
     onlineTurnInd.style.color = "#888";
   }
 
+  // مباراة أُلغيت قبل أن تبدأ (v35.8): ألغى الخصم بحثه بلحظة انضمامنا، أو اختفت غرفته — لا نبني لوحة
+  // لمباراة لن تُلعب، ولا ننتظر خريطة عناصر لن تُبثّ. (اختفاء نراه ونحن بلا شبكة قد يكون انقطاعنا نحن
+  // مطبّقاً محلياً — لا نحكم به هنا، يحسمه مسار النهاية المعتاد: "انقطع اتصالك")
+  const cancelledEarly = () => {
+    const lr = onlineManager.lastRoom();
+    return duoCancelledBeforeStart(lr) && (!!lr.abortedBy || onlineManager.isOnline() !== false);
+  };
+
   // الضيف ينتظر خريطة العناصر من المضيف (تزامن التوزيع)
   const prepare = async () => {
     config._sharedElementMap = null;
     if (myPlayerNum === 2) {
       // نحاول جلب الخريطة (مع إعادة محاولة قصيرة لو المضيف لسا ما بثّها)
       for (let i = 0; i < 10; i++) {
+        if (cancelledEarly()) break;
         const map = await onlineManager.fetchElementMap();
         if (map && Object.keys(map).length) { config._sharedElementMap = map; break; }
         await new Promise(r => setTimeout(r, 300));
@@ -1127,6 +1140,11 @@ export function launchOnlineGame(myPlayerNum, onlineTurnInd, onGameStart) {
 
   setTimeout(async () => {
     await prepare();
+    if (cancelledEarly()) {
+      state.gameFinished = true;          // زر الخروج بعدها هادئ (لا "انسحاب" من مباراة لم تبدأ)
+      showDuoCancelled(onlineManager.lastRoom());
+      return;
+    }
     onGameStart?.();
     updateOnlineTurnIndicator(onlineTurnInd);
 
@@ -1747,6 +1765,11 @@ function endDuoByOpponentExit(viaRestart, room) {
     showAlert("#f87171", "😔 انقطع اتصالك — انتهت المباراة", "🏠 العودة للقائمة");
     return;
   }
+  if (duoCancelledBeforeStart(r)) {
+    // أُلغيت قبل أن تبدأ فعلاً (v35.8): ألغى الخصم بحثه بلحظة الانضمام، أو اختفت غرفة المنشئ — لا تُحسب لأحد
+    showDuoCancelled(r);
+    return;
+  }
   if (!oppLeft && !oppDropped) {
     showAlert("#60a5fa", "🏁 انتهت المباراة", "🏠 العودة للقائمة");
     return;
@@ -1858,6 +1881,18 @@ function showAlert(borderColor, message, btnText) {
   btn.textContent = btnText;
   btn.addEventListener("click", () => location.reload());
   box.append(p, btn); document.body.appendChild(box);
+}
+// ── الثنائي: مباراة أُلغيت قبل أن تبدأ فعلاً (v35.8 — الخطوة 1.3) ──
+// abortedBy: ألغى أحد الطرفين بحثه بلحظة انضمام الآخر (المُلغي لا يُسحب لمباراة، والآخر يُبلَّغ هنا)؛
+// vanished: اختفت الغرفة (أُغلقت صفحة المنشئ بلحظة انضمامنا فمسحها أمر انقطاعه). لا تُحسب لأحد.
+function duoCancelledBeforeStart(room) {
+  return !!(room && (room.abortedBy || room.vanished));
+}
+function showDuoCancelled(room) {
+  try { onlineManager.disarmDuoDisconnect(); } catch {}
+  showAlert("#60a5fa", room && room.abortedBy
+    ? "⚠️ ألغى الخصم قبل أن تبدأ المباراة — لم تُحسب"
+    : "⚠️ غادر الخصم قبل أن تبدأ المباراة — لم تُحسب", "🏠 العودة للقائمة");
 }
 function showDisconnectAlert() { showAlert("#f87171", "❌ انقطع اتصال الخصم!", "🔄 العودة للقائمة"); }
 // (v35.6: رسائل خروج الخصم في الثنائي صارت نافذة نتيجة — endDuoByOpponentExit)

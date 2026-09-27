@@ -108,7 +108,10 @@ class Server {
       if (ser === L.lastSer) continue;       // لا حدث بلا تغيير (سلوك Firebase)
       L.lastSer = ser;
       const c = L.client;
-      clock.setTimeout(() => { if (!L.dead && c.connected) c.safe(() => L.cb(makeSnap(L.key, v))); }, c.down);
+      // الترتيب كـFirebase: تحديث لا يسبق اللقطة الأولى لمستمع جديد (v35.8 — كان تحديث يصل بعد رحلة
+      // واحدة يسبق لقطة التسجيل التي تحتاج رحلتين، فتكتب اللقطةُ القديمة فوقه)
+      const delay = Math.max(c.down, (L.readyAt || 0) - clock.now);
+      clock.setTimeout(() => { if (!L.dead && c.connected) c.safe(() => L.cb(makeSnap(L.key, v))); }, delay);
     }
     for (const C of this.childL) {
       if (C.dead) continue;
@@ -117,20 +120,24 @@ class Server {
       if (!cur || typeof cur !== 'object') continue;
       for (const k of Object.keys(cur).sort()) if (!C.seen.has(k)) {
         C.seen.add(k); const v = clone(cur[k]); const c = C.client;
-        clock.setTimeout(() => { if (!C.dead && c.connected) c.safe(() => C.cb(makeSnap(k, v))); }, c.down);
+        const delay = Math.max(c.down, (C.readyAt || 0) - clock.now);
+        clock.setTimeout(() => { if (!C.dead && c.connected) c.safe(() => C.cb(makeSnap(k, v))); }, delay);
       }
     }
   }
+  // صفحة أُغلقت (dead) لا تكتب شيئاً بعد إغلاقها ولا تكمل: طلب لم يصل الخادم قبل الإغلاق يضيع
+  // (v35.8 — كان بحث جارٍ في صفحة مغلقة يكمل وينشئ غرفة منتظرة بلا صاحب: غير واقعي)
   write(client, apply) {
     client.writes = (client.writes || 0) + 1;
     return new Promise(res => {
-      clock.setTimeout(() => { apply(); this.notify(); clock.setTimeout(res, client.down); }, client.up);
+      clock.setTimeout(() => { if (client.dead) return; apply(); this.notify(); clock.setTimeout(res, client.down); }, client.up);
     });
   }
   transaction(client, path, fn) {
     client.writes = (client.writes || 0) + 1;
     return new Promise((res, rej) => {
       clock.setTimeout(() => {
+        if (client.dead) return;
         const cur = toRead(clone(this.getAt(path)));
         let out;
         try { out = fn(cur); } catch (e) { rej(e); return; }
@@ -154,12 +161,13 @@ class Server {
     }
     const v = toRead(clone(this.getAt(path)));
     L.lastSer = JSON.stringify(v);
+    L.readyAt = clock.now + client.up + client.down;
     this.valueL.add(L);
     clock.setTimeout(() => { if (!L.dead) client.safe(() => cb(makeSnap(L.key, v))); }, client.up + client.down);
     return () => { L.dead = true; this.valueL.delete(L); };
   }
   addChild(client, path, cb) {
-    const C = { client, path, cb, seen: new Set(), dead: false };
+    const C = { client, path, cb, seen: new Set(), dead: false, readyAt: clock.now + client.up + client.down };
     const cur = this.getAt(path);
     const initial = cur && typeof cur === 'object' ? Object.keys(cur).sort() : [];
     initial.forEach(k => C.seen.add(k));
@@ -467,6 +475,14 @@ class Client {
     this.el('multi-create-confirm').click();
   }
   codeShown() { return this.el('multi-code-display').textContent; }
+  // ── الغرفة الثنائية بالكود (v35.8) ──
+  createDuoRoom() {
+    this.el('player-name-input').value = this.name;
+    this.event('act', 'إنشاء غرفة ثنائية بالكود');
+    this.el('create-room-btn').click();
+  }
+  duoCodeShown() { return this.el('room-code-display').textContent; }
+  cancelDuoRoom() { this.event('act', 'إلغاء الغرفة الثنائية'); this.el('cancel-room-btn').click(); }
   joinCode(code) {
     this.el('player-name-input').value = this.name;
     this.el('room-code-input').value = code;

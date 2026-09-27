@@ -338,33 +338,473 @@ export async function duoCancel(verbose = false) {
   w.dispose(); return r;
 }
 
-// ── 13) سباقات الثنائي: منضمّان بنفس اللحظة / إلغاء بنفس لحظة الانضمام ──
+// ── 13) سباقات الثنائي (الخطوة 1.3 — v35.8): الانضمام والإلغاء الذرّيان ──
+// كانت "خلل معروف" حتى v35.7: منضمّان بنفس اللحظة يدخلان معاً، والمُلغي يُسحب لمباراة، والمنضمّ يدخل غرفة شبحية.
+const CANCELLED_MSG = /ألغى الخصم قبل أن تبدأ المباراة — لم تُحسب/;
+const VANISHED_MSG  = /غادر الخصم قبل أن تبدأ المباراة — لم تُحسب/;
+const onStep = (c, s) => !c.hidden('online-step-' + s);
+// ننتظر (بخطوات 1ms) حتى يعتمد الخادم حالة بعينها — لنضرب الفعل التالي داخل نافذة السباق بالضبط
+async function untilServer(w, pred, maxMs = 3000) {
+  for (let i = 0; i < maxMs; i++) { if (pred()) return true; await w.run(1); }
+  return false;
+}
+// الباحث الوحيد الباقي: ينتظر في غرفته العامة (لا مباراة وهمية ولا شاشة معلّقة)
+function hostingAlone(w, c) {
+  const code = c.om.roomCode, rm = code ? w.server.getAt('rooms/' + code) : null;
+  return !!(onStep(c, 'searching') && c.matches.length === 0 && rm && rm.status === 'waiting'
+    && rm.public === true && rm.p1uid === c.uid && !rm.p2uid);
+}
 export async function duoRaces(verbose = false) {
-  const r = suite('البحث الثنائي: سباقات الانضمام'); r.verbose = verbose;
+  const r = suite('البحث الثنائي: سباقات الانضمام والإلغاء (ذرّية)'); r.verbose = verbose;
+  // (أ) منضمّان بنفس اللحظة لنفس المنتظر
   {
     const w = new World(); w.quiet = true; w.startSampler(100);
     const A = await w.client('أحمد'), B = await w.client('باسل'), C = await w.client('كريم');
     await A.startSearch(2); await w.run(3000);
     await B.startSearch(2); await C.startSearch(2);            // نفس اللحظة
     await w.run(8000);
-    const inA = A.matches.length ? 1 : 0;
-    const withA = [B, C].filter(c => c.matches.some(m => m.room === A.matches[0]?.room));
-    r.knownIssue(withA.length === 1, `منضمّان بنفس اللحظة لنفس المنتظر: ${withA.length} منهما دخلا غرفته (المنتظر يرى خصماً واحداً)`);
-    w.dispose();
+    const roomA = A.matches[0]?.room;
+    const withA = [B, C].filter(c => c.matches.some(m => m.room === roomA));
+    r.ok(A.matches.length === 1 && withA.length === 1, `منضمّان بنفس اللحظة لنفس المنتظر: واحد فقط دخل غرفته (${withA.length})`);
+    const other = [B, C].find(c => !withA.includes(c));
+    r.ok(other && hostingAlone(w, other), `والآخر (${other?.name}) يكمل البحث في غرفته المنتظرة — لا مباراة وهمية`);
+    const rm = w.server.getAt('rooms/' + roomA) || {};
+    r.ok(withA[0] && rm.p2uid === withA[0].uid && rm.p2name === withA[0].name, 'الغرفة تحمل خصماً واحداً متّسقاً (الاسم والمعرّف للاعب نفسه)');
+    r.ok(!A.ends.length && !B.ends.length && !C.ends.length, 'لا نتائج مسجّلة لأحد');
+    noErr(r, w); w.dispose();
   }
+  // (ب) المنتظر يُلغي قبل أن يصل انضمام الخصم الخادم: تُحذف غرفته، والخصم يكمل البحث
   {
     const w = new World(); w.quiet = true; w.startSampler(100);
     const A = await w.client('أحمد'), B = await w.client('باسل');
     await A.startSearch(2); await w.run(3000);
-    await B.startSearch(2); A.cancelSearch();                   // إلغاء بلحظة الانضمام
+    const code = A.om.roomCode;
+    A.cancelSearch(); await B.startSearch(2);
+    await w.run(6000);
+    r.ok(A.matches.length === 0 && onStep(A, 'name'), 'الإلغاء أولاً: من ألغى في القائمة بلا مباراة');
+    r.ok(w.server.getAt('rooms/' + code) == null, 'وغرفته حُذفت');
+    r.ok(hostingAlone(w, B), 'والقادم يكمل البحث في غرفته هو (لم يدخل غرفة شبحية)');
+    noErr(r, w); w.dispose();
+  }
+  // (ج) الانضمام يصل الخادم أولاً ثم يضغط المنتظر "إلغاء" قبل أن تصله اللقطة: لا يُسحب لمباراة،
+  //     ومباراة المنضمّ تُلغى قبل بدئها برسالة واضحة — لا فوز ولا خسارة لأحد
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    await A.startSearch(2); await w.run(3000);
+    const code = A.om.roomCode;
+    await B.startSearch(2);
+    const hit = await untilServer(w, () => (w.server.getAt('rooms/' + code) || {}).status === 'playing');
+    A.cancelSearch();                                          // داخل نافذة السباق (اللقطة لم تصل أحمد بعد)
+    await w.run(8000);
+    const rm = w.server.getAt('rooms/' + code) || {};
+    r.ok(hit && A.matches.length === 0 && onStep(A, 'name'), 'الانضمام سبق الإلغاء: من ألغى لا يُسحب لمباراة (يبقى في القائمة)');
+    r.ok(rm.status === 'finished' && rm.abortedBy === 1 && rm.p1uid === A.uid, `الغرفة: أُلغيت قبل البدء بيد المنشئ (${rm.status}/${rm.abortedBy})`);
+    r.ok(CANCELLED_MSG.test(B.toasts()), 'المنضمّ يرى "ألغى الخصم قبل أن تبدأ المباراة — لم تُحسب"');
+    r.ok(B.matches.length === 0, 'ولم تُبنَ له لوحة مباراة لن تُلعب');
+    r.ok(!A.ends.length && !B.ends.length, 'لا فوز ولا خسارة لأحد');
+    noErr(r, w); w.dispose();
+  }
+  // (ج2) نفسه لكن رفع المُلغي بطيء: الإلغاء يصل بعد أن بُنيت لوحة المنضمّ — يُبلَّغ من داخل المباراة
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    await A.startSearch(2); await w.run(3000);
+    const code = A.om.roomCode;
+    await B.startSearch(2);
+    const hit = await untilServer(w, () => (w.server.getAt('rooms/' + code) || {}).status === 'playing');
+    A.up = 7000;                                               // رفعه يبطؤ الآن: إلغاؤه يصل بعد 7 ثوانٍ
+    A.cancelSearch();
+    await w.run(12000);
+    const rm = w.server.getAt('rooms/' + code) || {};
+    r.ok(hit && A.matches.length === 0 && B.matches.length === 1, 'رفع بطيء: لوحة المنضمّ بُنيت قبل وصول الإلغاء');
+    r.ok(rm.status === 'finished' && rm.abortedBy === 1, `ثم وصل الإلغاء (${rm.status}/${rm.abortedBy})`);
+    r.ok(CANCELLED_MSG.test(B.toasts()) && !B.ends.length, 'فيُبلَّغ من داخل المباراة "ألغى الخصم قبل أن تبدأ المباراة" بلا نتيجة');
+    r.ok(B.mods.state.gameFinished === true, 'واللوحة مقفلة بعدها');
+    noErr(r, w); w.dispose();
+  }
+  // (هـ) نقرة "إلغاء" وصلت بعد أن تحوّل البحث لمباراة: لا تُلغي مباراة بدأت ولا تخفي اللوحة
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    await A.startSearch(2); await w.run(3000);
+    await B.startSearch(2); await w.run(3000);
+    const code = A.om.roomCode;
+    r.ok(A.matches.length === 1 && onStep(A, 'playing'), 'المباراة بدأت للمنتظر');
+    A.cancelSearch(); await w.run(2000);
+    const rm = w.server.getAt('rooms/' + code) || {};
+    r.ok(onStep(A, 'playing') && A.om.roomCode === code, 'النقرة المتأخرة لا تُخرجه من شاشة المباراة');
+    r.ok(rm.status === 'playing' && rm.abortedBy == null, 'ولا تمسّ الغرفة الجارية');
+    // وحتى لو استُدعي الإلغاء نفسه مباشرة أثناء المباراة (للمضيف والمنضمّ): لا شيء يتغيّر
+    await A.om.cancelRandomMatch(); await B.om.cancelRandomMatch(); await w.run(1000);
+    const rm2 = w.server.getAt('rooms/' + code) || {};
+    r.ok(A.om.roomCode === code && B.om.roomCode === code && rm2.status === 'playing' && rm2.abortedBy == null,
+      'إلغاء البحث لا يمسّ مباراة قائمة (حارس داخل firebase.js نفسه)');
+    noErr(r, w); w.dispose();
+  }
+  // (د) بنفس اللحظة تماماً (بلا ترتيب مفروض): أي النتيجتين، لكن دائماً متّسقة
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    await A.startSearch(2); await w.run(3000);
+    await B.startSearch(2); A.cancelSearch();
     await w.run(8000);
     const code = B.matches[0]?.room;
     const rm = code ? w.server.getAt('rooms/' + code) : null;
-    r.knownIssue(A.matches.length === 0, 'من ألغى البحث بلحظة انضمام خصم لا يُسحب لمباراة رغم إلغائه');
-    r.knownIssue(!(B.matches.length && !(rm && rm.p1uid)), `الخصم لا يدخل غرفة شبحية بلا منشئ${rm && !rm.p1uid ? ' (دخل ' + code + ')' : ''}`);
-    w.dispose();
+    r.ok(A.matches.length === 0, 'من ألغى البحث بلحظة انضمام خصم لا يُسحب لمباراة رغم إلغائه');
+    r.ok(!(B.matches.length && !(rm && rm.p1uid)), `الخصم لا يدخل غرفة شبحية بلا منشئ${rm && !rm.p1uid ? ' (دخل ' + code + ')' : ''}`);
+    r.ok(hostingAlone(w, B) || CANCELLED_MSG.test(B.toasts()), 'والخصم: يكمل البحث في غرفته، أو يرى أن المباراة أُلغيت قبل بدئها');
+    r.ok(!A.ends.length && !B.ends.length, 'لا نتائج مسجّلة');
+    noErr(r, w); w.dispose();
   }
   return r;
+}
+
+// ── 13ب) المنضمّ يُلغي بحثه ومعاملة انضمامه في الطريق (v35.8) ──
+export async function duoJoinerCancels(verbose = false) {
+  const r = suite('البحث الثنائي: المنضمّ يُلغي بلحظة انضمامه → لا مباراة له، والمنتظر لا يعلق'); r.verbose = verbose;
+  // (أ) المنتظر رأى الانضمام وبدأ: يُبلَّغ بإلغاء المباراة قبل بدئها
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    await A.startSearch(2); await w.run(3000);
+    const code = A.om.roomCode;
+    await B.startSearch(2);
+    const hit = await untilServer(w, () => (w.server.getAt('rooms/' + code) || {}).status === 'playing');
+    B.cancelSearch();                                          // الانضمام اعتُمد، والرد لم يصل باسل بعد
+    await w.run(8000);
+    const rm = w.server.getAt('rooms/' + code) || {};
+    r.ok(hit && B.matches.length === 0 && onStep(B, 'name'), 'من ألغى (المنضمّ) في القائمة بلا مباراة');
+    r.ok(rm.status === 'finished' && rm.abortedBy === 2, `مباراته أُلغيت قبل البدء (${rm.status}/${rm.abortedBy})`);
+    r.ok(CANCELLED_MSG.test(A.toasts()) || hostingAlone(w, A), 'المنتظر: يُبلَّغ بالإلغاء أو يكمل الانتظار — لا يلعب وحده');
+    r.ok(!A.ends.length && !B.ends.length, 'لا فوز ولا خسارة لأحد');
+    noErr(r, w); w.dispose();
+  }
+  // (ب) المنتظر لم يرَ إلا الإلغاء (لقطتان وصلتاه معاً — مثلاً بعد رجوعه): يعيد فتح غرفته ويكمل الانتظار
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), C = await w.client('كريم');
+    await A.startSearch(2); await w.run(3000);
+    const code = A.om.roomCode;
+    // معالج "خرج الخصم" باقٍ من مباراة سابقة في الجلسة نفسها: المنتظر يجب ألّا يستدعيه لغرفته وهو يبحث
+    let staleCalled = false; A.om.onOpponentLeft(() => { staleCalled = true; });
+    const room = w.server.getAt('rooms/' + code);
+    w.server.setAt('rooms/' + code, { ...room, status: 'finished', abortedBy: 2, p2uid: 'uid_زائر', p2name: 'زائر', public: false });
+    w.server.notify();
+    await w.run(2000);
+    r.ok(!staleCalled, 'المنتظر لا يعامل نهاية لم يبدأها كخروج خصم (معالج قديم لا يُستدعى)');
+    const rm = w.server.getAt('rooms/' + code) || {};
+    r.ok(rm.status === 'waiting' && rm.public === true && !rm.p2uid && rm.abortedBy == null, `أعاد فتح غرفته كما كانت (${rm.status}، عامة=${rm.public})`);
+    r.ok(onStep(A, 'searching') && A.matches.length === 0 && !/لم تُحسب/.test(A.toasts()), 'وما زال يبحث بهدوء (لا مباراة ولا رسالة)');
+    await C.startSearch(2); await w.run(6000);
+    r.ok(A.matches.length === 1 && C.matches[0]?.room === code && A.matches[0]?.room === code, 'والقادم التالي يدخل غرفته وتبدأ مباراتهما');
+    noErr(r, w); w.dispose();
+  }
+  return r;
+}
+
+// ── 13ج) الإلغاء أثناء البحث نفسه (قبل أن يكتمل): لا غرفة منتظرة ولا مباراة لمن ألغى (v35.8) ──
+export async function duoCancelMidSearch(verbose = false) {
+  const r = suite('البحث الثنائي: إلغاء قبل اكتمال البحث → لا غرفة ولا مباراة لمن ألغى'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const A = await w.client('أحمد', { up: 400, down: 400 }), B = await w.client('باسل');
+  await A.startSearch(2);
+  await w.run(100);                                            // قراءة الغرف ما زالت في الطريق
+  A.cancelSearch();
+  await w.run(5000);
+  r.ok(onStep(A, 'name') && A.om.roomCode == null, 'من ألغى في القائمة وبلا غرفة');
+  r.ok(!Object.values(w.server.getAt('rooms') || {}).some(rm => rm && rm.p1uid === A.uid), 'لم تُنشأ له غرفة منتظرة بعد الإلغاء');
+  await B.startSearch(2); await w.run(8000);
+  r.ok(A.matches.length === 0 && B.matches.length === 0 && hostingAlone(w, B), 'والقادم بعده لا يجده (لا مباراة تسحب من ألغى)');
+  noErr(r, w); w.dispose();
+  return r;
+}
+
+// ── 13د) اختفاء غرفة المنشئ بلحظة الانضمام (أُغلقت صفحته قبل أن يثبّت البدء): المنضمّ لا يعلق (v35.8) ──
+export async function duoHostVanishes(verbose = false) {
+  const r = suite('البحث الثنائي: صفحة المنتظر أُغلقت بلحظة الانضمام → المنضمّ يُبلَّغ ولا يعلق'); r.verbose = verbose;
+  // 150ms: الخادم يمسح الغرفة بعد أن يسجّل المنضمّ مستمعه؛ 5ms: قبل أن يسجّله (أول لقطة له "لا غرفة")
+  for (const detect of [150, 5]) {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    await A.startSearch(2); await w.run(3000);
+    const code = A.om.roomCode;
+    await B.startSearch(2);
+    const hit = await untilServer(w, () => (w.server.getAt('rooms/' + code) || {}).status === 'playing');
+    A.closeTab(detect);                                        // قبل أن تصله لقطة الانضمام: أمر انقطاعه ما زال "امسح الغرفة"
+    await w.run(8000);
+    const tag = `(${detect}ms) `;
+    r.ok(hit && w.server.getAt('rooms/' + code) == null, tag + 'الخادم مسح الغرفة بأمر انقطاع المنشئ');
+    r.ok(VANISHED_MSG.test(B.toasts()), tag + 'المنضمّ يرى "غادر الخصم قبل أن تبدأ المباراة — لم تُحسب" (لا انتظار للأبد)');
+    r.ok(!B.ends.length && B.matches.length === 0, tag + 'لا فوز ولا خسارة، ولا لوحة لمباراة لن تُلعب');
+    r.ok(B.mods.state.gameFinished === true, tag + 'والمباراة عنده مغلقة (زر الخروج بعدها هادئ)');
+    noErr(r, w); w.dispose();
+  }
+  return r;
+}
+
+// ── 13و) المنتظر يغلق صفحته لحظة إنشاء غرفته: لا تبقى غرفة منتظرة بلا صاحب يدخلها باحث ويعلق (v35.8) ──
+export async function duoHostClosesAtCreate(verbose = false) {
+  const r = suite('البحث الثنائي: إغلاق الصفحة لحظة إنشاء الغرفة → تُمسح (لا غرفة بلا صاحب)'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const A = await w.client('أحمد'), B = await w.client('باسل');
+  await A.startSearch(2);
+  // ننتظر وصول الإنشاء للخادم، ونغلق قبل أن يصل ردّه أحمد (ما بين الكتابة وتسجيل ما بعدها)
+  const hit = await untilServer(w, () => Object.values(w.server.getAt('rooms') || {}).some(rm => rm && rm.p1uid === A.uid));
+  A.closeTab(150);
+  await w.run(2000);
+  r.ok(hit && !Object.values(w.server.getAt('rooms') || {}).some(rm => rm && rm.p1uid === A.uid), 'الخادم مسح غرفته بأمر انقطاعها (سُجّل قبل الإنشاء)');
+  await B.startSearch(2); await w.run(6000);
+  r.ok(B.matches.length === 0 && hostingAlone(w, B), 'والقادم بعده لا يدخل غرفة بلا صاحب — يكمل البحث في غرفته');
+  noErr(r, w); w.dispose();
+  return r;
+}
+
+// ── 13ز) الإلغاء ثم إغلاق الصفحة فوراً (مراجعة v35.8 المستقلة): أمر المسح عند الانقطاع يبقى مسلّحاً حتى يُحسم
+// الإلغاء — كان يُلغى أولاً، فإغلاق الصفحة قبل وصول الحذف ترك غرفة "تنتظر" عامة بلا صاحب يدخلها الباحث التالي ويعلق ──
+export async function duoCancelThenClose(verbose = false) {
+  const r = suite('البحث الثنائي: إلغاء ثم إغلاق الصفحة فوراً → لا غرفة منتظرة بلا صاحب، ولا منضمّ عالق'); r.verbose = verbose;
+  for (const gap of [5, 20, 60]) {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    await A.startSearch(2); await w.run(3000);
+    const code = A.om.roomCode;
+    A.cancelSearch(); await w.run(gap); A.closeTab(150);      // أُغلقت الصفحة قبل أن يصل الحذف (أو بعده)
+    await w.run(2000);
+    const tag = `(${gap}ms) `;
+    r.ok(w.server.getAt('rooms/' + code) == null, tag + 'غرفته حُذفت (بالإلغاء، أو بأمر المسح عند إغلاق الصفحة)');
+    await B.startSearch(2); await w.run(4000);
+    r.ok(B.matches.length === 0 && hostingAlone(w, B), tag + 'والقادم بعده لا يعلق في غرفته — يكمل البحث في غرفته هو');
+    noErr(r, w); w.dispose();
+  }
+  // الغرفة بالكود: إلغاؤها ثم إغلاق الصفحة فوراً → تُحذف، ومن معه الكود لا يدخل غرفة بلا صاحب
+  for (const gap of [5, 20]) {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    A.createDuoRoom(); await w.run(500);
+    const code = A.duoCodeShown();
+    A.cancelDuoRoom(); await w.run(gap); A.closeTab(150);
+    await w.run(2000);
+    const tag = `(بالكود ${gap}ms) `;
+    r.ok(w.server.getAt('rooms/' + code) == null, tag + 'الغرفة حُذفت');
+    B.joinCode(code); await w.run(2000);
+    r.ok(B.matches.length === 0 && /الغرفة غير موجودة/.test(B.errorText()), tag + `ومن معه الكود يرى "الغرفة غير موجودة!" (${B.errorText() || '—'})`);
+    noErr(r, w); w.dispose();
+  }
+  // الانضمام يصل الخادم بلحظة الإلغاء، ثم تُغلق الصفحة قبل أن يصل الإلغاء: المنضمّ يُبلَّغ ولا يعلق
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    await A.startSearch(2); await w.run(3000);
+    const code = A.om.roomCode;
+    await B.startSearch(2);
+    const hit = await untilServer(w, () => (w.server.getAt('rooms/' + code) || {}).status === 'playing');
+    A.cancelSearch(); await w.run(5); A.closeTab(150);
+    await w.run(8000);
+    r.ok(hit && (CANCELLED_MSG.test(B.toasts()) || VANISHED_MSG.test(B.toasts())),
+      'الانضمام بلحظة الإلغاء ثم الإغلاق: المنضمّ يُبلَّغ أن المباراة أُلغيت أو غادر الخصم قبل بدئها');
+    r.ok(!A.ends.length && !B.ends.length && B.mods.state.gameFinished === true, 'لا نتيجة لأحد، والمباراة عند المنضمّ مغلقة (لا انتظار للأبد)');
+    noErr(r, w); w.dispose();
+  }
+  return r;
+}
+
+// ── 13ح) انقطاع لحظي للمنتظر (قديم — كُشف أثناء إصلاحات مراجعة v35.8): الخادم ينفّذ أمر "امسح الغرفة" المسجّل لإغلاق
+// الصفحة، والصفحة ما زالت تنتظر — كان ينتظر للأبد في غرفة لا يراها أحد. الآن تعود كما كانت ويدخلها القادم ──
+export async function duoHostBlip(verbose = false) {
+  const r = suite('الثنائي: غرفة المنتظر تختفي بانقطاع لحظي → تعود كما كانت ويدخلها الخصم (لا انتظار للأبد)'); r.verbose = verbose;
+  // (أ) بحث عشوائي، والخادم وحده لاحظ الانقطاع (نفّذ أمر المسح والصفحة لم تشعر): تعود الغرفة، والقادم يدخلها
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    await A.startSearch(2); await w.run(3000);
+    const code = A.om.roomCode;
+    A.blip(150);
+    const gone = await untilServer(w, () => w.server.getAt('rooms/' + code) == null, 3000);
+    await w.run(3000);
+    const rm = w.server.getAt('rooms/' + code) || {};
+    r.ok(gone && rm.status === 'waiting' && rm.public === true && rm.p1uid === A.uid && !rm.p2uid,
+      `(عشوائية) اختفت عند الخادم ثم عادت تنتظر كما كانت (${rm.status || 'غير موجودة'})`);
+    r.ok(onStep(A, 'searching') && A.matches.length === 0, '(عشوائية) والمنتظر ما زال يبحث بهدوء');
+    await B.startSearch(2); await w.run(6000);
+    r.ok(A.matches[0]?.room === code && B.matches[0]?.room === code, '(عشوائية) القادم يدخلها وتبدأ مباراتهما');
+    noErr(r, w); w.dispose();
+  }
+  // (ب) غرفة بالكود وانقطاع حقيقي (2ث): شاشة الكود باقية — كانت الغرفة تُمسح وصديقه يرى "الغرفة غير موجودة!"
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    A.createDuoRoom(); await w.run(500);
+    const code = A.duoCodeShown();
+    A.drop({ offlineMs: 2000, serverDetectMs: 500 });
+    const gone = await untilServer(w, () => w.server.getAt('rooms/' + code) == null, 3000);
+    await w.run(3000);
+    const rm = w.server.getAt('rooms/' + code) || {};
+    r.ok(gone && rm.status === 'waiting' && rm.p1uid === A.uid && !rm.p2uid, `(بالكود) مُسحت عند السقوط ثم عادت بعد العودة (${rm.status || 'غير موجودة'})`);
+    B.joinCode(code); await w.run(6000);
+    r.ok(A.matches[0]?.room === code && B.matches[0]?.room === code, `(بالكود) صديقه يدخل بالكود وتبدأ مباراتهما${B.errorText() ? ' — ' + B.errorText() : ''}`);
+    noErr(r, w); w.dispose();
+  }
+  // (ب2) مراجعة v35.8 الثانية: سقط اتصال المنشئ والخادم لم يلاحظ بعد، فدخل صديقه بالكود؛ ثم نفّذ الخادم أمر المسح
+  //      (والصديق فيها) وعاد المنشئ فأعادها "تنتظر" — الصديق يُبلَّغ ولا تمحو الغرفةُ المُعادة ذلك، وخروجه هادئ
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    A.createDuoRoom(); await w.run(500);
+    const code = A.duoCodeShown();
+    A.drop({ offlineMs: 2500, serverDetectMs: 1200 });
+    await w.run(100);
+    B.joinCode(code);                                          // يصل قبل أن ينفّذ الخادم أمر مسح المنشئ
+    const joinedHit = await untilServer(w, () => (w.server.getAt('rooms/' + code) || {}).p2uid === B.uid, 1000);
+    await w.run(8000);
+    const rm = w.server.getAt('rooms/' + code) || {};
+    r.ok(joinedHit && VANISHED_MSG.test(B.toasts()), '(بالكود، دخل الصديق لحظة سقوط المنشئ) يُبلَّغ "غادر الخصم قبل أن تبدأ المباراة — لم تُحسب"');
+    r.ok(B.om.lastRoom() && B.om.lastRoom().vanished === true && B.mods.state.gameFinished === true && !B.ends.length,
+      '"اختفت" باقية بعد عودة الغرفة، والمباراة عنده مغلقة بلا نتيجة');
+    r.ok(rm.status === 'waiting' && !rm.p2uid && A.matches.length === 0, `والمنشئ أعاد غرفته تنتظر بلا خصم (${rm.status || '-'})`);
+    B.withdraw(); await w.run(1500);
+    const rm2 = w.server.getAt('rooms/' + code) || {};
+    r.ok(rm2.status === 'waiting' && rm2.leftBy == null && !B.ends.length, 'وخروج الصديق هادئ: لا خسارة ولا "انسحب" في غرفة المنشئ');
+    noErr(r, w); w.dispose();
+  }
+  // (ج) بحث عشوائي وانقطاع يلاحظه الجهاز: القرار الموثّق — يرجع للقائمة برسالة واضحة، ولا تبقى له غرفة شبحية
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    await A.startSearch(2); await w.run(3000);
+    A.drop({ offlineMs: 2000, serverDetectMs: 500 });
+    await w.run(4000);
+    r.ok(!onStep(A, 'searching') && /انقطع اتصالك/.test(A.toasts()), '(عشوائية، انقطاع حقيقي) يرجع للقائمة برسالة "انقطع اتصالك"');
+    r.ok(!Object.values(w.server.getAt('rooms') || {}).some(x => x && x.p1uid === A.uid), 'ولا تبقى له غرفة منتظرة بعد العودة');
+    await B.startSearch(2); await w.run(4000);
+    r.ok(B.matches.length === 0 && hostingAlone(w, B), 'والقادم بعده ينتظر في غرفته (لا مباراة مع غائب)');
+    noErr(r, w); w.dispose();
+  }
+  return r;
+}
+
+// ── 13هـ) الغرفة الثنائية بالكود: الانضمام الذرّي والإلغاء بلا "فوز مجاني" (v35.8) ──
+export async function duoCodeRaces(verbose = false) {
+  const r = suite('الغرفة الثنائية بالكود: منضمّان بنفس اللحظة + إلغاء المنشئ بلحظة الانضمام'); r.verbose = verbose;
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل'), C = await w.client('كريم');
+    A.createDuoRoom(); await w.run(500);
+    const code = A.duoCodeShown();
+    r.ok(/^\d{6}$/.test(code), 'أُنشئت الغرفة وظهر كودها');
+    B.joinCode(code); C.joinCode(code);                        // نفس اللحظة
+    await w.run(6000);
+    const inRoom = [B, C].filter(c => c.matches.some(m => m.room === code));
+    const other = [B, C].find(c => !inRoom.includes(c));
+    r.ok(A.matches.length === 1 && inRoom.length === 1, `واحد فقط دخل (${inRoom.map(c => c.name).join('،') || '—'})`);
+    r.ok(other && other.matches.length === 0 && /الغرفة ممتلئة أو انتهت/.test(other.errorText()), `والآخر يرى "الغرفة ممتلئة أو انتهت!" (${other?.errorText() || '—'})`);
+    const rm = w.server.getAt('rooms/' + code) || {};
+    r.ok(inRoom[0] && rm.p2uid === inRoom[0].uid && rm.p2name === inRoom[0].name, 'الغرفة تحمل خصماً واحداً متّسقاً');
+    noErr(r, w); w.dispose();
+  }
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    A.createDuoRoom(); await w.run(500);
+    const code = A.duoCodeShown();
+    B.joinCode(code);
+    const hit = await untilServer(w, () => (w.server.getAt('rooms/' + code) || {}).status === 'playing');
+    A.cancelDuoRoom();                                         // المنشئ يلغي والانضمام سبقه بلحظة
+    await w.run(8000);
+    const rm = w.server.getAt('rooms/' + code) || {};
+    r.ok(hit && A.matches.length === 0, 'المنشئ الذي ألغى لا يُسحب لمباراة');
+    r.ok(rm.status === 'finished' && rm.abortedBy === 1 && rm.leftBy == null, `الغرفة أُلغيت قبل البدء لا "انسحاب" (${rm.status}/${rm.abortedBy}/${rm.leftBy ?? '-'})`);
+    r.ok(!B.ends.length && CANCELLED_MSG.test(B.toasts()), 'المنضمّ لا يأخذ فوزاً مجانياً من إلغاء — يرى "ألغى الخصم قبل أن تبدأ المباراة"');
+    noErr(r, w); w.dispose();
+  }
+  {
+    // إلغاء الغرفة قبل أن يدخلها أحد: تُحذف (لا تبقى "منتهية" أو "تنتظر" بلا مضيف)
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    A.createDuoRoom(); await w.run(500);
+    const code = A.duoCodeShown();
+    A.cancelDuoRoom(); await w.run(1000);
+    r.ok(w.server.getAt('rooms/' + code) == null, 'إلغاء غرفة تنتظر وحدها يحذفها');
+    B.joinCode(code); await w.run(2000);
+    r.ok(B.matches.length === 0 && /الغرفة غير موجودة/.test(B.errorText()), `ومن يحاول دخولها بعدها يرى "الغرفة غير موجودة!" (${B.errorText() || '—'})`);
+    noErr(r, w); w.dispose();
+  }
+  return r;
+}
+
+// ── مستكشف البحث الثنائي (v35.8): 3 لاعبين يبحثون ويلغون ويغلقون عشوائياً + ثوابت ──
+export async function fuzzDuo(seed, verbose = false) {
+  const R = rng(seed + 7777);
+  const w = new World(); w.quiet = !verbose; w.startSampler(100);
+  const P = [await w.client('أحمد'), await w.client('باسل'), await w.client('كريم')];
+  const findings = [];
+  const once = (key, msg) => { if (!findings.some(f => f.startsWith(key))) findings.push(key + msg); };
+  const lastSearch = new Map(), lastCancel = new Map(), matchCount = new Map(P.map(c => [c, 0]));
+  const staleSince = new Map(), lostSince = new Map();
+  const inv = clock.setInterval(() => {
+    const rooms = w.server.getAt('rooms') || {};
+    for (const [code, rm] of Object.entries(rooms)) {
+      if (!rm || rm.multi) continue;
+      // (أ) لا غرفة شبحية: خصم بلا منشئ
+      if (rm.p2uid && !rm.p1name) once('غرفة شبحية', ` ${code}`);
+      // (ب) غرفة عامة تنتظر يجب أن يكون صاحبها يبحث فيها فعلاً (مهلة ثانيتين لأمر الانقطاع/الإلغاء)
+      if (rm.status === 'waiting' && rm.public === true) {
+        const owner = P.find(c => c.uid === rm.p1uid);
+        const ok = owner && !owner.dead && owner.om.roomCode === code && onStep(owner, 'searching');
+        if (!ok) {
+          if (!staleSince.has(code)) staleSince.set(code, clock.now);
+          if (clock.now - staleSince.get(code) > 2000) once('غرفة منتظرة بلا صاحب يبحث', ` ${code} (${owner?.name || '?'})`);
+        } else staleSince.delete(code);
+      } else staleSince.delete(code);
+    }
+    for (const c of P) {
+      // (و) منتظر يبحث في غرفته: يجب أن تكون موجودة عند الخادم (مهلة 3ث للإنشاء، وللإعادة بعد انقطاع لحظي)
+      const hc = c.om.roomCode;
+      if (!c.dead && hc && c.om.playerNum === 1 && !c.om._gameStarted && onStep(c, 'searching') && !rooms[hc]) {
+        if (!lostSince.has(c)) lostSince.set(c, clock.now);
+        if (clock.now - lostSince.get(c) > 3000) once('منتظر في غرفة مختفية', `: ${c.name} (${hc})`);
+      } else lostSince.delete(c);
+      // (ج) لا مباراة لمن ألغى: مباراة بدأت بعد آخر إلغاء وبلا بحث جديد بعده
+      const n = c.matches.length;
+      if (n > matchCount.get(c)) {
+        const m = c.matches[n - 1];
+        if ((lastCancel.get(c) || -1) > (lastSearch.get(c) || -1) && m.at > lastCancel.get(c)) once('سُحب لمباراة بعد إلغائه', `: ${c.name}`);
+        const rm = rooms[m.room];
+        if (!rm || !rm.p1name || !rm.p2uid) once('مباراة بلا طرفين', `: ${c.name} في ${m.room}`);
+        matchCount.set(c, n);
+      }
+    }
+  }, 50);
+  for (let step = 0; step < 30; step++) {
+    const c = P[Math.floor(R() * P.length)];
+    if (c.dead) { await w.run(500); continue; }
+    const x = R();
+    const onMenu = onStep(c, 'name') || onStep(c, 'random-count');
+    if (onMenu) { if (x < 0.8) { lastSearch.set(c, clock.now); await c.startSearch(2); } }
+    else if (onStep(c, 'searching')) {
+      if (x < 0.35) { lastCancel.set(c, clock.now); c.cancelSearch(); }
+      else if (x < 0.40) c.closeTab();
+      // إلغاء ثم إغلاق الصفحة داخل زمن رفع الإلغاء (مراجعة v35.8: أمر المسح يجب أن يبقى حتى يُحسم الإلغاء)
+      else if (x < 0.45) { lastCancel.set(c, clock.now); c.cancelSearch(); await w.run(Math.floor(R() * 40)); c.closeTab(); }
+      // انقطاع لحظي للمنتظر: الخادم ينفّذ أمر مسح غرفته والصفحة باقية (يجب أن تعود غرفته — الثابت "و")
+      else if (x < 0.52 && c.om.playerNum === 1 && !c.om._gameStarted) c.blip(50 + Math.floor(R() * 300));
+    }
+    await w.run(Math.floor(R() < 0.5 ? R() * 120 : 300 + R() * 3000));   // نصفها داخل نوافذ السباق
+  }
+  await w.run(15000);
+  clock.clearInterval(inv);
+  // (د) كل مباراة بدأت: طرفاها في غرفة واحدة بمقعدين مختلفين، ولا مقعد لغير أصحابها
+  const byRoom = {};
+  for (const c of P) for (const m of c.matches) (byRoom[m.room] ||= []).push({ c, m });
+  for (const [room, arr] of Object.entries(byRoom)) {
+    if (arr.length > 2) once('أكثر من لاعبين', ` في ${room}`);
+    if (arr.length === 2 && arr[0].m.num === arr[1].m.num) once('مقعد مكرّر', ` في ${room}`);
+  }
+  // (هـ) لا نتائج: لا أحد انسحب أو لعب — كل ما حدث بحث وإلغاء وإغلاق
+  for (const c of P) if (c.ends.length) once('نتيجة مسجّلة', `: ${c.name} (${c.ends.map(e => e.kind).join(',')})`);
+  if (w.errors.length) once('أخطاء JS', `: ${w.errors[0].slice(0, 160)}`);
+  w.dispose();
+  return { seed, findings };
 }
 
 // ═════════════════════ 4 لاعبين ═════════════════════

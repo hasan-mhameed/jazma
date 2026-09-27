@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1790420518";
+import { getCurrentUser }   from "./auth.js?v=1790462091";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -19,6 +19,13 @@ const db  = getDatabase(app);
 
 function genCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// عقدة غرفة بلا صاحب: لا إعدادات (cfg) ولا منشئ ثنائي (p1uid) ولا غرفة جماعية — بقايا كتبها أمر انقطاع شارد
+// (أو كتابة متأخرة) بعد مسح الغرفة، مثل {status:"finished", dropped2:true} وحدها. كل غرفة حقيقية تُنشأ بإعداداتها
+// كاملة (ثنائية وجماعية)، فلا تُعدّ بقايا أبداً. لا يدخلها أحد، ولا تخصّ أحداً (مراجعة v35.8 الرابعة)
+function isOrphanRoomNode(room) {
+  return !!room && typeof room === "object" && !room.cfg && !room.p1uid && !room.multi;
 }
 
 // ── تنظيف الغرف القديمة (أكثر من ساعة) ─────────────────────────
@@ -70,6 +77,12 @@ export class OnlineManager {
     this._leaving     = false; // انسحاب من مباراة جماعية جارٍ: لا كتابة على مقعدي حتى يُحسم (v35.7)
     this._leavePromise = null; // المغادرة الجارية (نقرة ثانية تنتظرها)
     this._rearmPending = false; // عدنا للاتصال ومقعدي لم يظهر بعد: التسليح مع أول لقطة تُظهره
+    // ── الثنائي: البحث والانضمام الذرّي (v35.8 — الخطوة 1.3) ──
+    this._duoSearchSeq = 0;     // رقم جلسة البحث العشوائي: الإلغاء (أو المغادرة) يُبطل بحثاً ما زال جارياً
+    this._duoPublic   = false;  // غرفتي الثنائية عامة (بحث عشوائي) لا بالكود — لإعادة فتحها كما كانت
+    this._reopeningCode = null; // إعادة فتح غرفتي جارية (منضمّ ألغى بحثه بلحظة انضمامه)
+    this._duoHostData = null;   // بيانات إنشاء غرفتي المنتظرة — لإعادتها إن اختفت وأنا أنتظر فيها
+    this._restoringCode = null; // إعادة غرفتي المختفية جارية
   }
 
   // ══ إنشاء غرفة ══════════════════════════════════════════════
@@ -78,7 +91,16 @@ export class OnlineManager {
     this.roomCode  = code;
     this.playerNum = 1;
     this._gameStarted = false;
+    this._duoPublic = false;
+    this._lastRoom = null;          // لا لقطة من غرفة سابقة (تُقرأ لإبلاغ "انتهت" المبكر)
 
+    // أمر المسح عند الانقطاع قبل الإنشاء (v35.8) — كما في البحث العشوائي: لا غرفة منتظرة بلا صاحب
+    try { onDisconnect(ref(db, `rooms/${code}`)).remove().catch(() => {}); } catch {}
+    this._duoHostData = {
+      cfg:       { rows: cfg.rows, cols: cfg.cols },
+      p1name:    name,
+      p1uid:     getCurrentUser()?.uid || "",
+    };
     await set(ref(db, `rooms/${code}`), {
       cfg:       { rows: cfg.rows, cols: cfg.cols },
       status:    "waiting",
@@ -89,8 +111,12 @@ export class OnlineManager {
       createdAt: Date.now(),
       move:      { key: "", by: 0, seq: 0 },
     });
+    // ونسلّحه مرة ثانية بعد الإنشاء (مراجعة v35.8): انقطاع لحظي والإنشاء في الطريق يستهلك الأمر الأول عند
+    // الخادم (يمسح غرفة لم تُنشأ بعد)، ثم يُعاد إرسال الإنشاء بعد العودة فتبقى غرفة بلا أمر مسح. التكرار لا يضر.
+    if (this.roomCode === code) {
+      try { onDisconnect(ref(db, `rooms/${code}`)).remove().catch(() => {}); } catch {}
+    }
 
-    onDisconnect(ref(db, `rooms/${code}`)).remove();
     this._listenForPlayer2(code);
     this._listenForMoves(code);
     this._listenBankUpdate(code);
@@ -109,15 +135,16 @@ export class OnlineManager {
     const room = snap.val();
     if (room.status !== "waiting")  throw new Error("الغرفة ممتلئة أو انتهت!");
 
+    // ذرّياً (v35.8): لا ندخل إلا غرفة ما زالت تنتظر وحدها — منضمّان بنفس اللحظة: واحد فقط يدخل،
+    // وغرفة ألغاها صاحبها للتوّ لا "تُبعث" بكتابتنا غرفةً شبحية بلا منشئ (كانت كتابة عمياء فوق ما قرأناه)
+    const info = {};
+    const joined = await this._joinDuoAtomic(code, name, getCurrentUser()?.uid || "", null, false, info);
+    if (!joined) throw new Error(info.unknown ? "تعذّر الانضمام بسبب انقطاع الاتصال — حاول مجدداً" : "الغرفة ممتلئة أو انتهت!");
+
     this.roomCode  = code;
     this.playerNum = 2;
     this._gameStarted = false;
-
-    await update(ref(db, `rooms/${code}`), {
-      p2name: name,
-      p2uid:  getCurrentUser()?.uid || "",
-      status: "playing",
-    });
+    this._lastRoom = null;
 
     // الانقطاع ينهي المباراة ويسجّل من انقطع (droppedN) في كتابة واحدة ذرّية —
     // فيعرف الطرف الآخر أنه فاز، ويعرف المنقطع (لو عاد) أنه هو من خرج (v35.6)
@@ -130,37 +157,46 @@ export class OnlineManager {
     this._listenForRestart(code);
     this._monitorConnection();
     this._listenSpectators(code);
-    return { cfg: room.cfg, p1name: room.p1name, p1uid: room.p1uid };
+    return { cfg: joined.cfg, p1name: joined.p1name, p1uid: joined.p1uid };
   }
 
   // ══ مطابقة عشوائية (زي السنوكر) ═══════════════════════════════
-  // تبحث عن خصم ينتظر؛ إن وُجد تنضم إليه، وإلا تنشئ غرفة عامة وتنتظر
+  // تبحث عن خصم ينتظر؛ إن وُجد تنضم إليه، وإلا تنشئ غرفة عامة وتنتظر.
+  // v35.8 (الخطوة 1.3): الانضمام بمعاملة ذرّية — منضمّان بنفس اللحظة لنفس المنتظر: واحد يدخل والآخر يجرّب
+  // غيره أو ينشئ غرفته (كانا يدخلان معاً: كتابة عمياء، والمنتظر يرى خصماً واحداً). والبحث جلسة يُبطلها الإلغاء:
+  // ضغط "إلغاء" أثناء البحث نفسه (قبل أن يكتمل) لا ينتهي بغرفة منتظرة ولا بمباراة لمن ألغى.
+  // يرجع { role: "guest" | "host" | "cancelled" }
   async findRandomMatch(cfg, name) {
+    const seq = ++this._duoSearchSeq;
+    const alive = () => seq === this._duoSearchSeq;
     const myUid = getCurrentUser()?.uid || "";
-    // نبحث عن غرف عامة منتظرة
-    let joinCode = null, joinRoom = null;
+    // الغرف العامة المنتظرة بنفس الحجم، الأقدم أولاً (أطولهم انتظاراً أحقّهم)
+    let candidates = [];
     try {
       const snap = await get(ref(db, "rooms"));
       if (snap.exists()) {
-        const rooms = snap.val();
-        for (const [code, room] of Object.entries(rooms)) {
-          if (room && room.public === true && room.status === "waiting"
-              && room.p1uid !== myUid
-              && room.cfg && Number(room.cfg.rows) === Number(cfg.rows)) {
-            joinCode = code; joinRoom = room; break;
-          }
-        }
+        candidates = Object.entries(snap.val() || {})
+          .filter(([, room]) => this._duoJoinable(room, myUid, cfg.rows, true))
+          .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0))
+          .map(([code]) => code);
       }
     } catch {}
+    if (!alive()) return { role: "cancelled" };
 
-    if (joinCode) {
-      // ننضم كخصم — نحاول حجز المكان
+    for (const joinCode of candidates.slice(0, 5)) {
+      const joined = await this._joinDuoAtomic(joinCode, name, myUid, cfg.rows, true);
+      if (!alive()) {
+        // ألغينا البحث والمعاملة في الطريق فاعتُمد انضمامنا: نلغي المباراة قبل بدئها (لا تُحسب لأحد) —
+        // لا نتركه يلعب وحده أمام خصم ألغى (المنتظر يعيد فتح غرفته إن لم يكن بدأ)
+        if (joined) this._abortDuoMatch(joinCode, 2, myUid);
+        return { role: "cancelled" };
+      }
+      if (!joined) continue;          // سبقنا غيرنا إليها، أو أُلغيت، أو تغيّرت — التالية
       this.roomCode  = joinCode;
       this.playerNum = 2;
       this._gameStarted = false;
-      await update(ref(db, `rooms/${joinCode}`), {
-        p2name: name, p2uid: myUid, status: "playing", public: false,
-      });
+      this._duoPublic = false;
+      this._lastRoom = null;
       // انقطاع = إنهاء + تسجيل من انقطع (ذرّياً) — انظر joinRoom
       this._armDuoDisconnect(joinCode);
       this._listenForMoves(joinCode);
@@ -171,8 +207,8 @@ export class OnlineManager {
       this._listenForRestart(joinCode);
       this._monitorConnection();
       this._listenSpectators(joinCode);
-      return { role: "guest", code: joinCode, cfg: joinRoom.cfg,
-               p1name: joinRoom.p1name, p1uid: joinRoom.p1uid };
+      return { role: "guest", code: joinCode, cfg: joined.cfg,
+               p1name: joined.p1name, p1uid: joined.p1uid };
     }
 
     // لا يوجد خصم — ننشئ غرفة عامة وننتظر
@@ -180,6 +216,12 @@ export class OnlineManager {
     this.roomCode  = code;
     this.playerNum = 1;
     this._gameStarted = false;
+    this._duoPublic = true;
+    this._lastRoom = null;
+    // أمر المسح عند الانقطاع **قبل** إنشاء الغرفة (v35.8): الخادم ينفّذ طلبات الاتصال بترتيبها — فلو أُغلقت الصفحة
+    // بعد وصول الإنشاء لا تبقى غرفة منتظرة بلا صاحب (كان يُسجَّل بعده، فتضيع لحظة بينهما يدخلها باحث ويعلق)
+    try { onDisconnect(ref(db, `rooms/${code}`)).remove().catch(() => {}); } catch {}
+    this._duoHostData = { cfg: { rows: cfg.rows, cols: cfg.cols }, public: true, p1name: name, p1uid: myUid };
     await set(ref(db, `rooms/${code}`), {
       cfg:       { rows: cfg.rows, cols: cfg.cols },
       status:    "waiting",
@@ -190,7 +232,12 @@ export class OnlineManager {
       createdAt: Date.now(),
       move:      { key: "", by: 0, seq: 0 },
     });
-    onDisconnect(ref(db, `rooms/${code}`)).remove();
+    // أُلغي البحث أثناء الإنشاء: الإلغاء رأى الغرفة (roomCode ضُبط قبل الكتابة) وحذفها ذرّياً بعد وصولها
+    // (وأمر انقطاعها يبقى مسلّحاً حتى يُحسم الحذف) — لا مستمعين لغرفة لم تعد لنا
+    if (!alive()) return { role: "cancelled" };
+    // ونسلّح أمر المسح مرة ثانية بعد الإنشاء (مراجعة v35.8): انقطاع لحظي والإنشاء في الطريق يستهلك الأمر الأول
+    // عند الخادم، ثم يُعاد إرسال الإنشاء بعد العودة فتبقى غرفة بلا أمر مسح. التكرار لا يضر.
+    try { onDisconnect(ref(db, `rooms/${code}`)).remove().catch(() => {}); } catch {}
     this._listenForPlayer2(code);
     this._listenForMoves(code);
     this._listenBankUpdate(code);
@@ -203,12 +250,152 @@ export class OnlineManager {
     return { role: "host", code };
   }
 
-  // إلغاء انتظار المطابقة العشوائية
+  // إلغاء انتظار المطابقة العشوائية (v35.8: ذرّي، ولا يسحب من ألغى لمباراة)
+  // الترتيب هو الحل، وكله في اللحظة نفسها بلا أي انتظار: (1) نُبطل البحث الجاري، (2) نبدأ معاملة الغرفة
+  // والمستمعون ما زالوا متصلين — ذاكرتها دافئة فتُعتمد من أول رحلة (بعد فصلهم كانت تبدأ بذاكرة باردة فتحتاج
+  // رحلتين، وإغلاق الصفحة بينهما ترك غرفة "تنتظر" بلا صاحب — مراجعة v35.8): تنتظر وحدها → تُحذف؛ سبقنا منضمّ
+  // بلحظة → تُلغى مباراته قبل بدئها (لا تُحسب)، (3) نفصل كل المستمعين — فلا لقطة "انضمّ خصم" تصل بعد الضغط
+  // تبدأ لنا مباراة. لا ننتظر المعاملة: بلا شبكة كانت ستعلّق زر الإلغاء (تكمل وحدها وتُعاد إن ضاع ردّها،
+  // وأمر المسح عند الانقطاع يبقى مسلّحاً حتى تُحسم — إغلاق الصفحة قبلها يحذف الغرفة عند الخادم)
   async cancelRandomMatch() {
-    if (this.roomCode && this.playerNum === 1) {
-      try { await remove(ref(db, `rooms/${this.roomCode}`)); } catch {}
-    }
+    this._duoSearchSeq++;
+    // بدأت المباراة فعلاً (نقرة متأخرة)، أو انضممنا كخصم: لا "إلغاء" لمباراة قائمة — الخروج منها انسحاب.
+    // (والغرف الجماعية لها مسارها: leaveRoom — هذا للبحث الثنائي وحده)
+    if (this._gameStarted || this.playerNum === 2 || this._isMulti) return;
+    const code = this.roomCode, wasHost = this.playerNum === 1;
+    if (code && wasHost) this._cancelDuoHosting(code);
+    this._unsubs.forEach(u => u());
+    this._unsubs = [];
+    this._lastRoom = null;
+    this._cbJoined = null;
     this.roomCode = null; this.playerNum = null;
+  }
+
+  // ── أدوات الانضمام والإلغاء الذرّيين للثنائي (v35.8) ──
+  // غرفة ثنائية يمكن دخولها الآن: تنتظر، بلا خصم، لها منشئ وإعدادات (غرفة شبحية بلا منشئ لا تُدخل)
+  // rows: حجم مطلوب (null = أي حجم، للغرفة بالكود)، publicOnly: العشوائي لا يدخل غرف الأكواد ولا غرفه هو
+  _duoJoinable(room, myUid, rows, publicOnly) {
+    if (!room || typeof room !== "object" || room.multi === true) return false;
+    if (room.status !== "waiting" || room.p2uid || !room.cfg || room.p1name == null) return false;
+    if (rows != null && Number(room.cfg.rows) !== Number(rows)) return false;
+    if (publicOnly && (room.public !== true || room.p1uid === myUid)) return false;
+    return true;
+  }
+  // يرجع الغرفة كما اعتمدها الخادم بعد انضمامنا، أو null (سبقنا غيرنا / أُلغيت / لا تصلح).
+  // مراجعة v35.8: رفضُ المعاملة لا يعني أننا لم ننضم — انقطاع بعد إرسالها يُسقط ردّها وقد اعتمدها الخادم،
+  // فيبدأ المنتظر مباراة أمام خصم يظن أنه لم ينضم (ينتظر بنك وقته كاملاً، أو يخسر إن خرج). النتيجة إذن
+  // غير معروفة: لا نبني عليها مباراة (قد نعود بعد دقائق لمباراة انتهت)، ونلغيها قبل بدئها إن كانت اعتُمدت
+  // (abortedBy: 2 — تُعاد المحاولة بعد عودة الاتصال): المنتظر يعيد فتح غرفته، أو يرى "ألغى الخصم… لم تُحسب".
+  // info.unknown = true في هذه الحالة (لرسالة الغرفة بالكود)
+  async _joinDuoAtomic(code, name, myUid, rows, publicOnly, info = {}) {
+    try {
+      const res = await runTransaction(ref(db, `rooms/${code}`), (room) => {
+        // ذاكرة محلية باردة: null لا يُلغي — الخادم يرفضه إن كانت الغرفة موجودة فتُعاد بقيمتها الحقيقية
+        // (ولو غير موجودة فعلاً: لا شيء يُكتب، والنتيجة فارغة = لم ننضم)
+        if (room === null) return null;
+        if (!this._duoJoinable(room, myUid, rows, publicOnly)) return;
+        return { ...room, p2name: name, p2uid: myUid, status: "playing", public: false };
+      }, { applyLocally: false });
+      const v = res && res.committed && res.snapshot ? res.snapshot.val() : null;
+      return (v && v.status === "playing" && v.p2uid === myUid) ? v : null;
+    } catch {
+      info.unknown = true;
+      this._abortDuoMatch(code, 2, myUid);
+      return null;
+    }
+  }
+  // معاملة على غرفة تُعاد إن رُفضت (انقطاع ضيّع ردّها، أو ألغتها كتابة محلية): ننتظر الاتصال ثم نعيدها —
+  // دالة التحديث تقرّر من جديد على قيمة الخادم الحقيقية، فالإعادة آمنة (مراجعة v35.8: عمليات الإلغاء والإعادة
+  // كانت محاولة واحدة؛ ضياع ردّها ترك منتظراً أمام خصم غائب أو في غرفة منتهية). المحاولة الأولى تبدأ في اللحظة
+  // نفسها (قبل أي انتظار) — فتقرأ ذاكرة الغرفة كما هي الآن. يرجع نتيجة المعاملة، أو null بعد استنفاد المحاولات.
+  async _roomTxnReliably(code, update, tries = 6) {
+    for (let i = 0; i < tries; i++) {
+      try {
+        return await runTransaction(ref(db, `rooms/${code}`), update, { applyLocally: false });
+      } catch {}
+      await this._waitOnline();
+      await new Promise(res => setTimeout(res, 300 * (i + 1)));
+    }
+    return null;
+  }
+  // المضيف يلغي غرفة لم يبدأ فيها مباراة: تنتظر وحدها → تُحذف؛ دخلها منضمّ بلحظة الإلغاء → مباراته تُلغى
+  // قبل بدئها (abortedBy: 1 — لا فوز له ولا خسارة لأحد). بلا انتظار: يكمل وحده ولو بلا شبكة.
+  // أمر المسح عند الانقطاع يبقى مسلّحاً حتى تُحسم المعاملة (مراجعة v35.8): كان يُلغى أولاً — فإغلاق الصفحة
+  // قبل وصول الحذف ترك غرفة "تنتظر" عامة بلا صاحب يدخلها الباحث التالي ويعلق بلا خصم. المسح بعد الحسم لا يضر
+  // (غرفة محذوفة أو ملغاة)، ثم نلغيه كي لا يمسّ غرفةً جديدة بالرمز نفسه لاحقاً.
+  _cancelDuoHosting(code) {
+    const myUid = getCurrentUser()?.uid || "";
+    const task = this._roomTxnReliably(code, (room) => {
+      if (room === null) return null;
+      if (isOrphanRoomNode(room)) return null;               // بقايا بلا صاحب حلّت مكان غرفتي: نمسحها معها
+      if ((room.p1uid || "") !== myUid) return;            // ليست غرفتي (لا نمسّ غيرها)
+      if (room.status === "waiting" && !room.p2uid) return null;
+      // منضمّ ألغى بحثه بلحظة انضمامه (abortedBy: 2) وإعادة فتحها في الطريق: نحذفها أيضاً — وإلا عادت
+      // "تنتظر" بعد مغادرتنا (المعاملة الأولى تقرأ ذاكرتنا "منتهية" فيرفضها الخادم وتُعاد بقيمته "تنتظر").
+      // ومثلها "منتهية" بلا خصم (كتابة شاردة من منضمّ سابق — نفس شرط إعادة الفتح، مراجعة v35.8 الرابعة)
+      if (room.status === "finished" && (room.abortedBy === 2 || !room.p2uid)) return null;
+      if (room.status === "playing" && room.p2uid && !room.abortedBy)
+        return { ...room, status: "finished", abortedBy: 1 };
+      return;
+    });
+    task.then(res => {
+      if (res) { try { onDisconnect(ref(db, `rooms/${code}`)).cancel().catch(() => {}); } catch {} }
+    }).catch(() => {});
+    return task;
+  }
+  // انضممنا ثم تبيّن أننا ألغينا البحث (أو ضاع رد انضمامنا): مباراتنا تُلغى قبل بدئها (abortedBy: 2) —
+  // المنتظر يعيد فتح غرفته إن لم يكن بدأ، أو يرى "ألغى الخصم قبل أن تبدأ المباراة — لم تُحسب"
+  _abortDuoMatch(code, seat, myUid) {
+    return this._roomTxnReliably(code, (room) => {
+      if (room === null) return null;
+      if (room.status !== "playing" || room.abortedBy || (room["p" + seat + "uid"] || "") !== myUid) return;
+      return { ...room, status: "finished", abortedBy: seat };
+    }).catch(() => {});
+  }
+  // المنضمّ ألغى بحثه بلحظة انضمامه قبل أن نبدأ: نعيد فتح غرفتنا كما كانت ونكمل الانتظار بلا أثر.
+  // فقط ما دمنا ننتظر فيها (المحاولة تُعاد بعد عودة الاتصال — لا نعيد فتح غرفة ألغيناها في الأثناء)
+  _reopenDuoRoom(code) {
+    if (this._reopeningCode === code) return;
+    this._reopeningCode = code;
+    const pub = this._duoPublic;
+    const myUid = getCurrentUser()?.uid || "";
+    this._roomTxnReliably(code, (room) => {
+      if (room === null) return null;
+      if (!this._stillHostingDuo(code)) return;
+      // غرفتي أنا فقط (مراجعة v35.8 الرابعة): عقدة بلا صاحب تعيدها _restoreDuoRoom كاملة، وغرفة غيري لا نمسّها
+      if ((room.p1uid || "") !== myUid) return;
+      if (room.status !== "finished" || !(room.abortedBy === 2 || !room.p2uid)) return;
+      // نمسح كل علامات نهاية لم تبدأ عندنا (كي لا تقرأها مباراة لاحقة في الغرفة كخروج خصم)
+      const { abortedBy, dropped1, dropped2, leftBy, vanished, ...rest } = room;
+      return { ...rest, status: "waiting", p2name: "", p2uid: "", ...(pub ? { public: true } : {}) };
+    }).catch(() => {}).finally(() => { if (this._reopeningCode === code) this._reopeningCode = null; });
+  }
+  // ما زلت أنتظر في غرفتي الثنائية هذه (لم تبدأ مباراة، ولم ألغِ)
+  _stillHostingDuo(code) {
+    return this.roomCode === code && this.playerNum === 1 && !this._gameStarted && !this._isMulti && !this.isSpectator;
+  }
+  // غرفتي اختفت وأنا أنتظر فيها: نعيدها كما كانت بعد عودة الاتصال (مراجعة v35.8).
+  // السبب الأشيع: انقطاع لحظي (الجوال) — الخادم ينفّذ أمر "امسح الغرفة" المسجّل لإغلاق الصفحة، والصفحة ما زالت
+  // مفتوحة تنتظر، فلا يجدها باحث ولا صديق معه الكود ("الغرفة غير موجودة!") ونحن ننتظر للأبد. وقد يُنفَّذ الأمر
+  // متأخراً بعد عودتنا (اتصال قديم لاحظ الخادم سقوطه لاحقاً)، أو يمسحها منظّف الغرف — المستمع يرى الاختفاء كله.
+  // أمر المسح يُسلَّح أولاً على الاتصال الحالي (كالإنشاء)، والإعادة بمعاملة: فقط إن كانت غير موجودة فعلاً.
+  async _restoreDuoRoom(code) {
+    if (this._restoringCode === code || !this._duoHostData) return;
+    this._restoringCode = code;
+    const data = this._duoHostData;
+    try {
+      await this._waitOnline();
+      if (!this._stillHostingDuo(code)) return;
+      try { onDisconnect(ref(db, `rooms/${code}`)).remove().catch(() => {}); } catch {}
+      await this._roomTxnReliably(code, (room) => {
+        if (!this._stillHostingDuo(code)) return;          // ألغينا أو بدأت مباراة في الأثناء
+        // موجودة (ذاكرتنا متأخرة): لا نلمسها — إلا عقدة بلا صاحب: بقايا أمر انقطاع شارد كتبه منضمّ سابق بعد مسحها
+        // (سقط بصمت فلم يُلغِ أمره)، فنعيد غرفتنا فوقها. كانت "موجودة" فلا نعيدها وننتظر للأبد (مراجعة v35.8 الرابعة)
+        if (room !== null && !isOrphanRoomNode(room)) return;
+        return { ...data, status: "waiting", p2name: "", p2uid: "", createdAt: Date.now(),
+                 move: { key: "", by: 0, seq: 0 } };
+      });
+    } catch {} finally { if (this._restoringCode === code) this._restoringCode = null; }
   }
 
   // ══ مشاركة خريطة العناصر (تزامن التوزيع) ═══════════════════════
@@ -252,14 +439,14 @@ export class OnlineManager {
   // فيرى "انتهت" قبل الجميع؛ علامته في نفس اللقطة تمنعه من إعلان فوز ليس له.
   _armDuoDisconnect(code) {
     try {
-      onDisconnect(ref(db, `rooms/${code}`)).update({ status: "finished", ["dropped" + this.playerNum]: true });
+      onDisconnect(ref(db, `rooms/${code}`)).update({ status: "finished", ["dropped" + this.playerNum]: true }).catch(() => {});
     } catch {}
   }
   // نهاية المباراة عندي: لا نكتب شيئاً بعدها لو أغلقتُ الصفحة (كانت تبقى مسلّحة للأبد)
   // المشاهد لا يملك أمراً على مستوى الغرفة — والإلغاء عليها يلغي معه تنظيف حضوره (spectators/uid)
   disarmDuoDisconnect() {
     if (!this.roomCode || this._isMulti || this.isSpectator) return;
-    try { onDisconnect(ref(db, `rooms/${this.roomCode}`)).cancel(); } catch {}
+    try { onDisconnect(ref(db, `rooms/${this.roomCode}`)).cancel().catch(() => {}); } catch {}
   }
   // آخر لقطة للغرفة من مستمعها (تشمل ما طبّقه Firebase محلياً عند انقطاعي) — بلا قراءة من الشبكة
   lastRoom() { return this._lastRoom || null; }
@@ -268,14 +455,28 @@ export class OnlineManager {
   // ══ الاستماع لانضمام اللاعب 2 ══════════════════════════════
   _listenForPlayer2(code) {
     const unsub = onValue(ref(db, `rooms/${code}`), (snap) => {
-      if (!snap.exists()) return;
+      const hosting = this._stillHostingDuo(code);
+      // غرفتي اختفت وأنا أنتظر فيها (انقطاع لحظي نفّذ فيه الخادم أمر مسحها، أو منظّف الغرف): نعيدها.
+      // ومثلها عقدة بلا صاحب حلّت مكانها (بقايا أمر انقطاع شارد بعد المسح — مراجعة v35.8 الرابعة). فقط ما دمت أنتظر:
+      // بعد البدء تمرّ اللقطة لمعالج الخروج كما هي
+      if (!snap.exists() || (hosting && isOrphanRoomNode(snap.val()))) {
+        if (hosting) this._restoreDuoRoom(code);
+        return;
+      }
       const room = snap.val();
       this._lastRoom = room;
+      // المنضمّ ألغى بحثه بلحظة انضمامه ولم نكن بدأنا (v35.8): نعيد فتح الغرفة ونكمل الانتظار بلا أثر
+      // (بدونها تبقى غرفتنا "منتهية" ونحن ننتظر فيها للأبد — لا أحد يدخل غرفة منتهية). ومثلها "منتهية" بلا خصم
+      // ونحن ننتظر: كتابة شاردة من منضمّ سابق خرج منها (أمر انقطاعه، أو خروجه) — مراجعة v35.8 الثالثة
+      if (room.status === "finished" && (room.abortedBy === 2 || !room.p2uid) && !this._gameStarted) {
+        this._reopenDuoRoom(code);
+        return;
+      }
       if (room.status === "playing" && !this._gameStarted && room.p2name) {
         this._gameStarted = true;
         // بدأ اللعب: نغيّر سلوك الانقطاع من "مسح" إلى "إنهاء" (ليصل إشعار للخصم)
         // + تسجيل من انقطع (droppedN) في نفس الكتابة الذرّية (v35.6)
-        try { onDisconnect(ref(db, `rooms/${code}`)).cancel(); } catch {}
+        try { onDisconnect(ref(db, `rooms/${code}`)).cancel().catch(() => {}); } catch {}
         this._armDuoDisconnect(code);
         this._cbJoined && this._cbJoined(room.p2name);
       }
@@ -1027,12 +1228,44 @@ export class OnlineManager {
   // (leftBy/droppedN) في نفس اللقطة، بما فيها ما طبّقه Firebase محلياً عند انقطاعي أنا
   _listenForOpponentLeave(code) {
     let firstCall = true; // تجاهل أول استدعاء (القيمة الحالية)
+    // طرف في مباراة: المنضمّ دائماً، والمضيف بعد أن بدأ — المضيف المنتظر لا يُنهي شيئاً بما يراه هنا
+    // (منضمّ ألغى بحثه بلحظة انضمامه: تعيد _listenForPlayer2 فتح الغرفة ونكمل الانتظار — v35.8)
+    const inMatch = () => this.playerNum === 2 || this._gameStarted;
+    const myUid = getCurrentUser()?.uid || "";
+    // اختفت مباراتنا قبل أن تبدأ (بلا نتيجة لأحد) — مرة واحدة، على آخر لقطة لغرفتنا نحن
+    const vanish = () => {
+      if (!inMatch() || (this._lastRoom && this._lastRoom.status === "finished")) return;
+      this._lastRoom = { ...(this._lastRoom || {}), status: "finished", vanished: true };
+      // أمر "انتهت + انقطع" المسلّح على الغرفة لم يعد يخصّنا (مراجعة v35.8 الثالثة): إغلاق الصفحة قبل أن تُظهر
+      // الواجهة الرسالة كان يكتبه فوق غرفة المنتظر المُعادة ("منتهية" وهو ينتظر) — أو يُنشئ غرفة بقايا إن مُسحت
+      try { onDisconnect(ref(db, `rooms/${code}`)).cancel().catch(() => {}); } catch {}
+      this._cbLeft && this._cbLeft(this._lastRoom);
+    };
     const unsub = onValue(ref(db, `rooms/${code}`), (snap) => {
-      if (!snap.exists()) return;
+      // نهاية لا رجعة فيها وصلتنا (اختفت الغرفة، أو أُلغيت قبل البدء): تبقى كما هي — لقطة لاحقة لا تمحوها
+      // (غرفة أعادها منشئها أو فتحها من جديد كانت تكتب فوقها "تنتظر"، فيفوت الواجهةَ أن المباراة أُلغيت — مراجعة v35.8 الثانية)
+      const lr = this._lastRoom;
+      if (lr && lr.status === "finished" && (lr.vanished || lr.abortedBy)) return;
+      if (!snap.exists()) {
+        // اختفت الغرفة ونحن فيها (v35.8): مسحها أمر انقطاع منشئٍ أُغلقت صفحته بلحظة انضمامنا قبل أن يثبّت
+        // بدء المباراة — لا خصم ولا مباراة. كنا ننتظر حركته الأولى للأبد (هو من يبدأ الساعة أيضاً):
+        // نُنهيها بلا نتيجة لأحد. (انقطاعنا نحن يُطبَّق محلياً أيضاً — تفرزه الواجهة: غير متصل = انقطع اتصالك)
+        // ولو في أول لقطة: الغرفة موجودة يقيناً لحظة التسجيل (انضمامنا اعتُمد، أو أنشأناها) — قد تُمسح بين
+        // اعتماد انضمامنا وتسجيل المستمع (كشفه مستكشف البحث الثنائي)
+        vanish();
+        return;
+      }
       const room = snap.val();
+      // المنضمّ: مقعدي لم يعد لي في الغرفة = مباراتي اختفت (مراجعة v35.8 الثانية). منشئ سقط اتصاله بلحظة انضمامنا
+      // (قبل أن يرى الانضمام) مسحها الخادم بأمره، ثم عاد فأعادها "تنتظر" بلا خصم — وقد يدخلها غيرنا. ولو في أول لقطة.
+      // (نبني على آخر لقطة لغرفتنا نحن — لا على غرفة غيرنا: علاماتها (droppedN/leftBy) ليست لمباراتنا)
+      if (this.playerNum === 2 && (room.status === "waiting" || (room.p2uid || "") !== myUid)) {
+        vanish();
+        return;
+      }
       this._lastRoom = room;
       if (firstCall) { firstCall = false; return; }
-      if (room.status === "finished") {
+      if (room.status === "finished" && inMatch()) {
         this._cbLeft && this._cbLeft(room);
       }
     });
@@ -1057,6 +1290,7 @@ export class OnlineManager {
   async _leaveRoomOnce({ announce = true } = {}) {
     // 👁️ حماية: المشاهد لا يغادر عبر مسار اللاعبين إطلاقاً (وإلا تُنهى المباراة)
     if (this.isSpectator) return this.leaveSpectator();
+    this._duoSearchSeq++;   // أي مغادرة تُنهي بحثاً ثنائياً ما زال جارياً (لا غرفة ولا انضمام بعدها — v35.8)
     // نتذكّر الغرفة التي نغادرها: لا نعود إليها فوراً في بحث جديد
     // (وإلا يعود الرافض لجولته نفسها فيُحبس كمنتظر — حلقة مغلقة)
     if (this.roomCode) this._recentlyLeft = { code: this.roomCode, at: Date.now() };
@@ -1079,16 +1313,24 @@ export class OnlineManager {
       withdraw = await Promise.race([task, new Promise(res => setTimeout(() => res(null), waitMs))]);
       exitUnsettled = !withdraw || !!withdraw.error;
     }
+    // الثنائي، مضيف لم تبدأ عنده مباراة (يلغي غرفة تنتظر: بالكود، أو عشوائية ثم "العب ضد الكمبيوتر"):
+    // إلغاء ذرّي (v35.8) — تُحذف إن كانت تنتظر وحدها، ومن دخلها بلحظة المغادرة تُلغى مباراته قبل بدئها.
+    // كان "انسحاباً" (leftBy) يمنح المنضمّ بنفس اللحظة فوزاً من مجرد إلغاء، ومع announce=false كانت الغرفة
+    // تبقى "تنتظر" بلا مضيف (أمر انقطاعه أُلغي) فيدخلها باحث ويعلق بلا خصم. تبدأ المعاملة هنا قبل فصل
+    // المستمعين (ذاكرة دافئة = رحلة واحدة)، وأمر المسح عند الانقطاع يبقى مسلّحاً حتى تُحسم (مراجعة v35.8)
+    const duoHostCancel = !!this.roomCode && !this._isMulti && this.playerNum === 1 && !this._gameStarted;
+    if (duoHostCancel) this._cancelDuoHosting(this.roomCode);
     this._unsubs.forEach(u => u());
     this._unsubs = [];
     this._lastRoom = null;
     // إلغاء أي onDisconnect مسجّل للغرفة القديمة (وإلا يكتب فيها بعد مغادرتنا)
-    // مستوى الغرفة يُلغى دائماً (الثنائي لا يضبط _myUid — كان يبقى مسلّحاً بعد المغادرة)
+    // مستوى الغرفة يُلغى دائماً (الثنائي لا يضبط _myUid — كان يبقى مسلّحاً بعد المغادرة) — إلا غرفة ثنائية
+    // نلغيها كمضيف: أمر مسحها يبقى حتى يُحسم الإلغاء، ثم يُلغيه _cancelDuoHosting
     // (الإلغاء على مسار يشمل كل ما تحته — فلا شيء منه وانسحابنا لم يُحسم: ختم انقطاعنا هو ضمانه)
     // تُرسل بترتيبها بلا انتظار ردودها (مراجعة v35.7 الرابعة): انقطاع أثناء انتظار الرد يُسقط الرد نهائياً
     // فلا ينتهي الانتظار أبداً — وزر الخروج يبقى معلّقاً حتى إعادة تحميل الصفحة. الخادم ينفّذها بترتيبها.
     const quiet = p => { try { p.catch(() => {}); } catch {} };
-    if (this.roomCode && !exitUnsettled) {
+    if (this.roomCode && !exitUnsettled && !duoHostCancel) {
       try { quiet(onDisconnect(ref(db, `rooms/${this.roomCode}`)).cancel()); } catch {}
     }
     if (this.roomCode && this._myUid && !exitUnsettled) {
@@ -1119,6 +1361,8 @@ export class OnlineManager {
             });
           }
         } catch {}
+      } else if (duoHostCancel) {
+        // الثنائي، مضيف لم تبدأ عنده مباراة: أُلغيت الغرفة ذرّياً أعلاه (قبل فصل المستمعين)
       } else {
         // الثنائي: ننهي المباراة فقط إذا كنّا لاعبين فيها فعلاً
         // (leaveRoom تُستدعى أيضاً كتنظيف قبل البحث — يجب ألّا تُنهي غرفة غيرنا)

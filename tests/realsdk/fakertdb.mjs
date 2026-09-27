@@ -17,7 +17,8 @@ function resolveSV(v, now) {
   return v;
 }
 export class FakeRTDB {
-  constructor() { this.root = null; this.conns = new Set(); this.log = []; this.delay = 5; this.delayFor = null; this.replyDelayFor = null; }
+  // detectDelay: الخادم يلاحظ سقوط اتصال بعد مهلة (كالخادم الحقيقي مع الجوال) — أوامر onDisconnect تُنفَّذ متأخرة
+  constructor() { this.root = null; this.conns = new Set(); this.log = []; this.delay = 5; this.delayFor = null; this.replyDelayFor = null; this.detectDelay = 0; }
   close() { for (const c of this.conns) { try { c.ws.close(); } catch {} } try { this.srv.close(); } catch {} }
   getAt(p) { let c = this.root; for (const k of parts(p)) { if (c == null || typeof c !== 'object') return null; c = c[k]; if (c === undefined) return null; } return c ?? null; }
   setAt(p, v) {
@@ -48,7 +49,12 @@ export class FakeRTDB {
       const d = this.delayFor ? this.delayFor(m, conn) : null;
       setTimeout(() => this.onMsg(conn, m), typeof d === 'number' ? d : this.delay);
     });
-    ws.on('close', () => { conn.closed = true; this.conns.delete(conn); this.runOnDisconnect(conn); });
+    ws.on('close', () => {
+      conn.closed = true; this.conns.delete(conn);
+      // detectDelay: رقم لكل الاتصالات، أو دالة (conn) => ms لاتصال بعينه
+      const dd = typeof this.detectDelay === 'function' ? this.detectDelay(conn) : this.detectDelay;
+      if (dd) setTimeout(() => this.runOnDisconnect(conn), dd); else this.runOnDisconnect(conn);
+    });
   }
   runOnDisconnect(conn) {
     const now = Date.now(); const changed = [];

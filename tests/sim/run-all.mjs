@@ -17,7 +17,10 @@ const sections = [
     () => S.codeBasics(verbose), () => S.codeStartTwoAndLimits(verbose), () => S.codeHostLeaves(verbose),
     () => S.codeSeatReuse(verbose), () => S.codeExHostRejoins(verbose), () => S.codeHostClosesTab(verbose),
     () => S.abandonedRoomIgnored(verbose)]],
-  ['⚔️ البحث الثنائي', [() => S.duoBasics(verbose), () => S.duoCancel(verbose), () => S.duoRaces(verbose)]],
+  ['⚔️ البحث الثنائي', [() => S.duoBasics(verbose), () => S.duoCancel(verbose), () => S.duoRaces(verbose),
+    () => S.duoJoinerCancels(verbose), () => S.duoCancelMidSearch(verbose), () => S.duoHostVanishes(verbose),
+    () => S.duoHostClosesAtCreate(verbose), () => S.duoCancelThenClose(verbose), () => S.duoHostBlip(verbose),
+    () => S.duoCodeRaces(verbose)]],
   ['🚪 نهايات الانسحاب', [
     () => S.duoWithdrawEnding(verbose), () => S.duoDropEnding(verbose), () => S.duoRealDrop(verbose), () => S.duoLongDrop(verbose),
     () => S.duoSecondMatch(verbose), () => S.multiLastStanding(verbose), () => S.multiLateMark(verbose)]],
@@ -58,6 +61,7 @@ if (!only || only === 'مستكشف') {
   await explore('مستكشف البحث الجماعي — 3 لاعبين', N, s => S.fuzzOne(s, false, 3));
   await explore('مستكشف البحث الجماعي — 4 لاعبين', Math.ceil(N / 2), s => S.fuzzOne(s, false, 4));
   await explore('مستكشف الغرفة بالكود — 4 لاعبين', Math.ceil(N / 2), s => S.fuzzCode(s));
+  await explore('مستكشف البحث الثنائي — 3 لاعبين (بحث/إلغاء/إغلاق داخل نوافذ السباق)', N, s => S.fuzzDuo(s));
 }
 
 console.log(bad ? `\n❌ فشل ${bad} فحص` : '\n✅ كل الفحوص نجحت'
