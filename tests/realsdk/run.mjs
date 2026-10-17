@@ -6,7 +6,7 @@
 // فحص الطفرات: JAZAM_FIREBASE_JS=<نسخة قديمة من firebase.js> npm test  (يجب أن تفشل)
 import { pathToFileURL } from 'node:url';
 import { FakeRTDB } from './fakertdb.mjs';
-import { gen } from './gen.mjs';
+import { gen, genInvite } from './gen.mjs';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const results = [];
@@ -670,12 +670,69 @@ async function duoCancelStrayFinished() {
   }
 }
 
+// ── 25) دعوات الأصدقاء (v35.9 — الخطوة 1.8): الحذف المشروط بمعاملة في invite.js ──
+// سحب الدعوة من خانة الصديق (لا مستمع عليها = ذاكرة باردة)، ومسح الدعوة/الرد عند صاحبه: يعمل بذاكرة باردة
+// (المعاملة تسأل الخادم بدل أن تنتهي على null محلي)، ولا يمسّ دعوة أو ردّاً غير المقصود (أحدث، أو لغيره)
+async function inviteConditionalRemovals() {
+  const r = suite('الدعوات: سحب الدعوة ومسحها ومسح الرد — بذاكرة باردة، ولا تمسّ غير المقصود');
+  const S = new FakeRTDB(); const port = await S.listen();
+  const I = {};
+  for (const d of ['A', 'B', 'C']) I[d] = await import(pathToFileURL(genInvite(d, port)).href);
+  const cfg = { rows: 4, cols: 4 };
+  // (أ) أحمد يسحب دعوته من خانة باسل ولا يستمع لها
+  await I.A.sendGameInvite('uB', '111111', cfg);
+  await I.A.withdrawInvite('uB', '111111');
+  await wait(150);
+  r.ok(S.getAt('invites/uB') == null, `(أ) السحب بذاكرة باردة نجح (${JSON.stringify(S.getAt('invites/uB'))})`);
+  // (ب) لا يسحب دعوة غيره حلّت مكان دعوته
+  await I.A.sendGameInvite('uB', '222222', cfg);
+  await wait(5);
+  await I.C.sendGameInvite('uB', '333333', cfg);
+  await I.A.withdrawInvite('uB', '222222');
+  await wait(150);
+  r.ok(S.getAt('invites/uB')?.fromUid === 'uC', '(ب) سحب أحمد لم يمسّ دعوة كريم التي حلّت مكان دعوته');
+  // (ج) المستلم يمسح الدعوة نفسها فقط (لا نسخة أحدث أعاد صاحبها إرسالها)
+  let seen = null; const un = I.B.listenForInvites(v => { seen = v; });
+  await wait(150);
+  const inv1 = seen;
+  await wait(5);
+  await I.C.sendGameInvite('uB', '333333', cfg);
+  await wait(150);
+  await I.B.clearInviteIf(inv1);
+  await wait(150);
+  const now = S.getAt('invites/uB');
+  r.ok(inv1 && now && now.roomCode === '333333' && now.sentAt !== inv1.sentAt, '(ج) مسح نسخة قديمة لم يمسح الأحدث');
+  await I.B.clearInviteIf(seen);
+  await wait(150);
+  r.ok(S.getAt('invites/uB') == null, '(ج) ومسح الدعوة نفسها نجح');
+  un();
+  // (د) الرد: صاحب الدعوة يمسحه بذاكرة باردة، ولا يمسح ردّاً أحدث
+  I.B.replyToInvite({ fromUid: 'uA', roomCode: '444444', sentAt: 1 }, 'rejected');
+  await wait(150);
+  const rep1 = S.getAt('inviteRejections/uA');
+  await I.A.removeInviteReply(rep1);
+  await wait(150);
+  r.ok(rep1 && rep1.roomCode === '444444' && rep1.reason === 'rejected' && S.getAt('inviteRejections/uA') == null,
+    '(د) الرد يحمل رمز الغرفة وسببه، ومسحه بذاكرة باردة نجح');
+  I.B.replyToInvite({ fromUid: 'uA', roomCode: '555555', sentAt: 1 }, 'rejected');
+  await wait(150);
+  const rep2 = S.getAt('inviteRejections/uA');
+  await wait(5);
+  I.C.replyToInvite({ fromUid: 'uA', roomCode: '666666', sentAt: 1 }, 'playing');
+  await wait(150);
+  await I.A.removeInviteReply(rep2);
+  await wait(150);
+  r.ok(S.getAt('inviteRejections/uA')?.roomCode === '666666', '(د) مسح ردّ قديم لم يمسح الأحدث');
+  S.close();
+}
+
 const all = [offlineExitThenReconnect, blipDuringWithdraw, onlineExit, creatorStamp, timeoutDuringBlip,
   secondExitClick, dropBeforeStartAcks, quietLeaveDuringDrop, spectatorLeaveDuringDrop,
   duoTwoJoiners, duoHostCancelAlone, duoCancelAfterJoin, duoCancelJoinSimultaneous, duoCancelOffline,
   duoCodeTwoJoiners, duoHostGoneAtJoin,
   duoCancelThenClose, duoJoinAckLost, duoCodeJoinAckLost, duoCreateBlip, duoAbortRetried, duoCancelDuringReopen,
-  duoHostBlipRestores, duoRestoreKeepsGuestOut, duoEvictedGuestOp, duoOrphanNodeRestores, duoCancelStrayFinished];
+  duoHostBlipRestores, duoRestoreKeepsGuestOut, duoEvictedGuestOp, duoOrphanNodeRestores, duoCancelStrayFinished,
+  inviteConditionalRemovals];
 // ONLY=اسم1,اسم2 npm test — تشغيل فحوص بعينها (للتطوير وفحص الطفرات)
 const pick = process.env.ONLY ? all.filter(f => process.env.ONLY.split(',').includes(f.name)) : all;
 console.log('\n🔬 firebase.js بحزمة Firebase الحقيقية');

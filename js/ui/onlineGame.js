@@ -1,16 +1,16 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1790462091";
-import { setMyPresence } from "../presence.js?v=1790462091";
-import { updateScoreboard } from "./scoreboard.js?v=1790462091";
-import { config } from "../config/config.js?v=1790462091";
-import { onlineManager } from "../firebase.js?v=1790462091";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1790462091";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1790462091";
-import { state } from "../core/state.js?v=1790462091";
-import { getCurrentUser } from "../auth.js?v=1790462091";
-import { endGame, recordForfeit, recordElimination } from "./gameEnd.js?v=1790462091";
-import { renderTurnText } from "./turnManager.js?v=1790462091";
+import { audioManager } from "../audio/audioManager.js?v=1791040331";
+import { setMyPresence } from "../presence.js?v=1791040331";
+import { updateScoreboard } from "./scoreboard.js?v=1791040331";
+import { config } from "../config/config.js?v=1791040331";
+import { onlineManager } from "../firebase.js?v=1791040331";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1791040331";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1791040331";
+import { state } from "../core/state.js?v=1791040331";
+import { getCurrentUser } from "../auth.js?v=1791040331";
+import { endGame, recordForfeit, recordElimination } from "./gameEnd.js?v=1791040331";
+import { renderTurnText } from "./turnManager.js?v=1791040331";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -115,6 +115,10 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   let _waitGuardRound = null; // جولة نحرس انتظارنا فيها (منع البقاء منتظراً للأبد)
   let _searchStartedAt = null; // ختم بدء البحث الحالي (لتجاهل جولات موافقة أقدم)
 
+  // طلب إنشاء أو انضمام جارٍ (لم تظهر شاشته بعد): لا تُقبل دعوة صديق في منتصفه (v35.9 — مراجعة ثانية)
+  let _opBusy = 0;
+  async function busyOp(fn) { _opBusy++; try { return await fn(); } finally { _opBusy--; } }
+
   function showStep(step) {
     stepName.classList.add("hidden");
     stepLobby.classList.add("hidden");
@@ -147,6 +151,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   // ── إنشاء غرفة ──────────────────────────────────────────────
   createRoomBtn?.addEventListener("click", async () => {
+    if (_opBusy > 0) return;   // طلب آخر لم ينتهِ (نقرات سريعة على شبكة بطيئة — مراجعة v35.9 الثالثة)
     const name = getPlayerName(); if (!name) return;
     createRoomBtn.disabled = true;
     try {
@@ -162,7 +167,9 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         launchOnlineGame(1, onlineTurnInd, onGameStart);
       });
 
-      const code = await onlineManager.createRoom(config, name);
+      const code = await busyOp(() => onlineManager.createRoom(config, name));
+      // تُركت الغرفة أثناء إنشائها (v35.9): لا شاشة انتظار فوق ما بعدها
+      if (onlineManager.roomCode !== code) return;
       roomCodeDisplay.textContent = code;
       roomCodeDisplay.classList.remove("hidden");
       copyCodeBtn.classList.remove("hidden");
@@ -184,6 +191,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   // 👁️ مشاهدة مباراة بالكود (الطبقة 1 — مدخل الاختبار)
   const spectateBtn = document.getElementById("spectate-btn");
   spectateBtn?.addEventListener("click", async () => {
+    if (_opBusy > 0) return;
     const code = (roomCodeInput?.value || "").trim();
     if (!code) { showError("أدخل كود المباراة أولاً"); return; }
     spectateBtn.disabled = true;
@@ -197,10 +205,12 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   });
 
   joinRoomBtn?.addEventListener("click", async () => {
+    if (_opBusy > 0) return;
     const name = getPlayerName(); if (!name) return;
     const code = roomCodeInput.value.trim();
     if (code.length !== 6) { showError("❗ الكود يجب أن يكون 6 أرقام"); return; }
     joinRoomBtn.disabled = true;
+    _opBusy++;
     try {
       // نكشف نوع الغرفة أولاً (ثنائية أو جماعية)
       const roomType = await onlineManager.getRoomType(code);
@@ -224,7 +234,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         launchOnlineGame(2, onlineTurnInd, onGameStart);
       }
     } catch (e) { showError(e.message); }
-    finally { joinRoomBtn.disabled = false; }
+    finally { joinRoomBtn.disabled = false; _opBusy--; }
   });
 
   // ── مطابقة عشوائية (زي السنوكر) ─────────────────────────────
@@ -260,6 +270,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   randomCountBack?.addEventListener("click", () => showStep("name"));
 
   randomSearchStart?.addEventListener("click", async () => {
+    if (_opBusy > 0) return;   // إنشاء غرفة أو انضمام لم ينتهِ بعد: لا بحث فوقه
     if (_randomWanted === 2) await startDuoRandomSearch();
     else await startMultiRandomSearch(_randomWanted);
   });
@@ -899,6 +910,10 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   cancelSearchBtn?.addEventListener("click", async () => {
     // نقرة وصلت بعد أن تحوّل البحث لمباراة (شاشة البحث اختفت): لا إلغاء لمباراة بدأت (v35.8)
     if (stepSearching?.classList.contains("hidden")) return;
+    await cancelSearchNow();
+  });
+  // إلغاء البحث الجاري (زر الإلغاء، أو قبول/إرسال دعوة صديق أثناء البحث — v35.9)
+  async function cancelSearchNow() {
     stopSearchCountdown();
     stopLoneWaitTimer();
     closeApproval();
@@ -909,7 +924,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       await onlineManager.cancelRandomMatch();
     }
     showStep("name");
-  });
+  }
 
   // ── إلغاء الغرفة ─────────────────────────────────────────────
   cancelRoomBtn?.addEventListener("click", async () => {
@@ -960,11 +975,13 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   // إنشاء الغرفة الجماعية
   multiCreateConfirm?.addEventListener("click", async () => {
+    if (_opBusy > 0) return;   // نقرة ثانية أثناء الإنشاء كانت تنشئ غرفتين
     const name = getPlayerName(); if (!name) return;
     try {
       const gridSize = +document.getElementById("grid-size").value || 4;
       config.rows = config.cols = gridSize;
-      const { code } = await onlineManager.createMultiRoom(config, name, _multiMaxPlayers);
+      const { code, left } = await busyOp(() => onlineManager.createMultiRoom(config, name, _multiMaxPlayers));
+      if (left || onlineManager.roomCode !== code) return;   // تُركت أثناء إنشائها (v35.9)
       _isMultiHost = true;
       multiCodeDisplay.textContent = code;
       setupMultiLobby();
@@ -1101,7 +1118,49 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     document.getElementById("player-count").disabled = false;
   });
 
-  return { showStep };
+  // ═══ ما يفعله اللاعب الآن — لدعوات الأصدقاء (v35.9، الخطوة 1.8) ═══
+  // "playing": مباراة جارية (أي نوع) أو تبدأ الآن — لا تُقاطَع
+  // "done":    على اللوحة بعد نهايتها، أو خرج من مباراة جماعية جارية، أو يشاهد — يغادر بهدوء
+  // "waiting": بحث أو غرفة تنتظر — تُلغى بهدوء لقبول دعوة أو إرسالها
+  // "busy":    طلب إنشاء/انضمام جارٍ لم تظهر شاشته بعد — لحظة (القبول ينتظر، والدعوة تبقى ظاهرة)
+  // "idle":    لا شيء
+  function activity() {
+    const boardEl = document.getElementById("board");
+    if (boardEl && !boardEl.classList.contains("hidden")) {
+      if (config.spectator) return "done";
+      return (state.gameFinished || isOutOfMatch()) ? "done" : "playing";
+    }
+    if (_opBusy > 0) return "busy";
+    if (!onlineScreen.classList.contains("hidden")) {
+      if (!startCountdownEl?.classList.contains("hidden")) return "playing";   // 3-2-1 قبل البدء
+      if (!stepPlaying.classList.contains("hidden")) return "playing";         // مباراة تُحمَّل الآن
+      if (!stepSearching?.classList.contains("hidden") || !stepLobby.classList.contains("hidden")
+          || !stepMultiLobby?.classList.contains("hidden")) return "waiting";
+    }
+    return onlineManager.roomCode ? "waiting" : "idle";
+  }
+  // إنهاء الانتظار بهدوء (كأزرار الإلغاء نفسها). يرجع true إن صار اللاعب حراً،
+  // و false إن تحوّل الانتظار لمباراة بنفس اللحظة (لا نلغي مباراة بدأت)
+  async function cancelWaiting() {
+    const a = activity();
+    if (a !== "waiting") return a === "idle";
+    const shown = el => !onlineScreen.classList.contains("hidden") && !!el && !el.classList.contains("hidden");
+    if (shown(stepSearching)) {
+      await cancelSearchNow();
+    } else if (shown(stepMultiLobby)) {
+      await onlineManager.leaveRoom();
+      _isMultiHost = false;
+      showStep("name");
+    } else if (shown(stepLobby)) {
+      await onlineManager.leaveRoom();          // غرفة ثنائية بالكود أو دعوة تنتظر (كزر الإلغاء)
+      showStep("name");
+    } else {
+      await onlineManager.leaveRoom({ announce: false });   // غرفة بلا شاشة انتظار ظاهرة: مغادرة صامتة
+    }
+    return activity() === "idle";
+  }
+
+  return { showStep, activity, cancelWaiting };
 }
 
 export function launchOnlineGame(myPlayerNum, onlineTurnInd, onGameStart) {

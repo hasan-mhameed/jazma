@@ -2,6 +2,7 @@
 //   node --experimental-vm-modules --no-warnings run-all.mjs [عدد_الجلسات_العشوائية] [-v] [--only=كلمة]
 import * as S from './scenarios.mjs';
 import * as RS from './results.mjs';
+import * as IV from './invites.mjs';
 
 const N = Number(process.argv.find(a => /^\d+$/.test(a)) || 100);
 const verbose = process.argv.includes('-v');
@@ -31,6 +32,10 @@ const sections = [
     () => S.multiCreatorDrops(verbose), () => S.multiWithdrawSilent(verbose)]],
   ['🏁 نافذة نهاية المباراة', [() => RS.resultsPure(verbose), () => RS.resultsEndGame(verbose), () => RS.resultsExitEndings(verbose),
     () => RS.resultsElimination(verbose)]],
+  ['🎮 دعوات الأصدقاء', [() => IV.inviteAcceptAndAgain(verbose), () => IV.inviteReject(verbose), () => IV.inviteStaleReply(verbose),
+    () => IV.inviteCancelled(verbose), () => IV.inviteBusy(verbose), () => IV.inviteFromWaiting(verbose),
+    () => IV.inviteInviterBlip(verbose), () => IV.inviteExpires(verbose), () => IV.inviteOneAtATime(verbose),
+    () => IV.inviteReviewFixes(verbose), () => IV.inviteDuringPendingOp(verbose)]],
 ];
 
 for (const [title, runs] of sections) {
@@ -62,6 +67,7 @@ if (!only || only === 'مستكشف') {
   await explore('مستكشف البحث الجماعي — 4 لاعبين', Math.ceil(N / 2), s => S.fuzzOne(s, false, 4));
   await explore('مستكشف الغرفة بالكود — 4 لاعبين', Math.ceil(N / 2), s => S.fuzzCode(s));
   await explore('مستكشف البحث الثنائي — 3 لاعبين (بحث/إلغاء/إغلاق داخل نوافذ السباق)', N, s => S.fuzzDuo(s));
+  await explore('مستكشف دعوات الأصدقاء — 3 أصدقاء (دعوة/قبول/رفض/إلغاء/بحث/انقطاع/إغلاق)', Math.ceil(N / 2), s => IV.fuzzInvites(s));
 }
 
 console.log(bad ? `\n❌ فشل ${bad} فحص` : '\n✅ كل الفحوص نجحت'

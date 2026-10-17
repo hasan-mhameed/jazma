@@ -1,38 +1,38 @@
 // 📄 main.js — v13.9
 // Bootstrap فقط — يربط كل الـ modules
 
-import { config }                              from "./config/config.js?v=1790462091";
-import { state }                               from "./core/state.js?v=1790462091";
-import { startBoard, updateScoreboard, resetState } from "./board.js?v=1790462091";
-import { updateTurnUI }                        from "./ui/turnManager.js?v=1790462091";
-import { audioManager }                        from "./audio/audioManager.js?v=1790462091";
-import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1790462091";
-import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1790462091";
+import { config }                              from "./config/config.js?v=1791040331";
+import { state }                               from "./core/state.js?v=1791040331";
+import { startBoard, updateScoreboard, resetState } from "./board.js?v=1791040331";
+import { updateTurnUI }                        from "./ui/turnManager.js?v=1791040331";
+import { audioManager }                        from "./audio/audioManager.js?v=1791040331";
+import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1791040331";
+import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1791040331";
 
-import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1790462091";
-import { initPresence, setMyPresence } from "./presence.js?v=1790462091";
-import { initGameSetup }       from "./ui/gameSetup.js?v=1790462091";
-import { initTurnTimer, stopTurnTimer, startTurnTimer, TIME_BANKS, enableCentralClock, applyClockState } from "./ui/turnTimer.js?v=1790462091";
-import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator, leaveOnlineMatch, isOutOfMatch, noteMyExitPending } from "./ui/onlineGame.js?v=1790462091";
-import { initFriendsUI }       from "./ui/friendsUI.js?v=1790462091";
-import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1790462091";
-import { initInviteListener, sendInviteGame, showRejectionAlert } from "./ui/inviteUI.js?v=1790462091";
-import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1790462091";
-import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1790462091";
-import { renderStatsModal }    from "./ui/statsModal.js?v=1790462091";
-import { initHistoryUI }       from "./ui/historyUI.js?v=1790462091";
-import { resetMatchTimer, endGame } from "./ui/gameEnd.js?v=1790462091";
-import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1790462091";
-import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1790462091";
-import { refreshCoinsBadge, getMatchCoins } from "./core/wallet.js?v=1790462091";
-import { loadLearnedPowers } from "./ui/powerTutorial.js?v=1790462091";
-import { initPowersUI, refreshInventory } from "./ui/powersUI.js?v=1790462091";
-import { POWERS, addPower } from "./core/powers.js?v=1790462091";
-import { spendCoins } from "./core/wallet.js?v=1790462091";
-import { extendTime, cutBank, getTimerMode, getBank } from "./ui/turnTimer.js?v=1790462091";
-import { activatePower, triggerAI, nextActivePlayer } from "./ui/boardRenderer.js?v=1790462091";
-import { initNavMenu }            from "./ui/navMenu.js?v=1790462091";
-import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1790462091";
+import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1791040331";
+import { initPresence, setMyPresence } from "./presence.js?v=1791040331";
+import { initGameSetup }       from "./ui/gameSetup.js?v=1791040331";
+import { initTurnTimer, stopTurnTimer, startTurnTimer, TIME_BANKS, enableCentralClock, applyClockState } from "./ui/turnTimer.js?v=1791040331";
+import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator, leaveOnlineMatch, isOutOfMatch, noteMyExitPending } from "./ui/onlineGame.js?v=1791040331";
+import { initFriendsUI }       from "./ui/friendsUI.js?v=1791040331";
+import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1791040331";
+import { initInvites, resetInvites, startInvite, showInviteAlert, inviteEndText } from "./ui/inviteUI.js?v=1791040331";
+import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1791040331";
+import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1791040331";
+import { renderStatsModal }    from "./ui/statsModal.js?v=1791040331";
+import { initHistoryUI }       from "./ui/historyUI.js?v=1791040331";
+import { resetMatchTimer, endGame } from "./ui/gameEnd.js?v=1791040331";
+import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1791040331";
+import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1791040331";
+import { refreshCoinsBadge, getMatchCoins } from "./core/wallet.js?v=1791040331";
+import { loadLearnedPowers } from "./ui/powerTutorial.js?v=1791040331";
+import { initPowersUI, refreshInventory } from "./ui/powersUI.js?v=1791040331";
+import { POWERS, addPower } from "./core/powers.js?v=1791040331";
+import { spendCoins } from "./core/wallet.js?v=1791040331";
+import { extendTime, cutBank, getTimerMode, getBank } from "./ui/turnTimer.js?v=1791040331";
+import { activatePower, triggerAI, nextActivePlayer } from "./ui/boardRenderer.js?v=1791040331";
+import { initNavMenu }            from "./ui/navMenu.js?v=1791040331";
+import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1791040331";
 
 // ── رقم النسخة (للتأكد أي نسخة تعمل أثناء الاختبار) ──────────────
 // يُقرأ من رابط الملف نفسه (main.js?v=...) فيتحدّث تلقائياً مع كل إصدار
@@ -74,7 +74,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const onlineTurnInd= document.getElementById("online-turn-indicator");
 
   // ── Auth UI ──────────────────────────────────────────────────
-  initAuthUI();
+  initAuthUI({ beforeLogout: () => resetInvites() });   // دعوة تنتظر تُلغى قبل الخروج (v35.9)
   initPresence();               // 🟢 تسجيل حضورنا ومتابعة الاتصال
   initGuestUI();
 
@@ -320,6 +320,92 @@ document.addEventListener("DOMContentLoaded", () => {
   // ── Online Game ──────────────────────────────────────────────
   const onlineUI = initOnlineGame({ onGameStart: () => launchGame(), gameSetupApi: gameSetup });
 
+  // ── 🎮 دعوات الأصدقاء (v35.9 — الخطوة 1.8): المنطق في inviteUI.js، والشاشات هنا ──
+  const inviteHooks = {
+    activity: () => onlineUI.activity(),
+    // قبل إرسال دعوة أو قبولها: ننهي ما فيه اللاعب بهدوء — بحث أو غرفة تنتظر تُلغى،
+    // ونتيجة مباراة انتهت (أو مشاهدة) يُخرج منها كزر الخروج بعد النهاية (بلا تأكيد ولا خسارة)
+    goIdle: async (kind) => {
+      if (kind === "waiting") return await onlineUI.cancelWaiting();
+      if (kind === "done") {
+        winnerScreen?.classList.add("hidden");
+        await exitOnce();
+        return onlineUI.activity() === "idle";
+      }
+      return kind === "idle";
+    },
+    myName: () => userNameEl.textContent || "لاعب",
+    prepareInviterConfig: () => {
+      const gridSize = +document.getElementById("grid-size").value || 4;
+      config.rows = config.cols = gridSize;
+      config.players = 2; config.online = true; config.onlinePlayerNum = 1;
+      return config;
+    },
+    // صاحب الدعوة: شاشة الانتظار بعدّ تنازلي لمهلة الرد
+    onWaiting: (code, friendName, secs) => {
+      document.getElementById("friends-panel")?.classList.add("hidden");
+      document.getElementById("chat-panel")?.classList.add("hidden");
+      setupScreen.classList.add("hidden");
+      onlineScreen.classList.remove("hidden");
+      document.getElementById("room-code-display")?.classList.add("hidden");
+      document.getElementById("copy-code-btn")?.classList.add("hidden");
+      document.getElementById("lobby-share-hint")?.classList.add("hidden");
+      onlineUI.showStep("lobby");
+      document.getElementById("lobby-status-text").textContent = `بانتظار ${friendName}... ⏳ ${secs}`;
+    },
+    onWaitTick: (left, friendName) => {
+      document.getElementById("lobby-status-text").textContent = `بانتظار ${friendName}... ⏳ ${left}`;
+    },
+    onOpponentJoined: (oppName, friendName, cfg) => {
+      const myName = userNameEl.textContent || "لاعب";
+      // إعدادات المباراة من الدعوة نفسها (لوحة الصديق نفس لوحتها مهما تغيّر بعدها — مراجعة v35.9)
+      if (cfg) { config.rows = cfg.rows; config.cols = cfg.cols; }
+      config.players = 2; config.online = true; config.onlinePlayerNum = 1;
+      config.onlinePlayerNames = { 1: myName, 2: oppName };
+      document.getElementById("online-my-name").textContent  = myName;
+      document.getElementById("online-opp-name").textContent = oppName;
+      document.getElementById("friends-panel")?.classList.add("hidden");
+      onlineUI.showStep("playing");
+      launchOnlineGame(1, onlineTurnInd, () => launchGame());
+    },
+    // ترك شاشة انتظار الدعوة إلى لعبة أخرى (تحدي اليوم من القائمة): أُلغيت دعوته — لا تبقى شاشتها تحت اللعبة
+    onInviteAbandoned: () => { onlineScreen.classList.add("hidden"); },
+    // انتهت الدعوة بلا مباراة (رفض، في مباراة، انتهت المهلة، فشل الإرسال): للقائمة + رسالة واضحة
+    onInviteEnded: (reason, friendName) => {
+      onlineScreen.classList.add("hidden");
+      setupScreen.classList.remove("hidden");
+      showInviteAlert(inviteEndText(reason, friendName));
+    },
+    // المستلم: قبل الدعوة
+    onJoining: () => {
+      config.online = true;
+      config.onlinePlayerNum = 2;
+      document.getElementById("friends-panel")?.classList.add("hidden");
+      document.getElementById("chat-panel")?.classList.add("hidden");
+      setupScreen.classList.add("hidden");
+      onlineScreen.classList.remove("hidden");
+      onlineUI.showStep("playing");
+    },
+    onJoined: (roomData, invite) => {
+      const myName = userNameEl.textContent || "لاعب";
+      const oppName = roomData.p1name || invite.fromName || "الخصم";
+      config.rows = roomData.cfg.rows; config.cols = roomData.cfg.cols;
+      config.players = 2;
+      config.onlinePlayerNames = { 1: oppName, 2: myName };
+      document.getElementById("online-my-name").textContent  = myName;
+      document.getElementById("online-opp-name").textContent = oppName;
+      launchOnlineGame(2, onlineTurnInd, () => launchGame());
+    },
+    // القبول فشل (ألغاها صاحبها / انتهت / انقطاع): للقائمة + رسالة (كان يعود بصمت)
+    onJoinFailed: (message) => {
+      onlineScreen.classList.add("hidden");
+      setupScreen.classList.remove("hidden");
+      showInviteAlert(message);
+    },
+  };
+  // زر "🎮 تحدي" في نافذة المحادثة: نفس الدعوة (كان يُطلق حدثاً لا يستمع له أحد)
+  document.addEventListener("chat:invite", e => { if (e?.detail?.uid) startInvite(e.detail); });
+
   // ── Chat UI (مرة واحدة — الأزرار موجودة بالـ DOM دايماً) ────
   initChatUI({});
 
@@ -408,64 +494,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // ── Friends (بعد التحقق من الهوية) ──────────────────────
       initFriendsUI({
-        onInviteFriend: async (friend, resetBtn) => {
-          const myName = userNameEl.textContent || "لاعب";
-          const gridSize = +document.getElementById("grid-size").value || 4;
-          config.rows = config.cols = gridSize;
-          config.players = 2;
-
-          await sendInviteGame(friend, config, myName, {
-            onOpponentJoined: oppName => {
-              config.onlinePlayerNames = { 1: myName, 2: oppName };
-              document.getElementById("online-my-name").textContent  = myName;
-              document.getElementById("online-opp-name").textContent = oppName;
-              document.getElementById("friends-panel").classList.add("hidden");
-              onlineUI.showStep("playing");
-              launchOnlineGame(1, onlineTurnInd, () => launchGame());
-            },
-            onRoomReady: (code, friendName) => {
-              setupScreen.classList.add("hidden");
-              onlineScreen.classList.remove("hidden");
-              document.getElementById("room-code-display").classList.add("hidden");
-              document.getElementById("copy-code-btn").classList.add("hidden");
-              document.getElementById("lobby-share-hint").classList.add("hidden");
-              onlineUI.showStep("lobby");
-              document.getElementById("lobby-status-text").textContent = `بانتظار ${friendName}...`;
-              document.getElementById("friends-panel").classList.add("hidden");
-            },
-            onRejection: name => {
-              onlineScreen.classList.add("hidden");
-              setupScreen.classList.remove(  "hidden");
-              resetBtn?.();          // ← يرجع زر الدعوة لحالته
-              showRejectionAlert(name);
-            },
-          });
-        },
+        onInviteFriend: friend => startInvite(friend),
         onOpenChat: friend => openChat(friend),
       });
 
-      // ── Invite Listener ────────────────────────────────────
-      initInviteListener({
-        onInviteAccepted: async invite => {
-          config.online = true;
-          config.onlinePlayerNum = 2;
-          setupScreen.classList.add("hidden");
-          onlineScreen.classList.remove("hidden");
-          onlineUI.showStep("playing");
-          try {
-            const roomData = await onlineManager.joinRoom(invite.roomCode, userNameEl.textContent || "لاعب");
-            config.rows = roomData.cfg.rows; config.cols = roomData.cfg.cols;
-            config.players = 2;
-            config.onlinePlayerNames = { 1: invite.fromName, 2: userNameEl.textContent };
-            document.getElementById("online-my-name").textContent  = userNameEl.textContent;
-            document.getElementById("online-opp-name").textContent = invite.fromName;
-            launchOnlineGame(2, onlineTurnInd, () => launchGame());
-          } catch {
-            onlineScreen.classList.add("hidden");
-            setupScreen.classList.remove("hidden");
-          }
-        },
-      });
+      // ── 🎮 دعوات الأصدقاء: إرسال واستقبال (v35.9) ─────────
+      initInvites(inviteHooks);
 
       initChatNotifications();
       cleanupOldRooms();
@@ -490,6 +524,7 @@ document.addEventListener("DOMContentLoaded", () => {
         _deferredInstallPrompt = null;
       });
     } else {
+      resetInvites();             // لا دعوة معلّقة بعد تسجيل الخروج (v35.9)
       authScreen.classList.remove("hidden");
       userBar.classList.add("hidden");
       setupScreen.classList.add("hidden");
@@ -501,13 +536,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const playAgainBtn = document.getElementById("play-again");
 
   // خروج واحد في كل مرة: نقرة ثانية أثناء خروج جارٍ (ينتظر الشبكة حتى 4 ثوانٍ) لا تبدأ خروجاً
-  // ثانياً — كانت تسلك المسار الهادئ فتلغي ما يعتمد عليه الانسحاب الأول (مراجعة v35.7 الثالثة)
-  let exitBusy = false;
-  restartBtn?.addEventListener("click", async () => {
-    if (exitBusy) return;
-    exitBusy = true;
-    try { await handleExitClick(); } finally { exitBusy = false; }
-  });
+  // ثانياً — كانت تسلك المسار الهادئ فتلغي ما يعتمد عليه الانسحاب الأول (مراجعة v35.7 الثالثة).
+  // v35.9: والخروج الهادئ لقبول دعوة (أو إرسالها) من شاشة النتيجة يمرّ من هنا أيضاً — يشارك أي خروج جارٍ
+  let exitPromise = null;
+  function exitOnce() {
+    if (!exitPromise) exitPromise = handleExitClick().finally(() => { exitPromise = null; });
+    return exitPromise;
+  }
+  restartBtn?.addEventListener("click", () => { exitOnce(); });
   async function handleExitClick() {
     // 👁️ المشاهد: خروج لا يمسّ المباراة إطلاقاً (ليس طرفاً فيها)
     if (config.spectator) {

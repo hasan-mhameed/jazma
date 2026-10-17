@@ -1010,7 +1010,7 @@ h1 {
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 2000;
+  z-index: 10050;   /* فوق شاشة النتيجة (9999) وقائمة التنقّل (10000) — v35.9 */
   animation: slideUp 0.3s ease;
 }
 

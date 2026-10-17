@@ -269,7 +269,8 @@ class FakeElement {
 }
 const INITIALLY_HIDDEN = ['search-countdown', 'ai-suggest-box', 'approval-modal', 'start-countdown',
   'online-step-searching', 'online-step-multi-count', 'online-step-multi-lobby', 'online-step-random-count',
-  'online-step-lobby', 'online-step-playing', 'online-error', 'multi-start-btn'];
+  'online-step-lobby', 'online-step-playing', 'online-error', 'multi-start-btn',
+  'board', 'invite-notification', 'winner-screen'];   // اللوحة ونافذة الدعوة مخفيتان في البداية (v35.9)
 class FakeDocument {
   constructor(client) {
     this.client = client; this.els = new Map();
@@ -328,7 +329,8 @@ const STUBS = {
   'firebase-database.js': `const F = globalThis.__fdb; export const { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp } = F;`,
 };
 const REAL = { 'firebase.js': '/js/firebase.js', 'onlineGame.js': '/js/ui/onlineGame.js', 'matchResult.js': '/js/core/matchResult.js',
-  'turnManager.js': '/js/ui/turnManager.js' };   // النص الظاهر فوق اللوحة (فحص v35.7)
+  'turnManager.js': '/js/ui/turnManager.js',    // النص الظاهر فوق اللوحة (فحص v35.7)
+  'inviteUI.js': '/js/ui/inviteUI.js', 'invite.js': '/js/invite.js' };   // دعوات الأصدقاء (v35.9)
 
 export class World {
   constructor() { this.server = new Server(this); this.clients = []; this.timeline = []; this.errors = []; this.quiet = false; }
@@ -404,23 +406,114 @@ class Client {
     const root = getMod('onlineGame.js');
     await root.link(async (spec) => getMod(keyOf(spec)));
     await root.evaluate();
-    this.mods = { og: root.namespace, fb: getMod('firebase.js').namespace, config: getMod('config.js').namespace.config, state: getMod('state.js').namespace.state };
+    // دعوات الأصدقاء (v35.9): inviteUI.js وinvite.js الحقيقيان فوق نفس firebase.js
+    const invRoot = getMod('inviteUI.js');
+    await invRoot.link(async (spec) => getMod(keyOf(spec)));
+    await invRoot.evaluate();
+    this.mods = { og: root.namespace, fb: getMod('firebase.js').namespace, config: getMod('config.js').namespace.config,
+      state: getMod('state.js').namespace.state, inv: invRoot.namespace };
     this.om = this.mods.fb.onlineManager;
     const client = this;
-    this.mods.og.initOnlineGame({
-      onGameStart: () => {
-        // كما يفعل main.js (launchGame) عند بدء كل مباراة: مباراة جديدة = غير منتهية
-        client.mods.state.gameFinished = false;
-        const cfg = client.mods.config;
-        const nums = client.om._isMulti
-          ? Object.values(cfg.multiPlayers || {}).map(p => p.num).sort()
-          : [1, 2];
-        client.matches.push({ at: clock.now, num: cfg.onlinePlayerNum, nums, turn: client.mods.state.currentPlayer, room: client.om.roomCode });
-        client.event('MATCH', `بدأت مباراة غرفة=${client.om.roomCode} أنا=${cfg.onlinePlayerNum} اللاعبون=[${nums}] الدور الأول=${client.mods.state.currentPlayer}`);
-      },
+    // كما يفعل main.js (launchGame) عند بدء كل مباراة: مباراة جديدة = غير منتهية، واللوحة ظاهرة
+    const onGameStart = () => {
+      client.mods.state.gameFinished = false;
+      client.el('board').classList.remove('hidden');
+      const cfg = client.mods.config;
+      const nums = client.om._isMulti
+        ? Object.values(cfg.multiPlayers || {}).map(p => p.num).sort()
+        : [1, 2];
+      client.matches.push({ at: clock.now, num: cfg.onlinePlayerNum, nums, turn: client.mods.state.currentPlayer, room: client.om.roomCode });
+      client.event('MATCH', `بدأت مباراة غرفة=${client.om.roomCode} أنا=${cfg.onlinePlayerNum} اللاعبون=[${nums}] الدور الأول=${client.mods.state.currentPlayer}`);
+    };
+    this.onlineUI = this.mods.og.initOnlineGame({
+      onGameStart,
       gameSetupApi: { startAIGame: (size, diff) => client.event('AI', `لعب ضد الكمبيوتر (${diff})`) },
     });
+    // دعوات الأصدقاء: نفس الخطافات التي يمرّرها main.js (الشاشات هنا خطوات الأونلاين، والرسائل تُسجَّل)
+    this.inviteEnds = []; this.joinFails = [];
+    const turnInd = this.el('online-turn-indicator');
+    this.mods.inv.initInvites({
+      activity: () => client.onlineUI.activity(),
+      goIdle: async (kind) => {
+        if (kind === 'waiting') return await client.onlineUI.cancelWaiting();
+        if (kind === 'done') { await client.exitToMenu(); return client.onlineUI.activity() === 'idle'; }
+        return kind === 'idle';
+      },
+      myName: () => client.name,
+      prepareInviterConfig: () => {
+        const cfg = client.mods.config;
+        cfg.rows = cfg.cols = 4; cfg.players = 2; cfg.online = true; cfg.onlinePlayerNum = 1;
+        return cfg;
+      },
+      onWaiting: (code, fname, secs) => {
+        client.event('INV', `أرسل دعوة لـ${fname} (غرفة ${code}) — بانتظار الرد ${secs}ث`);
+        client.el('room-code-display').classList.add('hidden');
+        client.onlineUI.showStep('lobby');
+        client.el('lobby-status-text').textContent = `بانتظار ${fname}... ⏳ ${secs}`;
+      },
+      onWaitTick: (left, fname) => { client.el('lobby-status-text').textContent = `بانتظار ${fname}... ⏳ ${left}`; },
+      onOpponentJoined: (opp) => {
+        const cfg = client.mods.config;
+        cfg.onlinePlayerNames = { 1: client.name, 2: opp };
+        client.onlineUI.showStep('playing');
+        client.mods.og.launchOnlineGame(1, turnInd, onGameStart);
+      },
+      onInviteAbandoned: () => { client.event('INV', 'أُلغيت دعوتي (تركت شاشة الانتظار)'); },
+      onInviteEnded: (reason, fname) => {
+        client.inviteEnds.push(reason);
+        client.event('INV', `انتهت دعوتي لـ${fname}: ${reason}`);
+        client.onlineUI.showStep('name');
+        client.mods.inv.showInviteAlert(client.mods.inv.inviteEndText(reason, fname));
+      },
+      onJoining: () => {
+        const cfg = client.mods.config;
+        cfg.online = true; cfg.onlinePlayerNum = 2;
+        client.onlineUI.showStep('playing');
+      },
+      onJoined: (roomData, inv) => {
+        const cfg = client.mods.config;
+        cfg.rows = roomData.cfg.rows; cfg.cols = roomData.cfg.cols; cfg.players = 2;
+        cfg.onlinePlayerNames = { 1: roomData.p1name || inv.fromName, 2: client.name };
+        client.mods.og.launchOnlineGame(2, turnInd, onGameStart);
+      },
+      onJoinFailed: (msg) => {
+        client.joinFails.push(msg);
+        client.event('INV', `فشل قبول الدعوة: ${msg}`);
+        client.onlineUI.showStep('name');
+        client.mods.inv.showInviteAlert(msg);
+      },
+    });
   }
+  // زر الخروج بعد نهاية المباراة (أو من مباراة جارية = انسحاب) — كما يفعل main.js (exitOnce → handleExitClick):
+  // خروج واحد في كل مرة، ومن يطلبه أثناء خروج جارٍ ينتظر الخروج نفسه
+  exitToMenu() {
+    if (this._exitP) return this._exitP;
+    this.event('act', 'خروج للقائمة');
+    this._exitP = (async () => {
+      await this.mods.og.leaveOnlineMatch();
+      const cfg = this.mods.config;
+      cfg.online = false; cfg.multiPlayers = null; cfg.spectator = false;
+      this.el('board').classList.add('hidden');
+      this.onlineUI.showStep('name');
+    })().finally(() => { this._exitP = null; });
+    return this._exitP;
+  }
+  // تسجيل الخروج كما في main.js (v35.9): beforeLogout = resetInvites (ننتظره قليلاً) ثم يصير المستخدم null
+  // late=true: نحاكي ترتيباً أسوأ — المستخدم صار null قبل أن تُنهى الدعوة (شبكة الأمان في firebase.js/invite.js)
+  async signOut({ late = false } = {}) {
+    this.event('act', 'تسجيل الخروج' + (late ? ' (المستخدم null أولاً)' : ''));
+    if (late) { this.ctx.__user = null; this.mods.inv.resetInvites(); return; }
+    await Promise.race([this.mods.inv.resetInvites(), new Promise(r => clock.setTimeout(r, 1500))]);
+    this.ctx.__user = null;
+    this.mods.inv.resetInvites();
+  }
+  // ── دعوات الأصدقاء ──
+  invite(friend) { this.event('act', `دعوة ${friend.name}`); return this.safe(() => this.mods.inv.startInvite({ uid: friend.uid, name: friend.name })); }
+  acceptInvite() { this.event('act', 'قبول الدعوة'); this.el('invite-accept-btn').click(); }
+  rejectInvite() { this.event('act', 'رفض الدعوة'); this.el('invite-reject-btn').click(); }
+  invitePopup() { return this.hidden('invite-notification') ? '' : this.el('invite-text').textContent; }
+  outgoing() { return this.mods.inv.outgoingInvite(); }
+  lobbyText() { return this.el('lobby-status-text').textContent; }
   el(id) { return this.doc.getElementById(id); }
   hidden(id) { return this.el(id).classList.contains('hidden'); }
   visibleStep() {
@@ -436,7 +529,8 @@ class Client {
     const lob = this.visibleStep().includes('multi-lobby')
       ? `لوبي[${this.lobbyList().map(p => p.num + ':' + p.name + (p.host ? '👑' : '')).join(' ')}]${this.hidden('multi-start-btn') ? '' : ' +زر-البدء'}` : '';
     const err = this.hidden('online-error') ? '' : `خطأ[${this.el('online-error').textContent}]`;
-    const s = [this.visibleStep(), txt, lob, err, cd, ai, ap].filter(Boolean).join(' | ');
+    const inv = this.hidden('invite-notification') ? '' : `إشعار-دعوة[${this.el('invite-text').textContent}]`;
+    const s = [this.visibleStep(), txt, lob, err, cd, ai, ap, inv].filter(Boolean).join(' | ');
     // نسجّل تغيّر الحالة، مع ضغط تغيّر رقم العدّاد وحده (نسجّل أول وآخر قيمة)
     const key = s.replace(/عدّاد\[[^\]]*\]/, 'عدّاد[#]').replace(/تصويت\[⏳ \d+/, 'تصويت[⏳ #');
     if (key !== this.lastKey) { this.lastKey = key; this.event('ui', s); this.cdSeen = []; }

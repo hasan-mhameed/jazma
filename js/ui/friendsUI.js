@@ -1,9 +1,21 @@
 // 📄 ui/friendsUI.js
 // قائمة الأصدقاء + البحث + الإجراءات
-import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1790462091";
+import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1791040331";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend,
-         listenFriendRequests, listenFriends } from "../friends.js?v=1790462091";
+         listenFriendRequests, listenFriends } from "../friends.js?v=1791040331";
+import { outgoingInvite, onInviteStateChange } from "./inviteUI.js?v=1791040331";
+
+// زر "دعوة" يعكس حالة الدعوة الصادرة (v35.9): ⏳ للصديق المدعوّ ما دامت دعوته قائمة، ويرجع مع أي نهاية لها
+// (قبول ثم مباراة، رفض، "في مباراة"، انتهاء المهلة، إلغاء، فشل) — كان لا يرجع إلا عند الرفض
+function paintInviteBtn(btn) {
+  const out = outgoingInvite();
+  const mine = !!out && out.friendUid === btn.dataset.uid;
+  btn.textContent = mine ? "⏳" : "🎮 دعوة";
+  btn.disabled = mine;
+  btn.title = mine ? "بانتظار ردّه على دعوتك" : "";
+}
+let _inviteStateUnsub = null;
 
 function asText(v, fallback = "") { return String(v ?? fallback); }
 function firstInitial(name) { return asText(name, "?").trim().charAt(0).toUpperCase() || "?"; }
@@ -26,6 +38,12 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
   const friendReqBadge     = document.getElementById("friend-requests-badge");
 
   friendsBtn?.addEventListener("click", () => friendsPanel.classList.remove("hidden"));
+
+  // تحديث كل أزرار "دعوة" الظاهرة مع كل تغيّر في الدعوة الصادرة (اشتراك واحد ولو تكرّرت التهيئة)
+  try { _inviteStateUnsub?.(); } catch {}
+  _inviteStateUnsub = onInviteStateChange(() => {
+    friendsList?.querySelectorAll(".btn-invite").forEach(paintInviteBtn);
+  });
 
   closeFriendsBtn?.addEventListener("click", () => {
     friendsPanel.classList.add("hidden");
@@ -124,14 +142,12 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
       if (confirm(`حذف ${userName} من الأصدقاء؟`)) await removeFriend(user.uid);
     });
     card.querySelector(".btn-chat")?.addEventListener("click",   () => onOpenChat?.(user));
-    card.querySelector(".btn-invite")?.addEventListener("click", async e => {
-      const btn = e.target;
-      btn.textContent = "⏳"; btn.disabled = true;
-      await onInviteFriend?.(user, () => {
-        // callback: يُستدعى عند الرفض لإرجاع الزر
-        btn.textContent = "🎮 دعوة"; btn.disabled = false;
-      });
-    });
+    const inviteBtn = card.querySelector(".btn-invite");
+    if (inviteBtn) {
+      paintInviteBtn(inviteBtn);
+      // الحالة (⏳ ثم الرجوع) تأتي من الدعوة نفسها — لا من الزر
+      inviteBtn.addEventListener("click", () => { onInviteFriend?.(user); });
+    }
 
     return card;
   }

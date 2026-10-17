@@ -1,7 +1,7 @@
 // 📄 ui/authUI.js
 // واجهة تسجيل الدخول والتسجيل
 import { signInWithGoogle, logout, registerWithEmail, signInWithEmail,
-         loginAsGuest, upgradeGuestWithGoogle, upgradeGuestWithEmail, isGuest } from "../auth.js?v=1790462091";
+         loginAsGuest, upgradeGuestWithGoogle, upgradeGuestWithEmail, isGuest } from "../auth.js?v=1791040331";
 
 function getAuthError(code) {
   const errors = {
@@ -16,7 +16,8 @@ function getAuthError(code) {
   return errors[code] || "حدث خطأ، حاول مرة ثانية";
 }
 
-export function initAuthUI() {
+// beforeLogout (v35.9): ما يُنهى قبل تسجيل الخروج والمستخدم ما زال داخلاً (دعوة صديق تنتظر) — ننتظره ثانية ونصفاً بحدّ أقصى
+export function initAuthUI({ beforeLogout } = {}) {
   const authError       = document.getElementById("auth-error");
   const emailLoginBtn   = document.getElementById("email-login-btn");
   const emailRegisterBtn= document.getElementById("email-register-btn");
@@ -103,7 +104,10 @@ export function initAuthUI() {
   });
 
   // ── تسجيل الخروج ────────────────────────────────────────────
-  logoutBtn?.addEventListener("click", async () => { await logout(); });
+  logoutBtn?.addEventListener("click", async () => {
+    try { await Promise.race([Promise.resolve(beforeLogout?.()), new Promise(r => setTimeout(r, 1500))]); } catch {}
+    await logout();
+  });
 }
 
 // ── زر الضيف ─────────────────────────────────────────────────

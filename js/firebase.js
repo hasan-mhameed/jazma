@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1790462091";
+import { getCurrentUser }   from "./auth.js?v=1791040331";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -88,6 +88,7 @@ export class OnlineManager {
   // ══ إنشاء غرفة ══════════════════════════════════════════════
   async createRoom(cfg, name) {
     const code = genCode();
+    const leaveSeq = this._duoSearchSeq;   // كل مغادرة تزيده فوراً — نعرف به إن غادرنا أثناء الإنشاء (v35.9)
     this.roomCode  = code;
     this.playerNum = 1;
     this._gameStarted = false;
@@ -111,11 +112,12 @@ export class OnlineManager {
       createdAt: Date.now(),
       move:      { key: "", by: 0, seq: 0 },
     });
+    // تُركت أثناء إنشائها (قبول دعوة صديق بنفس اللحظة — v35.9): ألغتها المغادرة ذرّياً، فلا مستمعين لها
+    // (كانت تُسجَّل فوق الغرفة التالية وتُفصل معها فقط)
+    if (this.roomCode !== code || this._duoSearchSeq !== leaveSeq) return code;
     // ونسلّحه مرة ثانية بعد الإنشاء (مراجعة v35.8): انقطاع لحظي والإنشاء في الطريق يستهلك الأمر الأول عند
     // الخادم (يمسح غرفة لم تُنشأ بعد)، ثم يُعاد إرسال الإنشاء بعد العودة فتبقى غرفة بلا أمر مسح. التكرار لا يضر.
-    if (this.roomCode === code) {
-      try { onDisconnect(ref(db, `rooms/${code}`)).remove().catch(() => {}); } catch {}
-    }
+    try { onDisconnect(ref(db, `rooms/${code}`)).remove().catch(() => {}); } catch {}
 
     this._listenForPlayer2(code);
     this._listenForMoves(code);
@@ -324,7 +326,9 @@ export class OnlineManager {
   // قبل وصول الحذف ترك غرفة "تنتظر" عامة بلا صاحب يدخلها الباحث التالي ويعلق بلا خصم. المسح بعد الحسم لا يضر
   // (غرفة محذوفة أو ملغاة)، ثم نلغيه كي لا يمسّ غرفةً جديدة بالرمز نفسه لاحقاً.
   _cancelDuoHosting(code) {
-    const myUid = getCurrentUser()?.uid || "";
+    // صاحب الغرفة كما أنشأها (مراجعة v35.9): تسجيل الخروج أثناء الانتظار يجعل المستخدم الحالي null فلا تُعرف
+    // غرفته — كانت تبقى "تنتظر" بلا صاحب وبلا أمر مسح، ويدخلها صديقه إلى مباراة لا أحد فيها
+    const myUid = this._duoHostData?.p1uid || getCurrentUser()?.uid || "";
     const task = this._roomTxnReliably(code, (room) => {
       if (room === null) return null;
       if (isOrphanRoomNode(room)) return null;               // بقايا بلا صاحب حلّت مكان غرفتي: نمسحها معها
@@ -611,6 +615,7 @@ export class OnlineManager {
   // إنشاء غرفة متعددة (المضيف يحدّد الحد الأقصى)
   async createMultiRoom(cfg, name, maxPlayers) {
     const code = genCode();
+    const leaveSeq = this._duoSearchSeq;   // كل مغادرة تزيده فوراً (مغادرة اللوبي الجماعي لا تصفّر roomCode إلا بعد كتاباتها)
     const myUid = getCurrentUser()?.uid || ("guest_" + Date.now());
     this.roomCode  = code;
     this.playerNum = 1;
@@ -630,6 +635,8 @@ export class OnlineManager {
       move:       { key: "", by: 0, seq: 0 },
       createdAt:  Date.now(),
     });
+    // تُركت أثناء إنشائها (v35.9): لا أوامر ولا مستمعين لها — والمغادرة نفسها تمسحها
+    if (this.roomCode !== code || this._duoSearchSeq !== leaveSeq) return { code, left: true };
     // عند انقطاع المنشئ في اللوبي (إغلاق تبويب/تحديث صفحة/انقطاع شبكة):
     // يُزال **هو فقط** كالمنضمّين، والغرفة تستمر للباقين وينتقل التاج لأصغر رقم حاضر.
     // (كانت تُمسح الغرفة كاملة: في العشوائي يُطرد الجميع، وفي الغرفة بالكود يعلقون بلا مضيف)

@@ -28,3 +28,23 @@ export function gen(dev, port) {
   fs.writeFileSync(path.join(dir, `auth_${dev}.mjs`), `export function getCurrentUser() { return { uid: "u${dev}", displayName: "${dev}" }; }\n`);
   return out;
 }
+
+// invite.js (v35.9 — الخطوة 1.8): نسخة لكل جهاز موصولة بالخادم الوهمي (تطبيق Firebase مستقل لكل جهاز).
+// JAZAM_INVITE_JS: ملف invite.js آخر (لفحص الطفرات)
+export function genInvite(dev, port) {
+  gen(dev, port);   // يكتب auth_<dev>.mjs
+  let s = fs.readFileSync(process.env.JAZAM_INVITE_JS || path.join(PROJECT, 'js/invite.js'), 'utf8');
+  const rep = (re, to) => { if (!re.test(s)) throw new Error('genInvite: لم أجد ' + re); s = s.replace(re, to); };
+  rep(/from "https:\/\/www\.gstatic\.com\/firebasejs\/[\d.]+\/firebase-app\.js"/, 'from "firebase/app"');
+  rep(/from "https:\/\/www\.gstatic\.com\/firebasejs\/[\d.]+\/firebase-database\.js"/, 'from "firebase/database"');
+  rep(/from "\.\/auth\.js(\?v=\d+)?"/, `from "./auth_${dev}.mjs"`);
+  rep(/const app = getApps\(\)\.length \? getApps\(\)\[0\] : initializeApp\(firebaseConfig\);/,
+    `import { connectDatabaseEmulator, goOffline as __gOff, goOnline as __gOn } from "firebase/database";\n` +
+    `const app = initializeApp({ ...firebaseConfig, databaseURL: "http://localhost:${port}?ns=jazam" }, "inv_${dev}_${port}");`);
+  rep(/const db\s+= getDatabase\(app\);/,
+    `const db = getDatabase(app); connectDatabaseEmulator(db, "localhost", ${port});\n` +
+    `export const __off = () => __gOff(db); export const __on = () => __gOn(db);`);
+  const out = path.join(HERE, '.gen', `inv_${dev}_${port}.mjs`);
+  fs.writeFileSync(out, s);
+  return out;
+}
