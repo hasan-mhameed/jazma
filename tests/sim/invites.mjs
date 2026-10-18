@@ -473,6 +473,103 @@ export async function inviteDuringPendingOp(verbose = false) {
   return r;
 }
 
+// ── 12) الحضور يتبع المباراة (v35.9 — ملاحظة فحص 1): "في مباراة" ما دامت جارية، و"متصل" لحظة انتهائها ──
+// (كان "في مباراة" من دخول شاشة اللعب حتى الخروج منها، فيظهر الصديق مشغولاً وهو على شاشة النتيجة والدعوة تعمل)
+// ما يراه الأصدقاء فعلاً: حالة الحضور المخزّنة عند الخادم (يكتبها presence.js الحقيقي)
+const pres = c => c.world.server.getAt('users/' + c.uid + '/presence/state');
+export async function presenceFollowsMatch(verbose = false) {
+  const r = suite('الحضور: "في مباراة" ما دامت المباراة جارية فقط — "متصل" لحظة انتهائها بأي شكل'); r.verbose = verbose;
+  // (أ) ثنائي بدعوة: نهاية طبيعية والاثنان ما زالا على شاشة النتيجة
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    await w.run(500);
+    await inviteShown(w, A, B); B.acceptInvite();
+    // لحظة بدء التحميل (قبل ظهور اللوحة): "في مباراة" من الآن — كما تعاملها الدعوات (مراجعة v35.9)
+    await waitFor(w, () => onStep(B, 'playing') && onStep(A, 'playing'), 4000);
+    await w.run(300);
+    r.ok(pres(A) === 'playing' && pres(B) === 'playing' && B.matches.length === 0,
+      `(أ) لحظة بدء التحميل وقبل اللوحة: الاثنان "في مباراة" (${pres(A)}/${pres(B)}، لوحة باسل=${B.matches.length})`);
+    await waitFor(w, () => A.matches.length && B.matches.length, 8000);
+    await w.run(3000);
+    r.ok(pres(A) === 'playing' && pres(B) === 'playing', `(أ) أثناء المباراة: الاثنان "في مباراة" (${pres(A)}/${pres(B)})`);
+    await finishDuo(w, A);
+    r.ok(A.onlineUI.activity() === 'done' && B.onlineUI.activity() === 'done', '(أ) انتهت والاثنان على شاشة النتيجة');
+    r.ok(pres(A) === 'online' && pres(B) === 'online', `(أ) خلال ثانية: الاثنان "متصل" (${pres(A)}/${pres(B)})`);
+    const n = A.presence.length;
+    await w.run(5000);
+    r.ok(A.presence.length === n, '(أ) لا كتابات حضور متكررة وهو على شاشة النتيجة');
+    A.exitToMenu(); await w.run(3000);
+    r.ok(pres(A) === 'online' && A.presence.length === n, '(أ) بعد الخروج للقائمة: "متصل" بلا كتابة زائدة');
+    // مباراة ثانية بعد الخروج: تعود "في مباراة"
+    await inviteShown(w, A, B); B.acceptInvite();
+    await waitFor(w, () => A.matches.length === 2 && B.matches.length === 2, 10000);
+    await w.run(2000);
+    r.ok(pres(A) === 'playing' && pres(B) === 'playing', `(أ) المباراة الثانية: "في مباراة" من جديد (${pres(A)}/${pres(B)})`);
+    noErr(r, w); w.dispose();
+  }
+  // (أ2) الانضمام بالكود: "في مباراة" من لحظة ظهور شاشة اللعب، قبل اللوحة (مراجعة v35.9)
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    A.createDuoRoom(); await w.run(800);
+    B.joinCode(A.duoCodeShown());
+    await waitFor(w, () => onStep(B, 'playing'), 4000);
+    await w.run(300);
+    r.ok(pres(B) === 'playing' && B.matches.length === 0, `(أ2) بالكود: الضيف "في مباراة" أثناء تحميلها وقبل اللوحة (${pres(B)})`);
+    await waitFor(w, () => A.matches.length && B.matches.length, 8000);
+    r.ok(pres(A) === 'playing' && pres(B) === 'playing', '(أ2) وأثناء المباراة: الاثنان "في مباراة"');
+    noErr(r, w); w.dispose();
+  }
+  // (ب) ثنائي: الخصم ينسحب → الباقي "متصل" (فاز ونافذة النتيجة ظاهرة)
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل');
+    await duoMatch(w, A, B);
+    r.ok(pres(A) === 'playing' && pres(B) === 'playing', '(ب) أثناء المباراة: "في مباراة"');
+    B.withdraw(); await w.run(4000);
+    r.ok(A.mods.state.gameFinished && pres(A) === 'online', `(ب) باسل انسحب → أحمد "متصل" على شاشة فوزه (${pres(A)})`);
+    noErr(r, w); w.dispose();
+  }
+  // (ج) جماعي: من خرج من مباراة ما زالت جارية "متصل"، والباقون "في مباراة"؛ وعودة اتصاله لا تعيده "في مباراة"
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل'), C = await w.client('كريم');
+    A.createCodeRoom(3); await w.run(400);
+    const code = A.codeShown();
+    B.joinCode(code); await w.run(600); C.joinCode(code); await w.run(800);
+    A.startCode();
+    await waitFor(w, () => A.matches.length && B.matches.length && C.matches.length, 8000);
+    await w.run(6000);
+    r.ok([A, B, C].every(c => pres(c) === 'playing'), `(ج) أثناء المباراة: الثلاثة "في مباراة"`);
+    C.drop({ offlineMs: 16000, serverDetectMs: 1500 });
+    await w.run(20000);    // خرج بعد المهلة، ثم عاد اتصاله
+    r.ok(C.mods.og.isOutOfMatch() === true, '(ج) كريم خارج المباراة (يتابع)');
+    r.ok(pres(C) === 'online', `(ج) كريم "متصل" بعد خروجه وعودة اتصاله (${pres(C)})`);
+    r.ok(pres(A) === 'playing' && pres(B) === 'playing', '(ج) وأحمد وباسل ما زالا "في مباراة"');
+    // انقطاع ثانٍ قصير وهو خارجها: عودة الاتصال لا تكتب "في مباراة" ولو لحظة
+    const k = C.presence.length;
+    C.drop({ offlineMs: 2000, serverDetectMs: 500 });
+    await w.run(5000);
+    const after = C.presence.slice(k).map(x => x.s);
+    r.ok(!after.includes('playing') && pres(C) === 'online', `(ج) انقطاع ثانٍ وهو خارجها: لا "في مباراة" ولو لحظة (${after.join('→') || '—'})`);
+    noErr(r, w); w.dispose();
+  }
+  // (د) المشاهد: "متصل" (متاح للدعوة — حالة "يشاهد" مخطّطة في 2.2)، واللاعبان "في مباراة"
+  {
+    const w = new World(); w.quiet = true; w.startSampler(100);
+    const A = await w.client('أحمد'), B = await w.client('باسل'), C = await w.client('كريم');
+    await duoMatch(w, A, B);
+    C.el('room-code-input').value = A.om.roomCode;
+    C.el('spectate-btn').click();
+    await w.run(8000);
+    r.ok(C.mods.config.spectator === true && C.matches.length === 1, '(د) كريم يشاهد مباراتهما');
+    r.ok(pres(C) === 'online' && pres(A) === 'playing' && pres(B) === 'playing', `(د) المشاهد "متصل" واللاعبان "في مباراة" (${pres(C)}/${pres(A)}/${pres(B)})`);
+    noErr(r, w); w.dispose();
+  }
+  return r;
+}
+
 // ── مستكشف عشوائي: دعوات/قبول/رفض/إلغاء/بحث/انقطاع/إغلاق بين 3 أصدقاء داخل نوافذ السباق ──
 // الثوابت بعد الهدوء: لا غرفة منتظرة بلا صاحب حاضر ينتظر فيها، لا دعوة صادرة بلا غرفتها، لا مباراة بطرف واحد،
 // ≤2 في كل غرفة ثنائية، لا لاعب في مباراتين، ولا إشعار ظاهر لدعوة غرفتها لا تنتظر

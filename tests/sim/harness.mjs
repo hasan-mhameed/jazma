@@ -199,9 +199,14 @@ function makeFdb(server, client) {
       if (client.connected || client.dead) go(); else (client.waiters ||= []).push(go);
     }),
     set: (r, v) => server.write(client, () => server.setAt(r.path, resolveSV(clone(v), clock.now))),
-    update: (r, obj) => server.write(client, () => {
-      for (const [k, v] of Object.entries(obj)) server.setAt(r.path + '/' + k, resolveSV(clone(v), clock.now));
-    }),
+    update: (r, obj) => {
+      if (/^users\/[^/]+\/presence$/.test(r.path) && obj && obj.state && !client.dead) {
+        client.presence.push({ at: clock.now, s: obj.state }); client.event('PRES', obj.state);
+      }
+      return server.write(client, () => {
+        for (const [k, v] of Object.entries(obj)) server.setAt(r.path + '/' + k, resolveSV(clone(v), clock.now));
+      });
+    },
     remove: (r) => server.write(client, () => server.setAt(r.path, null)),
     push: (r) => { const key = server.genKey(); return { path: r.path + '/' + key, key }; },
     runTransaction: (r, fn) => server.transaction(client, r.path, fn),
@@ -291,7 +296,6 @@ class FakeDocument {
 // ═════════ العالم واللاعبون ═════════
 const STUBS = {
   'audioManager.js': `export const audioManager = new Proxy({}, { get: () => () => {} });`,
-  'presence.js': `export function setMyPresence() {}`,
   'scoreboard.js': `export function updateScoreboard() {}`,
   'config.js': `export const config = {};`,
   // اللوحة: الحركة الخاصة "__final__" تكمل اللوحة (كما يفعل boardRenderer عند آخر مربع: تُعلَّم
@@ -303,7 +307,7 @@ const STUBS = {
   'turnTimer.js': `export function setBank() {} export function applyClockState() {} export function stopTurnTimer() {}
     export function isTimerEnabled() { return false; } export function startTurnTimer() {}`,
   'state.js': `export const state = {};`,
-  'auth.js': `export function getCurrentUser() { return globalThis.__user; }`,
+  'auth.js': `export function getCurrentUser() { return globalThis.__user; } export function onUserChange() {}`,
   // نافذة النهاية: نلتقط كل نهاية (ومعها من خرج والعنوان) وكل تسجيل انسحاب — v35.6
   // + v35.7: تسجيل الخروج من مباراة جماعية جارية (السبب والمركز)، والترتيب النهائي من
   //   matchResult الحقيقي (المركز الذي يُسجَّل ويُعرض فعلاً)
@@ -330,7 +334,8 @@ const STUBS = {
 };
 const REAL = { 'firebase.js': '/js/firebase.js', 'onlineGame.js': '/js/ui/onlineGame.js', 'matchResult.js': '/js/core/matchResult.js',
   'turnManager.js': '/js/ui/turnManager.js',    // النص الظاهر فوق اللوحة (فحص v35.7)
-  'inviteUI.js': '/js/ui/inviteUI.js', 'invite.js': '/js/invite.js' };   // دعوات الأصدقاء (v35.9)
+  'inviteUI.js': '/js/ui/inviteUI.js', 'invite.js': '/js/invite.js',    // دعوات الأصدقاء (v35.9)
+  'presence.js': '/js/presence.js' };   // الحضور الحقيقي: ما يكتبه هو ما يراه الأصدقاء (v35.9)
 
 export class World {
   constructor() { this.server = new Server(this); this.clients = []; this.timeline = []; this.errors = []; this.quiet = false; }
@@ -351,7 +356,7 @@ class Client {
   constructor(world, name, { up = 30, down = 30, uid } = {}) {
     this.world = world; this.name = name; this.uid = uid || ('uid_' + name);
     this.up = up; this.down = down; this.connected = true; this.connL = []; this.onDisc = [];
-    this.last = ''; this.matches = []; this.ends = [];
+    this.last = ''; this.matches = []; this.ends = []; this.presence = [];
   }
   event(kind, msg) { this.world.log(this.name, kind, msg); }
   safe(fn) {
@@ -413,11 +418,14 @@ class Client {
     this.mods = { og: root.namespace, fb: getMod('firebase.js').namespace, config: getMod('config.js').namespace.config,
       state: getMod('state.js').namespace.state, inv: invRoot.namespace };
     this.om = this.mods.fb.onlineManager;
+    this.mods.pres = getMod('presence.js').namespace;
+    this.mods.pres.initPresence();
     const client = this;
     // كما يفعل main.js (launchGame) عند بدء كل مباراة: مباراة جديدة = غير منتهية، واللوحة ظاهرة
     const onGameStart = () => {
       client.mods.state.gameFinished = false;
       client.el('board').classList.remove('hidden');
+      client.onlineUI.startPresenceSync();   // كما في main.js (launchGame) — الحضور يتبع المباراة (v35.9)
       const cfg = client.mods.config;
       const nums = client.om._isMulti
         ? Object.values(cfg.multiPlayers || {}).map(p => p.num).sort()

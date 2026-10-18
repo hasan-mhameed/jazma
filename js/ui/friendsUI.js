@@ -1,10 +1,10 @@
 // 📄 ui/friendsUI.js
 // قائمة الأصدقاء + البحث + الإجراءات
-import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1791040331";
+import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1792313787";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend,
-         listenFriendRequests, listenFriends } from "../friends.js?v=1791040331";
-import { outgoingInvite, onInviteStateChange } from "./inviteUI.js?v=1791040331";
+         listenFriendRequests, listenFriends } from "../friends.js?v=1792313787";
+import { outgoingInvite, onInviteStateChange } from "./inviteUI.js?v=1792313787";
 
 // زر "دعوة" يعكس حالة الدعوة الصادرة (v35.9): ⏳ للصديق المدعوّ ما دامت دعوته قائمة، ويرجع مع أي نهاية لها
 // (قبول ثم مباراة، رفض، "في مباراة"، انتهاء المهلة، إلغاء، فشل) — كان لا يرجع إلا عند الرفض

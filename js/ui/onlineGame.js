@@ -1,16 +1,16 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1791040331";
-import { setMyPresence } from "../presence.js?v=1791040331";
-import { updateScoreboard } from "./scoreboard.js?v=1791040331";
-import { config } from "../config/config.js?v=1791040331";
-import { onlineManager } from "../firebase.js?v=1791040331";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1791040331";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1791040331";
-import { state } from "../core/state.js?v=1791040331";
-import { getCurrentUser } from "../auth.js?v=1791040331";
-import { endGame, recordForfeit, recordElimination } from "./gameEnd.js?v=1791040331";
-import { renderTurnText } from "./turnManager.js?v=1791040331";
+import { audioManager } from "../audio/audioManager.js?v=1792313787";
+import { setMyPresence } from "../presence.js?v=1792313787";
+import { updateScoreboard } from "./scoreboard.js?v=1792313787";
+import { config } from "../config/config.js?v=1792313787";
+import { onlineManager } from "../firebase.js?v=1792313787";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1792313787";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1792313787";
+import { state } from "../core/state.js?v=1792313787";
+import { getCurrentUser } from "../auth.js?v=1792313787";
+import { endGame, recordForfeit, recordElimination } from "./gameEnd.js?v=1792313787";
+import { renderTurnText } from "./turnManager.js?v=1792313787";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -117,6 +117,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
 
   // طلب إنشاء أو انضمام جارٍ (لم تظهر شاشته بعد): لا تُقبل دعوة صديق في منتصفه (v35.9 — مراجعة ثانية)
   let _opBusy = 0;
+  let _presenceTimer = null;   // مزامنة الحضور مع المباراة (syncPresence أدناه) — مُعرَّف قبل showStep التي تبدؤها
   async function busyOp(fn) { _opBusy++; try { return await fn(); } finally { _opBusy--; } }
 
   function showStep(step) {
@@ -135,6 +136,8 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     if (step === "lobby")       stepLobby.classList.remove("hidden");
     if (step === "playing")     stepPlaying.classList.remove("hidden");
     if (step === "playing") { try { stopLoneWaitTimer(); } catch {} }
+    // مباراة تبدأ الآن (تحميلها يأخذ لحظات): الحضور "في مباراة" من هذه اللحظة — كالدعوات (مراجعة v35.9)
+    if (step === "playing") startPresenceSync();
     if (step === "searching")   stepSearching?.classList.remove("hidden");
     if (step === "multiCount")  stepMultiCount?.classList.remove("hidden");
     if (step === "multiLobby")  stepMultiLobby?.classList.remove("hidden");
@@ -662,6 +665,7 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     if (!startCountdownEl || !startCountdownNum) { cb(); return; }
     let n = 3;
     startCountdownEl.classList.remove("hidden");
+    startPresenceSync();   // 3-2-1 قبل البدء = "في مباراة" (مراجعة v35.9)
     startCountdownNum.textContent = n;
     const id = setInterval(() => {
       n--;
@@ -1130,13 +1134,14 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
       if (config.spectator) return "done";
       return (state.gameFinished || isOutOfMatch()) ? "done" : "playing";
     }
+    const onScreen = !onlineScreen.classList.contains("hidden");
+    // مباراة تبدأ (3-2-1 أو تُحمَّل الآن) — قبل فحص الطلب الجاري: الانضمام بالكود يُظهر شاشة "اللعب" قبل أن
+    // ينتهي طلبه، وهو داخل مباراة فعلاً (كان "busy" فيبقى حضوره "متصل" حتى اللوحة — مراجعة v35.9)
+    if (onScreen && !startCountdownEl?.classList.contains("hidden")) return "playing";
+    if (onScreen && !stepPlaying.classList.contains("hidden")) return "playing";
     if (_opBusy > 0) return "busy";
-    if (!onlineScreen.classList.contains("hidden")) {
-      if (!startCountdownEl?.classList.contains("hidden")) return "playing";   // 3-2-1 قبل البدء
-      if (!stepPlaying.classList.contains("hidden")) return "playing";         // مباراة تُحمَّل الآن
-      if (!stepSearching?.classList.contains("hidden") || !stepLobby.classList.contains("hidden")
-          || !stepMultiLobby?.classList.contains("hidden")) return "waiting";
-    }
+    if (onScreen && (!stepSearching?.classList.contains("hidden") || !stepLobby.classList.contains("hidden")
+        || !stepMultiLobby?.classList.contains("hidden"))) return "waiting";
     return onlineManager.roomCode ? "waiting" : "idle";
   }
   // إنهاء الانتظار بهدوء (كأزرار الإلغاء نفسها). يرجع true إن صار اللاعب حراً،
@@ -1160,7 +1165,26 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     return activity() === "idle";
   }
 
-  return { showStep, activity, cancelWaiting };
+  // ═══ الحضور يتبع المباراة نفسها (v35.9 — ملاحظة فحص 1 لـ1.8) ═══
+  // "🔵 في مباراة" ما دام يلعب مباراة جارية فقط — نفس تعريف الدعوات (دعوته تُرفض تلقائياً وقتها).
+  // انتهت بأي شكل (والنتيجة ما زالت ظاهرة)، أو خرج من مباراة جماعية ما زالت جارية، أو يشاهد: "🟢 متصل" —
+  // متاح للدعوة. (كانت "في مباراة" من دخول شاشة اللعب حتى الخروج منها، ولو انتهت المباراة.)
+  // تُراجع كل ثانية ما دامت شاشة اللعب ظاهرة، وتتوقف وحدها بعد مغادرتها. الكتابة عند التغيّر فقط.
+  function syncPresence() {
+    const a = activity();
+    try { setMyPresence(a === "playing" ? "playing" : "online"); } catch {}
+    if (a !== "playing" && a !== "done") stopPresenceSync();      // غادر شاشة اللعب
+  }
+  function startPresenceSync() {
+    stopPresenceSync();
+    _presenceTimer = setInterval(syncPresence, 1000);
+    syncPresence();
+  }
+  function stopPresenceSync() {
+    if (_presenceTimer) { clearInterval(_presenceTimer); _presenceTimer = null; }
+  }
+
+  return { showStep, activity, cancelWaiting, startPresenceSync, stopPresenceSync };
 }
 
 export function launchOnlineGame(myPlayerNum, onlineTurnInd, onGameStart) {
@@ -1512,7 +1536,8 @@ export function launchOnlineMultiGame(myPlayerNum, onlineTurnInd, onGameStart) {
       // ولا بعد انتهاء المباراة عندي أو أثناء انسحابي: الكتابة على مقعدي تُلغي معاملة انسحاب تنتظر
       // عودة الشبكة (زر الخروج بلا شبكة — مراجعة v35.7 الثانية)
       if (connected && !isOutOfMatch() && !state.gameFinished) onlineManager.clearMyDisconnectMark();
-      try { setMyPresence(connected ? "playing" : "away"); } catch {}
+      // (v35.9: بعد نهايتها أو خروجي منها "متصل" — كان يعيد "في مباراة" مع كل عودة اتصال)
+      try { setMyPresence(connected ? ((state.gameFinished || isOutOfMatch()) ? "online" : "playing") : "away"); } catch {}
     });
   }, 800);
 }

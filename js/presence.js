@@ -3,7 +3,7 @@
 // الحالات: online (متصل) | playing (في مباراة) | away (انقطاع مؤقت) | offline (غير متصل)
 import { getDatabase, ref, onValue, onDisconnect, update, serverTimestamp, off }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser, onUserChange } from "./auth.js?v=1791040331";
+import { getCurrentUser, onUserChange } from "./auth.js?v=1792313787";
 
 const db = getDatabase();
 
@@ -43,8 +43,12 @@ function _startFor(uid) {
 }
 
 // تغيير حالتنا (مثلاً عند دخول مباراة أو الخروج منها)
+// بلا تغيير = بلا كتابة (v35.9): مزامنة الحضور مع المباراة تستدعيها كل ثانية. وعودة الاتصال يعيد
+// مستمع .info/connected أعلاه كتابة الحالة الحالية دائماً — فلا يفوت الخادمَ شيء
 export function setMyPresence(state) {
-  _myState = state || "online";
+  const next = state || "online";
+  if (next === _myState) return;
+  _myState = next;
   if (!_myUid) return;
   update(ref(db, `users/${_myUid}/presence`), {
     state: _myState, lastSeen: serverTimestamp(),

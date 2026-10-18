@@ -36,6 +36,7 @@ const sections = [
     () => IV.inviteCancelled(verbose), () => IV.inviteBusy(verbose), () => IV.inviteFromWaiting(verbose),
     () => IV.inviteInviterBlip(verbose), () => IV.inviteExpires(verbose), () => IV.inviteOneAtATime(verbose),
     () => IV.inviteReviewFixes(verbose), () => IV.inviteDuringPendingOp(verbose)]],
+  ['🟢 الحضور', [() => IV.presenceFollowsMatch(verbose)]],
 ];
 
 for (const [title, runs] of sections) {
