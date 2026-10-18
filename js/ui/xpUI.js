@@ -1,8 +1,9 @@
 // 📄 ui/xpUI.js
 // شريط XP في user-bar + popup ترقية المستوى
 
-import { getXP, getLevelFromXP, LEVELS } from "../xp.js?v=1792313787";
-import { getCurrentUser } from "../auth.js?v=1792313787";
+import { getXP, getLevelFromXP, LEVELS } from "../xp.js?v=1792364320";
+import { getCurrentUser } from "../auth.js?v=1792364320";
+import { esc } from "./safeText.js?v=1792364320";
 
 // ── تحديث شريط XP ─────────────────────────────────────────────────
 export async function refreshXPBar() {
@@ -42,17 +43,17 @@ export function showXPGain(result) {
       <div class="xp-popup-inner xp-levelup">
         <div class="xp-popup-title">🎉 ترقية مستوى!</div>
         <div class="xp-popup-level">
-          ${result.before.current.icon} ${result.before.current.title}
+          ${esc(result.before.current.icon)} ${esc(result.before.current.title)}
           <span class="xp-arrow">→</span>
-          ${result.newLevel.icon} ${result.newLevel.title}
+          ${esc(result.newLevel.icon)} ${esc(result.newLevel.title)}
         </div>
-        <div class="xp-popup-gained">+${result.gained} XP</div>
+        <div class="xp-popup-gained">+${esc(result.gained)} XP</div>
       </div>`;
   } else {
     popup.innerHTML = `
       <div class="xp-popup-inner">
-        <div class="xp-popup-gained">+${result.gained} XP</div>
-        <div class="xp-popup-level">${result.after.current.icon} ${result.after.current.title}</div>
+        <div class="xp-popup-gained">+${esc(result.gained)} XP</div>
+        <div class="xp-popup-level">${esc(result.after.current.icon)} ${esc(result.after.current.title)}</div>
       </div>`;
   }
 
@@ -131,9 +132,9 @@ function renderXPGuide(container) {
       <div class="xpg-title">🎖️ المستويات</div>
       ${LEVELS.map(l => `
         <div class="xpg-level-row">
-          <span class="xpg-level-icon">${l.icon}</span>
-          <span class="xpg-level-name">${l.title}</span>
-          <span class="xpg-level-xp">${l.xp.toLocaleString()} XP</span>
+          <span class="xpg-level-icon">${esc(l.icon)}</span>
+          <span class="xpg-level-name">${esc(l.title)}</span>
+          <span class="xpg-level-xp">${esc(l.xp.toLocaleString())} XP</span>
         </div>`).join('')}
     </div>`;
 }

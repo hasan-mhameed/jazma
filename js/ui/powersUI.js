@@ -1,9 +1,10 @@
 // 📄 ui/powersUI.js
 // شريط المخزون — يعرض قدرات اللاعب الحالي + التفعيل
 
-import { POWERS, getInventory } from "../core/powers.js?v=1792313787";
-import { state } from "../core/state.js?v=1792313787";
-import { getPowerIcon } from "./powerIcons.js?v=1792313787";
+import { POWERS, getInventory } from "../core/powers.js?v=1792364320";
+import { state } from "../core/state.js?v=1792364320";
+import { getPowerIcon } from "./powerIcons.js?v=1792364320";
+import { esc } from "./safeText.js?v=1792364320";
 
 let _onActivate = null;
 let _onBuy = null;
@@ -50,8 +51,8 @@ function renderSpectatorInventory(cfg, bar) {
         const p = POWERS[type]; if (!p) return;
         const slot = document.createElement('div');
         slot.className = 'inv-slot filled spectator';   // بلا مستمع نقر إطلاقاً
-        slot.innerHTML = `<span class="inv-icon">${p.icon}</span>` +
-                         (inv[type] > 1 ? `<span class="inv-count">${inv[type]}</span>` : '');
+        slot.innerHTML = `<span class="inv-icon">${esc(p.icon)}</span>` +
+                         (inv[type] > 1 ? `<span class="inv-count">${esc(inv[type])}</span>` : '');
         slot.title = p.name || '';
         slots.appendChild(slot);
       });
@@ -98,7 +99,7 @@ export function refreshInventory(cfg) {
     const count = inv[type];
     const slot = document.createElement('div');
     slot.className = 'inv-slot filled';
-    slot.innerHTML = `<span class="inv-icon">${getPowerIcon(type, power.icon)}</span><span class="inv-count">${count}</span>`;
+    slot.innerHTML = `<span class="inv-icon">${getPowerIcon(type, power.icon)}</span><span class="inv-count">${esc(count)}</span>`;
     slot.title = `${power.name} — ${power.desc}`;
 
     // هل يمكن التفعيل الآن؟ (دور اللاعب الحالي)
@@ -133,7 +134,7 @@ function addGuideButton(bar) {
   btn.textContent = '؟';
   btn.title = 'دليل الأدوات';
   btn.addEventListener('click', () => {
-    import('./guideUI.js?v=1792313787').then(m => m.openGuide());
+    import('./guideUI.js?v=1792364320').then(m => m.openGuide());
   });
   bar.appendChild(btn);
 }
@@ -153,7 +154,7 @@ function addShopButtons(bar, cfg) {
 
     const btn = document.createElement('button');
     btn.className = 'shop-btn';
-    btn.innerHTML = `<span class="shop-icon">${getPowerIcon(key, p.icon)}</span><span class="shop-cost">${p.cost}💎</span>`;
+    btn.innerHTML = `<span class="shop-icon">${getPowerIcon(key, p.icon)}</span><span class="shop-cost">${esc(p.cost)}💎</span>`;
     btn.title = `${p.name} — ${p.desc} (${p.cost} جوهرة)`;
     if (!myTurn) btn.classList.add('disabled');
     else btn.addEventListener('click', () => _onBuy?.(key));

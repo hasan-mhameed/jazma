@@ -1,6 +1,7 @@
 // 📄 ui/achievementsUI.js
-import { ACHIEVEMENTS, getUnlocked } from "../achievements.js?v=1792313787";
-import { getCurrentUser } from "../auth.js?v=1792313787";
+import { ACHIEVEMENTS, getUnlocked } from "../achievements.js?v=1792364320";
+import { getCurrentUser } from "../auth.js?v=1792364320";
+import { esc } from "./safeText.js?v=1792364320";
 
 export function showAchievementPopup(key) {
   const def = ACHIEVEMENTS[key];
@@ -11,9 +12,9 @@ export function showAchievementPopup(key) {
   popup.innerHTML = `
     <div class="ach-popup-inner">
       <div class="ach-popup-label">🏆 إنجاز جديد!</div>
-      <div class="ach-popup-icon">${def.icon}</div>
-      <div class="ach-popup-name">${def.name}</div>
-      <div class="ach-popup-desc">${def.desc}</div>
+      <div class="ach-popup-icon">${esc(def.icon)}</div>
+      <div class="ach-popup-name">${esc(def.name)}</div>
+      <div class="ach-popup-desc">${esc(def.desc)}</div>
     </div>`;
   document.body.appendChild(popup);
   setTimeout(() => {
@@ -55,7 +56,7 @@ function renderAchievements(unlocked, container) {
   const header = document.createElement('div');
   header.className = 'ach-progress-wrap';
   header.innerHTML = `
-    <div class="ach-progress-label">${doneCount} / ${total} إنجاز</div>
+    <div class="ach-progress-label">${esc(doneCount)} / ${esc(total)} إنجاز</div>
     <div class="ach-progress-bar"><div class="ach-progress-fill" style="width:${pct}%"></div></div>`;
   container.appendChild(header);
 
@@ -69,10 +70,10 @@ function renderAchievements(unlocked, container) {
     const card = document.createElement('div');
     card.className = `ach-card ${done ? 'ach-done' : 'ach-locked'}`;
     card.innerHTML = `
-      <div class="ach-card-icon">${done ? def.icon : '🔒'}</div>
-      <div class="ach-card-name">${def.name}</div>
-      <div class="ach-card-desc">${def.desc}</div>
-      ${date ? `<div class="ach-card-date">${date}</div>` : ''}`;
+      <div class="ach-card-icon">${done ? esc(def.icon) : '🔒'}</div>
+      <div class="ach-card-name">${esc(def.name)}</div>
+      <div class="ach-card-desc">${esc(def.desc)}</div>
+      ${date ? `<div class="ach-card-date">${esc(date)}</div>` : ''}`;
     grid.appendChild(card);
   });
   container.appendChild(grid);

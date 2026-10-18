@@ -1,6 +1,7 @@
 // 📄 ui/powerIcons.js
 // أيقونات SVG موحّدة للقدرات — تطابق رسم اللوحة (السمكة الذهبية)
 // تُستخدم في المخزون وبطاقة التعريف بدل الإيموجي
+import { esc } from "./safeText.js?v=1792364320";
 
 // السمكة الذهبية (نفس أسلوب اللوحة: جسم منحني + ذيل + زعانف + عين)
 export const FISH_SVG = `
@@ -74,14 +75,16 @@ export const TIME_REDUCE_SVG = `
 </svg>`;
 
 // خريطة الأيقونات حسب نوع القدرة
-export const POWER_ICONS = {
+export const POWER_ICONS = Object.freeze({
   water: FISH_SVG,
   gem: GEM_SVG,
   time_extend: TIME_EXTEND_SVG,
   time_reduce: TIME_REDUCE_SVG,
-};
+});
 
 // نرجّع أيقونة القدرة (SVG لو متوفّر، وإلا الإيموجي fallback)
+// v36.0 (1.10): الناتج يُدرج كـHTML — فهو دائماً SVG ثابت من الجدول أعلاه (مفتاح خاص به، لا من سلسلة النماذج)
+// أو الاحتياط مُهرَّباً. الحارس (tests/ui/guard.mjs) يقبل getPowerIcon بلا esc لهذا السبب وحده.
 export function getPowerIcon(type, fallbackEmoji) {
-  return POWER_ICONS[type] || fallbackEmoji || '';
+  return Object.prototype.hasOwnProperty.call(POWER_ICONS, type) ? POWER_ICONS[type] : esc(fallbackEmoji ?? '');
 }

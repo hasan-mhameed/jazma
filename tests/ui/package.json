@@ -1,0 +1,14 @@
+{
+  "name": "jazam-ui-tests",
+  "private": true,
+  "type": "module",
+  "description": "فحوص أمان النصوص والحساب (v36.0 — الخطوتان 1.10 و1.11): حارس ثابت يمنع وصول نص غير آمن إلى HTML/رابط/CSS/شيفرة، وعرض حقيقي (jsdom) لكل واجهة تعرض أسماء أو رسائل، واللعبة كاملة (main.js الحقيقي) فوق Firebase وهمي: الدخول والخروج وتغيّر الحساب والأصدقاء",
+  "scripts": {
+    "test": "node --experimental-vm-modules --no-warnings run.mjs"
+  },
+  "dependencies": {
+    "acorn": "8.14.1",
+    "acorn-walk": "8.3.4",
+    "jsdom": "26.1.0"
+  }
+}

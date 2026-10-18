@@ -6,7 +6,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
          createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
          signInAnonymously, linkWithPopup, linkWithCredential, EmailAuthProvider }
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getDatabase, ref, set, get, update, remove }
+import { getDatabase, ref, get, update, remove }
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const firebaseConfig = {
@@ -38,6 +38,10 @@ export async function signInWithGoogle() {
 export async function registerWithEmail(name, email, password) {
   const result = await createUserWithEmailAndPassword(auth, email, password);
   await updateProfile(result.user, { displayName: name });
+  // v36.0 (1.11): الدخول يحفظ الملف فور إنشاء الحساب — غالباً قبل أن يصل الاسم فيُحفظ "لاعب". نعيد الحفظ بعد وصوله:
+  // يُنشئ الملف كاملاً إن لم يوجد بعد، أو يصحّح "لاعب". لا كتابة جزئية مستقلة هنا: على اتصال بارد (أول دخول) تُرسَل
+  // الكتابات المعلّقة قبل القراءات المعلّقة، فكانت كتابة الاسم وحده تجعل الملف "موجوداً" ناقصاً بلا uid (مراجعة v36.0 الثالثة)
+  try { await saveUserProfile(result.user); } catch {}
   return result.user;
 }
 
@@ -63,6 +67,7 @@ export async function upgradeGuestWithGoogle() {
   const provider = new GoogleAuthProvider();
   const result   = await linkWithPopup(auth.currentUser, provider);
   await saveUserProfile(result.user);
+  await syncProfileIdentity(result.user);
   return result.user;
 }
 
@@ -72,7 +77,27 @@ export async function upgradeGuestWithEmail(name, email, password) {
   const result     = await linkWithCredential(auth.currentUser, credential);
   await updateProfile(result.user, { displayName: name });
   await saveUserProfile(result.user);
+  await syncProfileIdentity(result.user, name);
   return result.user;
+}
+
+// v36.0 (الخطوة 1.11): الاسم والصورة في الملف العام من الحساب نفسه — بعد ترقية الضيف (ملفه أُنشئ باسم "لاعب"،
+// و saveUserProfile لا يحدّث ملفاً موجوداً) وبعد التسجيل بإيميل (الملف يُحفظ قبل وصول الاسم). كان يبقى "لاعب" عند
+// الأصدقاء وفي البحث. (والاسم في حساب الدخول نفسه إن بقي فارغاً بعد ربط Google — يظهر في الشريط والدعوات.)
+// لا إيميل هنا: الملف العام يقرؤه كل من يبحث عن صديق. وإن فشلت الكتابة، يصحّحها saveUserProfile في الدخول التالي.
+async function syncProfileIdentity(user, name = "") {
+  try {
+    const g = (user.providerData || []).find(p => p && p.providerId === "google.com") || {};
+    const displayName = String(name || user.displayName || g.displayName || "").trim();
+    const photo = user.photoURL || g.photoURL || "";
+    if (displayName && !user.displayName) {
+      await updateProfile(user, { displayName, ...(photo && !user.photoURL ? { photoURL: photo } : {}) }).catch(() => {});
+    }
+    const patch = {};
+    if (displayName) patch.name = displayName;
+    if (photo) patch.photo = photo;
+    if (Object.keys(patch).length) await update(ref(db, `users/${user.uid}`), patch);
+  } catch {}
 }
 
 // ── هل المستخدم ضيف؟ ─────────────────────────────────────────
@@ -90,25 +115,33 @@ export function onUserChange(cb) {
 }
 
 // ─── حفظ/تحديث ملف المستخدم في DB ───────────────────────────
+const NEW_STATS = () => ({ ai: { wins: 0, losses: 0 }, local: { wins: 0, losses: 0 } });
 async function saveUserProfile(user) {
   const userRef = ref(db, `users/${user.uid}`);
   const snap    = await get(userRef);
-  if (!snap.exists()) {
-    await set(userRef, {
+  const cur     = snap.exists() ? snap.val() : null;
+  if (!cur || typeof cur !== "object") {
+    // ملف جديد — دمج لا استبدال (v36.0): لا يمحو ما كُتب تحته للتوّ (كحالة الحضور لحظة الاتصال)
+    await update(userRef, {
       uid:      user.uid,
       name:     user.displayName || "لاعب",
       email:    user.email,
       photo:    user.photoURL || "",
       joinedAt: Date.now(),
-      friends:  {},
-      stats: {
-        ai:    { wins: 0, losses: 0 },
-        local: { wins: 0, losses: 0 },
-        online: {},
-      },
+      stats:    NEW_STATS(),
     });
   } else {
-    await update(userRef, { lastSeen: Date.now() });
+    const patch = { lastSeen: Date.now() };
+    // v36.0 (1.11): ملف ناقص (كتابة جزئية سبقت إنشاءه) تُكمَل حقوله الأساسية دون مسّ الموجود
+    if (cur.uid !== user.uid) patch.uid = user.uid;
+    if (!cur.joinedAt) patch.joinedAt = Date.now();
+    // stats ناقصة: أوراقها فقط (لا استبدال العقدة كلها — نتيجة مباراة كُتبت للتوّ من جهاز آخر لا تضيع)
+    if (!cur.stats) Object.assign(patch, { "stats/ai/wins": 0, "stats/ai/losses": 0, "stats/local/wins": 0, "stats/local/losses": 0 });
+    // واسم "لاعب" المؤقت (ضيف ترقّى، أو تسجيل سبق حفظُ ملفه وصولَ الاسم) أو صورة ناقصة تُصحَّح من الحساب
+    const accName = String(user.displayName || "").trim();
+    if (accName && (!cur.name || cur.name === "لاعب")) patch.name = accName;
+    if (user.photoURL && !cur.photo) patch.photo = user.photoURL;
+    await update(userRef, patch);
   }
 }
 

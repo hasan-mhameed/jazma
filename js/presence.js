@@ -1,16 +1,16 @@
 // 📄 presence.js
 // نظام الحضور: يحدّث حالة المستخدم على Firebase ويقرأ حالات الآخرين
 // الحالات: online (متصل) | playing (في مباراة) | away (انقطاع مؤقت) | offline (غير متصل)
-import { getDatabase, ref, onValue, onDisconnect, update, serverTimestamp, off }
+import { getDatabase, ref, onValue, onDisconnect, update, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser, onUserChange } from "./auth.js?v=1792313787";
+import { getCurrentUser, onUserChange } from "./auth.js?v=1792364320";
 
 const db = getDatabase();
 
 let _myUid = null;
 let _myState = "online";
 let _connUnsub = null;
-const _watchers = new Map(); // uid -> unsubscribe
+const _watchers = new Set(); // دوال إيقاف متابعات حضور الآخرين القائمة (v36.0)
 
 // ── تسجيل حضورنا ومتابعة الاتصال ────────────────────────────
 // مهم: نربط التسجيل بتغيّر حالة الدخول — استدعاء واحد عند التشغيل يفشل
@@ -22,7 +22,11 @@ export function initPresence() {
   // ونتابع أي تغيّر لاحق (دخول/خروج/ترقية حساب ضيف)
   onUserChange((user) => {
     if (user?.uid) _startFor(user.uid);
-    else { _myUid = null; if (_connUnsub) { try { _connUnsub(); } catch {} _connUnsub = null; } }
+    else {
+      _myUid = null;
+      if (_connUnsub) { try { _connUnsub(); } catch {} _connUnsub = null; }
+      unwatchAllPresence();      // لا متابعات لحساب خرج (والصفحة تُعاد بعدها أصلاً — v36.0، 1.11)
+    }
   });
 }
 
@@ -56,16 +60,27 @@ export function setMyPresence(state) {
 }
 
 // ── متابعة حضور مستخدم آخر ──────────────────────────────────
+// v36.0 (الخطوة 1.11): كل استدعاء متابعةٌ مستقلة تُرجع دالة إيقافها (Firebase يجمع المستمعين على المسار
+// نفسه داخلياً — طلب واحد للخادم). كانت: متابعة واحدة لكل صديق مهما تكرّر الطلب، فبطاقة الصديق الجديدة بعد
+// إعادة رسم القائمة (إضافة/حذف صديق) لا تستلم شيئاً وتتجمّد على "غير متصل"، والقديمة المحذوفة تبقى تستلم.
 export function watchPresence(uid, cb) {
-  if (!uid || _watchers.has(uid)) return;
-  const r = ref(db, `users/${uid}/presence`);
-  const unsub = onValue(r, (snap) => cb(snap.val() || { state: "offline", lastSeen: null }));
-  _watchers.set(uid, () => { try { off(r); } catch {} unsub && unsub(); });
+  if (!uid || typeof cb !== "function") return () => {};
+  let stopped = false;
+  const unsub = onValue(ref(db, `users/${uid}/presence`), (snap) => {
+    if (!stopped) cb(snap.val() || { state: "offline", lastSeen: null });
+  });
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    _watchers.delete(stop);
+    try { unsub(); } catch {}
+  };
+  _watchers.add(stop);
+  return stop;
 }
 
 export function unwatchAllPresence() {
-  _watchers.forEach(fn => { try { fn(); } catch {} });
-  _watchers.clear();
+  [..._watchers].forEach(stop => stop());
 }
 
 // مهلة اعتبار الانقطاع "مؤقتاً" — مطابقة لمهلة السماح داخل المباراة

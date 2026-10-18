@@ -1,4 +1,5 @@
 // 📄 ui/navMenu.js — زر القائمة يفتح modal بطاقات
+import { esc } from "./safeText.js?v=1792364320";
 export function initNavMenu() {
   const userInfo = document.getElementById('user-info');
   if (!userInfo) return;
@@ -42,7 +43,7 @@ export function initNavMenu() {
     const card = document.createElement('button');
     card.className = `nav-menu-card nmc-${color}`;
     card.type = 'button';
-    card.innerHTML = `<span class="nmc-icon">${icon}</span><span class="nmc-label">${label}</span>`;
+    card.innerHTML = `<span class="nmc-icon">${esc(icon)}</span><span class="nmc-label">${esc(label)}</span>`;
     card.addEventListener('click', () => {
       closeMenu();
       setTimeout(() => original.click(), 50);

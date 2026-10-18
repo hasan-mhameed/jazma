@@ -1,10 +1,11 @@
 // 📄 ui/friendsUI.js
 // قائمة الأصدقاء + البحث + الإجراءات
-import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1792313787";
+import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1792364320";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend,
-         listenFriendRequests, listenFriends } from "../friends.js?v=1792313787";
-import { outgoingInvite, onInviteStateChange } from "./inviteUI.js?v=1792313787";
+         listenFriendRequests, listenFriends } from "../friends.js?v=1792364320";
+import { outgoingInvite, onInviteStateChange } from "./inviteUI.js?v=1792364320";
+import { asText, firstInitial, safeImageSrc } from "./safeText.js?v=1792364320";
 
 // زر "دعوة" يعكس حالة الدعوة الصادرة (v35.9): ⏳ للصديق المدعوّ ما دامت دعوته قائمة، ويرجع مع أي نهاية لها
 // (قبول ثم مباراة، رفض، "في مباراة"، انتهاء المهلة، إلغاء، فشل) — كان لا يرجع إلا عند الرفض
@@ -17,12 +18,14 @@ function paintInviteBtn(btn) {
 }
 let _inviteStateUnsub = null;
 
-function asText(v, fallback = "") { return String(v ?? fallback); }
-function firstInitial(name) { return asText(name, "?").trim().charAt(0).toUpperCase() || "?"; }
-function safeImageUrl(url) {
-  try { const p = new URL(asText(url), location.href); return p.protocol === "https:" || p.protocol === "http:"; }
-  catch { return false; }
+// متابعات بطاقات الأصدقاء الظاهرة (الحضور + مؤقّت التحديث) — تُوقف كلها قبل إعادة رسم القائمة (v36.0 — 1.11).
+// كانت: تبقى متابعة البطاقة المحذوفة، ولا تستلم الجديدة شيئاً (حالة الصديق تتجمّد)، ومؤقّتها لا يتوقف أبداً
+// (كان يعتمد على حدث DOMNodeRemoved الذي أزالته المتصفحات الحديثة).
+let _cardStops = [];
+function stopFriendCards() {
+  _cardStops.splice(0).forEach(stop => { try { stop(); } catch {} });
 }
+
 
 // onInviteFriend يُمرر من main.js لأن إطلاق اللعبة يحتاج config
 export function initFriendsUI({ onInviteFriend, onOpenChat }) {
@@ -65,9 +68,15 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
     const q = friendsSearchInput.value.trim();
     if (!q) return;
     friendsSearchBtn.textContent = "⏳";
-    const results = await searchUsers(q);
-    friendsSearchBtn.textContent = "🔍";
+    let results = null;
+    try { results = await searchUsers(q); }
+    catch { results = null; }
+    finally { friendsSearchBtn.textContent = "🔍"; }   // v36.0: الزر يرجع ولو فشل البحث
     searchResults.innerHTML = "";
+    if (!Array.isArray(results)) {
+      searchResults.innerHTML = `<p class="friends-empty">تعذّر البحث — حاول مجدداً</p>`;
+      return;
+    }
     if (results.length === 0) {
       searchResults.innerHTML = `<p class="friends-empty">لا نتائج</p>`;
       return;
@@ -80,9 +89,11 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
     const card     = document.createElement("div"); card.className = "friend-card";
     const userName = asText(user.name, "لاعب");
     let avatar;
-    if (user.photo && safeImageUrl(user.photo)) {
+    const photo = safeImageSrc(user.photo);     // v36.0: صور حسابات Google فقط، وبلا referrer
+    if (photo) {
       avatar = document.createElement("img");
-      avatar.src = user.photo; avatar.alt = userName;
+      avatar.referrerPolicy = "no-referrer";
+      avatar.src = photo; avatar.alt = userName;
     } else {
       avatar = document.createElement("div");
       avatar.className = "friend-avatar-placeholder";
@@ -113,10 +124,10 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
           ? (lastSeenText(_lastPresence?.lastSeen) || meta.label)
           : meta.label;
       };
-      watchPresence(user.uid, (p) => { _lastPresence = p; paint(); });
+      const stopWatch = watchPresence(user.uid, (p) => { _lastPresence = p; paint(); });
       // تحديث دوري: "انقطاع مؤقت" تنتهي بعد المهلة، و"آخر ظهور" يتقادم
       const tick = setInterval(paint, 5000);
-      card.addEventListener("DOMNodeRemoved", () => clearInterval(tick), { once: true });
+      _cardStops.push(() => { stopWatch(); clearInterval(tick); });
     }
 
     function addAction(cls, text) {
@@ -167,6 +178,7 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
   });
 
   listenFriends(friends => {
+    stopFriendCards();
     friendsList.innerHTML = "";
     if (friends.length === 0) {
       friendsList.innerHTML = `<p class="friends-empty">لا يوجد أصدقاء بعد</p>`;

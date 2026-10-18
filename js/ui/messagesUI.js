@@ -1,9 +1,10 @@
 // 📄 ui/messagesUI.js
 // زر الرسائل في navbar + panel المحادثات
 
-import { listenMessages, markAsRead, getLastReadMap, listenLastRead, chatKey } from "../chat.js?v=1792313787";
-import { listenFriends }              from "../friends.js?v=1792313787";
-import { getCurrentUser }             from "../auth.js?v=1792313787";
+import { listenMessages, markAsRead, getLastReadMap, listenLastRead, chatKey } from "../chat.js?v=1792364320";
+import { listenFriends }              from "../friends.js?v=1792364320";
+import { getCurrentUser }             from "../auth.js?v=1792364320";
+import { esc, asText, firstInitial }  from "./safeText.js?v=1792364320";
 
 let _friends     = [];
 let _unsubscribes = [];
@@ -129,18 +130,20 @@ function renderMessagesList() {
     const row     = document.createElement('div');
     row.className = `msg-row ${unread > 0 ? 'msg-row-unread' : ''}`;
 
-    const initial = (friend.name || '?')[0].toUpperCase();
-    const preview = lastMsg?.text
-      ? (lastMsg.text.length > 30 ? lastMsg.text.slice(0, 30) + '...' : lastMsg.text)
+    // v36.0 (1.10): الاسم ونص الرسالة من المستخدم — يُعرضان كنص (كانا يُدرجان كشيفرة HTML)
+    const initial = firstInitial(friend.name);
+    const text    = lastMsg?.text ? asText(lastMsg.text) : '';
+    const preview = text
+      ? (text.length > 30 ? text.slice(0, 30) + '...' : text)
       : 'لا رسائل بعد';
 
     row.innerHTML = `
-      <div class="msg-avatar">${initial}</div>
+      <div class="msg-avatar">${esc(initial)}</div>
       <div class="msg-info">
-        <div class="msg-name">${friend.name || 'لاعب'}</div>
-        <div class="msg-preview">${preview}</div>
+        <div class="msg-name">${esc(friend.name || 'لاعب')}</div>
+        <div class="msg-preview">${esc(preview)}</div>
       </div>
-      ${unread > 0 ? `<div class="msg-unread-badge">${unread}</div>` : ''}`;
+      ${unread > 0 ? `<div class="msg-unread-badge">${esc(unread)}</div>` : ''}`;
 
     row.addEventListener('click', () => {
       // مسح الـ unread — markAsRead يكتب في Firebase

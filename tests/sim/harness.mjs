@@ -335,7 +335,8 @@ const STUBS = {
 const REAL = { 'firebase.js': '/js/firebase.js', 'onlineGame.js': '/js/ui/onlineGame.js', 'matchResult.js': '/js/core/matchResult.js',
   'turnManager.js': '/js/ui/turnManager.js',    // النص الظاهر فوق اللوحة (فحص v35.7)
   'inviteUI.js': '/js/ui/inviteUI.js', 'invite.js': '/js/invite.js',    // دعوات الأصدقاء (v35.9)
-  'presence.js': '/js/presence.js' };   // الحضور الحقيقي: ما يكتبه هو ما يراه الأصدقاء (v35.9)
+  'presence.js': '/js/presence.js',     // الحضور الحقيقي: ما يكتبه هو ما يراه الأصدقاء (v35.9)
+  'safeText.js': '/js/ui/safeText.js' }; // تهريب النصوص الحقيقي (v36.0 — 1.10)
 
 export class World {
   constructor() { this.server = new Server(this); this.clients = []; this.timeline = []; this.errors = []; this.quiet = false; }

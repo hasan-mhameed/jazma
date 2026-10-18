@@ -1,16 +1,17 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1792313787";
-import { setMyPresence } from "../presence.js?v=1792313787";
-import { updateScoreboard } from "./scoreboard.js?v=1792313787";
-import { config } from "../config/config.js?v=1792313787";
-import { onlineManager } from "../firebase.js?v=1792313787";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1792313787";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1792313787";
-import { state } from "../core/state.js?v=1792313787";
-import { getCurrentUser } from "../auth.js?v=1792313787";
-import { endGame, recordForfeit, recordElimination } from "./gameEnd.js?v=1792313787";
-import { renderTurnText } from "./turnManager.js?v=1792313787";
+import { audioManager } from "../audio/audioManager.js?v=1792364320";
+import { setMyPresence } from "../presence.js?v=1792364320";
+import { updateScoreboard } from "./scoreboard.js?v=1792364320";
+import { config } from "../config/config.js?v=1792364320";
+import { onlineManager } from "../firebase.js?v=1792364320";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1792364320";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1792364320";
+import { state } from "../core/state.js?v=1792364320";
+import { getCurrentUser } from "../auth.js?v=1792364320";
+import { endGame, recordForfeit, recordElimination } from "./gameEnd.js?v=1792364320";
+import { renderTurnText } from "./turnManager.js?v=1792364320";
+import { esc } from "./safeText.js?v=1792364320";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -447,7 +448,8 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
           const icon = d === "accepted" ? "✅" : d === "rejected" ? "❌" : "⏳";
           const cls  = d === "accepted" ? "accepted" : d === "rejected" ? "rejected" : "";
           const nm   = _lobbyNames[num] || names[num] || `لاعب ${num}`;
-          return `<div class="approval-player ${cls}"><span>${nm}</span><span class="ap-state">${icon}</span></div>`;
+          // v36.0 (1.10): أسماء اللاعبين نص لا شيفرة
+          return `<div class="approval-player ${esc(cls)}"><span>${esc(nm)}</span><span class="ap-state">${esc(icon)}</span></div>`;
         }).join("");
       }
       startApprovalTimer();
@@ -737,17 +739,18 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
         _lobbyNames = {};
         list.forEach(p => { _lobbyNames[p.num] = p.name; });
         if (!_approvalOpen) {
-          const names = list.map(p => `✓ ${p.name}`).join("<br>");
+          // v36.0 (1.10): كل اسم وعدد يُهرَّب (الأسماء و maxPlayers يكتبها غيرنا في الغرفة)
+          const names = list.map(p => `✓ ${esc(p.name)}`).join("<br>");
           // النص يصدق مع الحالة: وحدنا = "نبحث عن لاعبين" لا "بانتظار البقية"
           searchingText.innerHTML = (count <= 1)
             ? `🔍 نبحث عن لاعبين...<br><span class="search-names">${names}</span>`
-            : `👥 انضم ${count} من ${max}<br><span class="search-names">${names}</span><br>بانتظار البقية...`;
+            : `👥 انضم ${esc(count)} من ${esc(max)}<br><span class="search-names">${names}</span><br>بانتظار البقية...`;
         }
         // بقيتُ وحيداً بعد مغادرة الآخرين → نواصل البحث + بديل الكمبيوتر فوراً
         if (count <= 1 && _approvalOpen) {
           closeApproval();
           if (isRoomOwner()) onlineManager.clearApprovalState();
-          showAISuggestNow(`↩️ غادر بقية اللاعبين — نواصل البحث لك<br><span class="search-names">👥 ${count} من ${max}</span>`);
+          showAISuggestNow(`↩️ غادر بقية اللاعبين — نواصل البحث لك<br><span class="search-names">👥 ${esc(count)} من ${esc(max)}</span>`);
         }
         // التصويت مغلق: لا نعيد فتح الجولة عند تغيّر العدد (القائمة مجمّدة أثناء الـ15 ثانية)
         // من ينضم أثناءها يدخل بحالة "منتظر" ويُضمّ بعد الحسم.
@@ -1032,7 +1035,8 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
     list.forEach(p => {
       const item = document.createElement("div");
       item.className = "multi-player-item" + (p.active === false ? " inactive" : "");
-      item.innerHTML = `<span class="mp-num">${p.num}</span><span class="mp-name">${p.name}</span>${p.num === hostNum ? '<span class="mp-host">👑</span>' : ''}`;
+      // v36.0 (1.10): رقم المقعد واسم اللاعب من الغرفة (يكتبهما غيرنا) — نص لا شيفرة
+      item.innerHTML = `<span class="mp-num">${esc(p.num)}</span><span class="mp-name">${esc(p.name)}</span>${p.num === hostNum ? '<span class="mp-host">👑</span>' : ''}`;
       multiPlayersList.appendChild(item);
     });
     const count = list.length;

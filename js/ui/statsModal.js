@@ -1,6 +1,7 @@
 // 📄 ui/statsModal.js
 // عرض modal الإحصائيات مع فلتر زمني
-import { getAllStats } from "../auth.js?v=1792313787";
+import { getAllStats } from "../auth.js?v=1792364320";
+import { esc } from "./safeText.js?v=1792364320";
 
 let _statsFilter = 'all';
 
@@ -47,13 +48,14 @@ function computeMultiFiltered(historyObj, filter) {
 // ── بناء صف 1v1 ─────────────────────────────────────────────────
 function vsRow(name, { w, l, d, total }) {
   if (total === 0) return `<p class="stats-empty">لا مباريات في هذه الفترة</p>`;
+  // v36.0 (1.10): اسم الخصم محفوظ كما كتبه هو — نص لا شيفرة
   return `
     <div class="stats-vs-row">
-      <span class="vs-name">${name}</span>
-      <span class="sh-win">🏆 ${w}</span>
+      <span class="vs-name">${esc(name)}</span>
+      <span class="sh-win">🏆 ${esc(w)}</span>
       <span class="sh-sep">–</span>
-      <span class="sh-loss">💔 ${l}</span>
-      ${d > 0 ? `<span class="sh-sep">·</span><span class="sh-draw">🤝 ${d}</span>` : ''}
+      <span class="sh-loss">💔 ${esc(l)}</span>
+      ${d > 0 ? `<span class="sh-sep">·</span><span class="sh-draw">🤝 ${esc(d)}</span>` : ''}
     </div>`;
 }
 
@@ -83,7 +85,7 @@ export async function renderStatsModal(uid) {
     <div class="stats-filter-tabs">
       ${tabs.map(t => `
         <button class="sft-btn ${_statsFilter === t.id ? 'active' : ''}"
-          data-filter="${t.id}">${t.label}</button>`).join('')}
+          data-filter="${esc(t.id)}">${esc(t.label)}</button>`).join('')}
     </div>`;
 
   // ── AI ───────────────────────────────────────────────────────
@@ -123,15 +125,15 @@ export async function renderStatsModal(uid) {
       const count = filteredMulti.filter(r => r.rank === rank).length;
       const pct   = Math.round((count / total) * 100);
       const label = medals[i] ?? `#${rank}`;
-      return `<div class="smg-rank-chip ${rank <= 3 ? `smg-rank-${rank}` : 'smg-rank-other'}">
-        <span class="smg-rank-label">${label}</span>
-        <span class="smg-rank-pct">${pct}%</span>
+      return `<div class="smg-rank-chip ${rank <= 3 ? `smg-rank-${esc(rank)}` : 'smg-rank-other'}">
+        <span class="smg-rank-label">${esc(label)}</span>
+        <span class="smg-rank-pct">${esc(pct)}%</span>
       </div>`;
     }).join('');
     html += `
       <div class="stats-multi-grid">
-        <div class="smg-cell"><span class="smg-val">${total}</span><span class="smg-lbl">🎮 مباراة</span></div>
-        <div class="smg-cell"><span class="smg-val">⌀ ${avgScore}</span><span class="smg-lbl">متوسط النقاط</span></div>
+        <div class="smg-cell"><span class="smg-val">${esc(total)}</span><span class="smg-lbl">🎮 مباراة</span></div>
+        <div class="smg-cell"><span class="smg-val">⌀ ${esc(avgScore)}</span><span class="smg-lbl">متوسط النقاط</span></div>
       </div>
       <div class="smg-ranks-row">${rankChips}</div>`;
   }

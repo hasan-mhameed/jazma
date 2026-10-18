@@ -3,7 +3,7 @@
 
 import { getDatabase, ref, get, set }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1792313787";
+import { currentUser } from "./auth.js?v=1792364320";
 
 const db = getDatabase();
 
@@ -81,7 +81,7 @@ export async function checkAchievements(matchData, allStats, historyCount) {
     const uniqueOpponents = new Set(
       histMatches
         .filter(m => m.vs && m.mode !== 'ai')
-        .map(m => m.vs.toLowerCase().trim())
+        .map(m => String(m.vs).toLowerCase().trim())   // v36.0: اسم الخصم يكتبه هو — قد لا يكون نصاً
     );
     if (uniqueOpponents.size >= 3) await tryUnlock('social_3');
   }

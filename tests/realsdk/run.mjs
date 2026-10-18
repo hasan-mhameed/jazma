@@ -2,11 +2,13 @@
 // المحاكي (tests/sim) يختبر منطق اللعبة كله لكن بقاعدة بيانات مبسّطة؛ هنا نختبر ما لا يراه:
 // سلوك الحزمة الداخلي — المعاملة تُلغى بكتابة محلية على مسارها أو بتطبيق أوامر الانقطاع محلياً لحظة
 // الانقطاع، والإلغاء على مسار يشمل ما تحته، والكتابات تنتظر عودة الشبكة. (أُضيفت في مراجعة v35.7 الثانية)
+// ومنذ v36.0: auth.js الحقيقي (التسجيل بإيميل) فوق وسيط يضيف زمن الشبكة — ترتيب الحزمة للعمليات المعلّقة عند أول اتصال.
 // التشغيل: cd tests/realsdk && npm install && npm test
-// فحص الطفرات: JAZAM_FIREBASE_JS=<نسخة قديمة من firebase.js> npm test  (يجب أن تفشل)
+// فحص الطفرات: JAZAM_FIREBASE_JS=<نسخة قديمة من firebase.js> npm test  (يجب أن تفشل) — وكذلك JAZAM_INVITE_JS وJAZAM_AUTH_JS
 import { pathToFileURL } from 'node:url';
 import { FakeRTDB } from './fakertdb.mjs';
-import { gen, genInvite } from './gen.mjs';
+import { gen, genInvite, genAuth } from './gen.mjs';
+import net from 'node:net';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const results = [];
@@ -726,13 +728,60 @@ async function inviteConditionalRemovals() {
   S.close();
 }
 
+// وسيط TCP يضيف تأخيراً ثابتاً في الاتجاهين (زمن الرحلة)، ومدة تجهيز قبل أول بايت (DNS + TCP + TLS) — لنمذجة الجوال
+function latencyProxy(targetPort, oneWayMs, setupMs = 0) {
+  const srv = net.createServer(c => {
+    const s = net.connect(targetPort, 'localhost');
+    const t0 = Date.now();
+    const pipe = (from, to) => from.on('data', d => setTimeout(() => { if (!to.destroyed) to.write(d); }, Math.max(oneWayMs, setupMs - (Date.now() - t0) + oneWayMs)));
+    pipe(c, s); pipe(s, c);
+    c.on('error', () => {}); s.on('error', () => {});
+    c.on('close', () => s.destroy()); s.on('close', () => c.destroy());
+  });
+  return new Promise(r => srv.listen(0, () => r({ port: srv.address().port, close: () => srv.close() })));
+}
+
+// v36.0 (الخطوة 1.11، مراجعة 1.11 الثالثة): التسجيل بإيميل بـ auth.js الحقيقي والحزمة الحقيقية على شبكات بأزمنة مختلفة.
+// أول دخول = اتصال بارد (لا طلبات قبله)؛ والحزمة ترسل الكتابات المعلّقة قبل القراءات المعلّقة عند الاتصال، فكتابة
+// الاسم وحده بعد updateProfile كانت تسبق قراءة "هل الملف موجود؟" فيبقى الملف ناقصاً بلا uid (لا يصله طلب صداقة).
+// المطلوب في كل الأزمنة: ملف كامل (uid/joinedAt/stats) واسمه ما كتبه — لا "لاعب".
+async function registrationProfile() {
+  const r = suite('التسجيل بإيميل (auth.js الحقيقي): ملف كامل باسمه على كل شبكة — بارد/دافئ، جوال/مكتب');
+  const profiles = [
+    ['آلية: الاسم يصل فور القراءات', { warm: false, oneWayMs: 5, setupMs: 0, upd: 0 }],
+    ['4G: رحلة 80، تجهيز 220، الاسم 230', { warm: false, oneWayMs: 40, setupMs: 220, upd: 230 }],
+    ['3G: رحلة 200، تجهيز 550، الاسم 400', { warm: false, oneWayMs: 100, setupMs: 550, upd: 400 }],
+    ['مكتب: رحلة 30، تجهيز 80، الاسم 180', { warm: false, oneWayMs: 15, setupMs: 80, upd: 180 }],
+    ['اتصال دافئ، 4G', { warm: true, oneWayMs: 40, setupMs: 220, upd: 230 }],
+    ['اتصال دافئ، قراءات سريعة، الاسم بطيء 600', { warm: true, oneWayMs: 5, setupMs: 0, upd: 600 }],
+  ];
+  let i = 0;
+  for (const [label, p] of profiles) {
+    const S = new FakeRTDB(); const port = await S.listen();
+    const P = await latencyProxy(port, p.oneWayMs, p.setupMs);
+    const A = await import(pathToFileURL(genAuth('R' + (++i), P.port)).href);
+    A.onUserChange(() => {}); A.onUserChange(() => {});          // كالتطبيق: main.js وpresence.js
+    await wait(20);
+    if (p.warm) await A.getUserProfile('warmup');               // شيء فتح الاتصال قبل التسجيل
+    globalThis.__UPDATE_PROFILE_MS = p.upd;
+    const email = `sara${i}@x.com`, uid = 'uid_' + email.replace(/\W/g, '_');
+    await A.registerWithEmail('سارة', email, 'Aa1!aaaa');
+    await wait(Math.max(600, 4 * (2 * p.oneWayMs) + p.setupMs + 200));
+    const prof = S.getAt(`users/${uid}`) || {};
+    r.ok(prof.uid === uid && prof.joinedAt > 0 && !!prof.stats, `${label}: الملف ناقص [${Object.keys(prof).sort().join(', ')}]`);
+    r.ok(prof.name === 'سارة', `${label}: الاسم ${JSON.stringify(prof.name)} (المطلوب سارة)`);
+    P.close(); S.close();
+  }
+  globalThis.__UPDATE_PROFILE_MS = 0;
+}
+
 const all = [offlineExitThenReconnect, blipDuringWithdraw, onlineExit, creatorStamp, timeoutDuringBlip,
   secondExitClick, dropBeforeStartAcks, quietLeaveDuringDrop, spectatorLeaveDuringDrop,
   duoTwoJoiners, duoHostCancelAlone, duoCancelAfterJoin, duoCancelJoinSimultaneous, duoCancelOffline,
   duoCodeTwoJoiners, duoHostGoneAtJoin,
   duoCancelThenClose, duoJoinAckLost, duoCodeJoinAckLost, duoCreateBlip, duoAbortRetried, duoCancelDuringReopen,
   duoHostBlipRestores, duoRestoreKeepsGuestOut, duoEvictedGuestOp, duoOrphanNodeRestores, duoCancelStrayFinished,
-  inviteConditionalRemovals];
+  inviteConditionalRemovals, registrationProfile];
 // ONLY=اسم1,اسم2 npm test — تشغيل فحوص بعينها (للتطوير وفحص الطفرات)
 const pick = process.env.ONLY ? all.filter(f => process.env.ONLY.split(',').includes(f.name)) : all;
 console.log('\n🔬 firebase.js بحزمة Firebase الحقيقية');

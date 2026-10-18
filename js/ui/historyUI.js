@@ -1,8 +1,9 @@
 // 📄 ui/historyUI.js
 // عرض تاريخ المباريات مع فلتر وpagination
 
-import { fetchHistory } from "../history.js?v=1792313787";
-import { getCurrentUser } from "../auth.js?v=1792313787";
+import { fetchHistory } from "../history.js?v=1792364320";
+import { getCurrentUser } from "../auth.js?v=1792364320";
+import { esc } from "./safeText.js?v=1792364320";
 
 let _filter   = 'all';   // 'all' | 'ai' | 'local' | 'online' | 'multi'
 let _lastKey  = null;
@@ -44,7 +45,9 @@ function modeName(mode) {
 // ── بناء بطاقة مباراة ────────────────────────────────────────────
 function buildMatchCard(match) {
   const card = document.createElement('div');
-  card.className = `history-card result-${match.result}`;
+  // v36.0 (مراجعة 1.10): النتيجة من القاعدة — صنف معروف فقط (قيمة يكتبها غيرنا لا تضيف أصنافاً للبطاقة)
+  const resultClass = match.result === 'win' ? 'win' : match.result === 'loss' ? 'loss' : 'draw';
+  card.className = `history-card result-${resultClass}`;
 
   const isMulti = match.mode === 'multi';
   const score   = isMulti
@@ -55,19 +58,20 @@ function buildMatchCard(match) {
     ? `vs ${match.vs}`
     : modeName(match.mode);
 
+  // v36.0 (1.10): اسم الخصم (يكتبه هو) وكل حقل محفوظ — نص لا شيفرة
   card.innerHTML = `
-    <div class="hc-result">${resultIcon(match.result)}</div>
+    <div class="hc-result">${esc(resultIcon(match.result))}</div>
     <div class="hc-info">
-      <div class="hc-vs">${vsText}</div>
+      <div class="hc-vs">${esc(vsText)}</div>
       <div class="hc-meta">
-        <span>${modeName(match.mode)}</span>
-        <span>${match.grid}</span>
-        ${match.duration ? `<span>${formatDuration(match.duration)}</span>` : ''}
+        <span>${esc(modeName(match.mode))}</span>
+        <span>${esc(match.grid)}</span>
+        ${match.duration ? `<span>${esc(formatDuration(match.duration))}</span>` : ''}
       </div>
     </div>
     <div class="hc-right">
-      <div class="hc-score">${score}</div>
-      <div class="hc-time">${formatTime(match.ts)}</div>
+      <div class="hc-score">${esc(score)}</div>
+      <div class="hc-time">${esc(formatTime(match.ts))}</div>
     </div>`;
 
   return card;

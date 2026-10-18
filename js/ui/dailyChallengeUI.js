@@ -1,11 +1,12 @@
 // 📄 ui/dailyChallengeUI.js
 import { getDailyConfig, difficultyName, hasPlayedToday,
-         saveDailyResult, getDailyLeaderboard, todayStr } from "../dailyChallenge.js?v=1792313787";
-import { config }      from "../config/config.js?v=1792313787";
-import { AIPlayer }    from "../ai/aiPlayer.js?v=1792313787";
-import { addXP, calcXP } from "../xp.js?v=1792313787";
-import { showXPGain }  from "./xpUI.js?v=1792313787";
-import { getCurrentUser } from "../auth.js?v=1792313787";
+         saveDailyResult, getDailyLeaderboard, todayStr } from "../dailyChallenge.js?v=1792364320";
+import { config }      from "../config/config.js?v=1792364320";
+import { AIPlayer }    from "../ai/aiPlayer.js?v=1792364320";
+import { addXP, calcXP } from "../xp.js?v=1792364320";
+import { showXPGain }  from "./xpUI.js?v=1792364320";
+import { getCurrentUser } from "../auth.js?v=1792364320";
+import { esc } from "./safeText.js?v=1792364320";
 
 let _dailyActive    = false;
 let _dailyStartTime = null;
@@ -85,11 +86,11 @@ async function renderDailyModal() {
 
   if (info) {
     info.innerHTML = `
-      <div class="daily-date">📅 ${new Date().toLocaleDateString('ar',
-        { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+      <div class="daily-date">📅 ${esc(new Date().toLocaleDateString('ar',
+        { weekday: 'long', day: 'numeric', month: 'long' }))}</div>
       <div class="daily-details">
-        <span>🗺️ ${gridLabel(cfg.gridSize)}</span>
-        <span>⚡ ${difficultyName(cfg.difficulty)}</span>
+        <span>🗺️ ${esc(gridLabel(cfg.gridSize))}</span>
+        <span>⚡ ${esc(difficultyName(cfg.difficulty))}</span>
       </div>
       ${played ? '<div class="daily-played">✅ لعبت التحدي اليوم!</div>' : ''}`;
   }
@@ -107,12 +108,13 @@ async function renderDailyModal() {
       lbList.innerHTML = '<p class="history-empty">لا يوجد فائزون بعد — كن الأول!</p>';
     } else {
       const medals = ['🥇', '🥈', '🥉'];
+      // v36.0 (1.10): كل لاعب يكتب نتيجته بنفسه (الاسم والنقاط والمدة) فتظهر عند الجميع — نص لا شيفرة
       lbList.innerHTML = leaders.map((p, i) => `
         <div class="daily-lb-row ${p.uid === getCurrentUser()?.uid ? 'daily-lb-me' : ''}">
-          <span class="daily-lb-rank">${medals[i] || `#${i + 1}`}</span>
-          <span class="daily-lb-name">${p.name}</span>
-          <span class="daily-lb-score">🏆 ${p.myScore}</span>
-          <span class="daily-lb-time">⏱️ ${Math.floor(p.duration / 60)}:${String(p.duration % 60).padStart(2, '0')}</span>
+          <span class="daily-lb-rank">${esc(medals[i] || `#${i + 1}`)}</span>
+          <span class="daily-lb-name">${esc(p.name)}</span>
+          <span class="daily-lb-score">🏆 ${esc(p.myScore)}</span>
+          <span class="daily-lb-time">⏱️ ${esc(Math.floor(p.duration / 60))}:${esc(String(p.duration % 60).padStart(2, '0'))}</span>
         </div>`).join('');
     }
   }

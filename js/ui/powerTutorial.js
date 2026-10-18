@@ -4,9 +4,10 @@
 
 import { getDatabase, ref, get, update }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "../auth.js?v=1792313787";
-import { POWERS } from "../core/powers.js?v=1792313787";
-import { getPowerIcon } from "./powerIcons.js?v=1792313787";
+import { currentUser } from "../auth.js?v=1792364320";
+import { POWERS } from "../core/powers.js?v=1792364320";
+import { getPowerIcon } from "./powerIcons.js?v=1792364320";
+import { esc } from "./safeText.js?v=1792364320";
 
 const db = getDatabase();
 
@@ -59,8 +60,8 @@ function showCard(power, type) {
   card.innerHTML = `
     <div class="ptc-badge">قدرة جديدة!</div>
     <div class="ptc-icon">${getPowerIcon(type, power.icon)}</div>
-    <div class="ptc-name">${power.name}</div>
-    <div class="ptc-desc">${power.desc}</div>
+    <div class="ptc-name">${esc(power.name)}</div>
+    <div class="ptc-desc">${esc(power.desc)}</div>
     <button class="ptc-btn">فهمت 👍</button>
   `;
 

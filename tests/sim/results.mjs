@@ -118,7 +118,8 @@ const STUBS = {
   'wallet.js': `export async function commitMatchCoins() { globalThis.__calls.push(['coins']); return { earned: 0, total: 0 }; }
     export function getMatchCoins() { return globalThis.__matchCoins || 0; }`,
 };
-const REAL = { 'gameEnd.js': '/js/ui/gameEnd.js', 'matchResult.js': '/js/core/matchResult.js' };
+const REAL = { 'gameEnd.js': '/js/ui/gameEnd.js', 'matchResult.js': '/js/core/matchResult.js',
+  'safeText.js': '/js/ui/safeText.js' };   // تهريب النصوص الحقيقي (v36.0 — 1.10)
 
 // بيئة معزولة واحدة (يمكن استدعاء أكثر من دالة فيها بالتتابع — لفحص "مرة واحدة لكل مباراة")
 export async function loadGameEnd({ user = { uid: 'uid_me' } } = {}) {

@@ -1,13 +1,7 @@
 // 📄 ui/leaderboardUI.js
 // لوحة المتصدرين
-import { getLeaderboard } from "../leaderboard.js?v=1792313787";
-
-function asText(v, fallback = "") { return String(v ?? fallback); }
-function firstInitial(name) { return asText(name, "?").trim().charAt(0).toUpperCase() || "?"; }
-function safeImageUrl(url) {
-  try { const p = new URL(asText(url), location.href); return p.protocol === "https:" || p.protocol === "http:"; }
-  catch { return false; }
-}
+import { getLeaderboard } from "../leaderboard.js?v=1792364320";
+import { asText, firstInitial, safeImageSrc } from "./safeText.js?v=1792364320";
 
 export function initLeaderboardUI() {
   const leaderboardBtn      = document.getElementById("leaderboard-btn");
@@ -34,10 +28,12 @@ export function initLeaderboardUI() {
       rank.textContent = medals[i] || String(i + 1);
 
       let avatar;
-      if (p.photo && safeImageUrl(p.photo)) {
+      const photo = safeImageSrc(p.photo);      // v36.0: صور حسابات Google فقط، وبلا referrer
+      if (photo) {
         avatar = document.createElement("img");
         avatar.className = "leaderboard-avatar";
-        avatar.src = p.photo; avatar.alt = asText(p.name, "لاعب");
+        avatar.referrerPolicy = "no-referrer";
+        avatar.src = photo; avatar.alt = asText(p.name, "لاعب");
       } else {
         avatar = document.createElement("div");
         avatar.className = "leaderboard-avatar-placeholder";

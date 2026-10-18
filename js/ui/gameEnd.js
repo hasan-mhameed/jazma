@@ -2,17 +2,18 @@
 // النهايات: اكتمال اللوحة، نفاد بنك الوقت، انسحاب/انقطاع الخصوم (نافذة النتيجة + التسجيل)،
 // والانسحاب بالزر (تسجيل الخسارة فقط — recordForfeit)، والخروج من مباراة جماعية جارية
 // (نفاد الوقت أو الانقطاع بلا عودة — recordElimination، v35.7).
-import { audioManager } from "../audio/audioManager.js?v=1792313787";
+import { audioManager } from "../audio/audioManager.js?v=1792364320";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1792313787";
-import { saveMatch } from "../history.js?v=1792313787";
-import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1792313787";
-import { showNewAchievements } from "./achievementsUI.js?v=1792313787";
-import { calcXP, addXP } from "../xp.js?v=1792313787";
-import { showXPGain } from "./xpUI.js?v=1792313787";
-import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1792313787";
-import { commitMatchCoins, getMatchCoins } from "../core/wallet.js?v=1792313787";
-import { computeMatchResult, multiHistoryResult, getMyNum, OUT_LABELS } from "../core/matchResult.js?v=1792313787";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1792364320";
+import { saveMatch } from "../history.js?v=1792364320";
+import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1792364320";
+import { showNewAchievements } from "./achievementsUI.js?v=1792364320";
+import { calcXP, addXP } from "../xp.js?v=1792364320";
+import { showXPGain } from "./xpUI.js?v=1792364320";
+import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1792364320";
+import { commitMatchCoins, getMatchCoins } from "../core/wallet.js?v=1792364320";
+import { computeMatchResult, multiHistoryResult, getMyNum, OUT_LABELS } from "../core/matchResult.js?v=1792364320";
+import { esc } from "./safeText.js?v=1792364320";
 
 export let _matchStartTime = Date.now();
 // مرة واحدة لكل مباراة: نهايتان متزامنتان (مثلاً آخر حركة + خروج خصم) لا تسجّلان مرتين
@@ -62,7 +63,8 @@ async function doRecord(cfg, R, scores, { silent = false, startedAt, daily }) {
 
   // اسم خصمي في مباراة الاثنين أونلاين (ثنائي، أو غرفة جماعية بقي فيها اثنان)
   const oppNum  = R.opponent ? R.opponent.num : null;
-  const oppName = (oppNum != null && cfg.onlinePlayerNames?.[oppNum]) || "الخصم";
+  // v36.0: الاسم من الغرفة (يكتبه الخصم) — يُحفظ نصاً دائماً في السجل والإحصائيات
+  const oppName = (oppNum != null && String(cfg.onlinePlayerNames?.[oppNum] ?? "").trim()) || "الخصم";
 
   if (R.category === 'multi') {
     // ── متعدد اللاعبين (3 فأكثر لعبوا فعلاً): مركزي أنا ونقاطي ──
@@ -336,9 +338,10 @@ export async function endGame(cfg, scores, forced = false, loserPlayer = null, e
       row.style.opacity      = isExited ? "0.6" : "1";
       // شارة توضّح خروج اللاعب (نفد وقته/انسحب/انقطع) — النقاط تبقى ظاهرة لكن مؤطّرة
       const badge = isExited
-        ? ` <span style="font-size:0.8rem;background:rgba(248,113,113,0.2);color:#fca5a5;padding:1px 7px;border-radius:8px;border:1px solid #f8717155;">${isExited}</span>`
+        ? ` <span style="font-size:0.8rem;background:rgba(248,113,113,0.2);color:#fca5a5;padding:1px 7px;border-radius:8px;border:1px solid #f8717155;">${esc(isExited)}</span>`
         : "";
-      row.innerHTML = `${p.rank}. ${playerName(p.player)}: ${p.score} نقطة${badge}`;
+      // v36.0 (1.10): أسماء لاعبي الأونلاين يكتبها أصحابها — نص لا شيفرة
+      row.innerHTML = `${esc(p.rank)}. ${esc(playerName(p.player))}: ${esc(p.score)} نقطة${badge}`;
       winnerDetails.appendChild(row);
     });
 
@@ -365,22 +368,23 @@ export async function endGame(cfg, scores, forced = false, loserPlayer = null, e
         const medals    = ['🥇','🥈','🥉'];
         const rankEmoji = medals[myRank - 1] ?? `#${myRank}`;
         headToHeadEl.innerHTML = `
-          <div class="h2h-label">إحصائياتك — ${players} لاعبين</div>
+          <div class="h2h-label">إحصائياتك — ${esc(players)} لاعبين</div>
           <div class="h2h-multi-row">
-            <span class="hm-stat"><span class="hm-val">${rankEmoji}</span><span class="hm-lbl">هذه الجولة</span></span>
-            <span class="hm-stat"><span class="hm-val hm-gold">${winPct}%</span><span class="hm-lbl">نسبة الأول</span></span>
-            <span class="hm-stat"><span class="hm-val">${avgScore}</span><span class="hm-lbl">متوسط النقاط</span></span>
-            <span class="hm-stat"><span class="hm-val">${total}</span><span class="hm-lbl">مباراة</span></span>
+            <span class="hm-stat"><span class="hm-val">${esc(rankEmoji)}</span><span class="hm-lbl">هذه الجولة</span></span>
+            <span class="hm-stat"><span class="hm-val hm-gold">${esc(winPct)}%</span><span class="hm-lbl">نسبة الأول</span></span>
+            <span class="hm-stat"><span class="hm-val">${esc(avgScore)}</span><span class="hm-lbl">متوسط النقاط</span></span>
+            <span class="hm-stat"><span class="hm-val">${esc(total)}</span><span class="hm-lbl">مباراة</span></span>
           </div>`;
       } else {
         const { myW, myL, myD, label } = headToHead;
+        // v36.0 (1.10): label فيه اسم الخصم ("أنت vs ...") — نص لا شيفرة
         headToHeadEl.innerHTML = `
-          <div class="h2h-label">${label}</div>
+          <div class="h2h-label">${esc(label)}</div>
           <div class="h2h-score">
-            <span class="h2h-win">🏆 ${myW}</span>
+            <span class="h2h-win">🏆 ${esc(myW)}</span>
             <span class="h2h-sep">–</span>
-            <span class="h2h-loss">💔 ${myL}</span>
-            ${myD > 0 ? `<span class="h2h-sep">·</span><span class="h2h-draw">🤝 ${myD}</span>` : ''}
+            <span class="h2h-loss">💔 ${esc(myL)}</span>
+            ${myD > 0 ? `<span class="h2h-sep">·</span><span class="h2h-draw">🤝 ${esc(myD)}</span>` : ''}
           </div>`;
       }
       headToHeadEl.classList.remove("hidden");

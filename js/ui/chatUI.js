@@ -1,9 +1,11 @@
 // 📄 ui/chatUI.js
 // المحادثة بين الأصدقاء + الإشعارات
-import { sendMessage, listenMessages, listenUnread, markAsRead, markDelivered, markRead } from "../chat.js?v=1792313787";
-import { getCurrentUser } from "../auth.js?v=1792313787";
-import { audioManager } from "../audio/audioManager.js?v=1792313787";
-import { playNotifSound } from "../audio/notif.js?v=1792313787";
+import { sendMessage, listenMessages, listenUnread, markAsRead, markDelivered, markRead } from "../chat.js?v=1792364320";
+import { getCurrentUser } from "../auth.js?v=1792364320";
+import { audioManager } from "../audio/audioManager.js?v=1792364320";
+import { playNotifSound } from "../audio/notif.js?v=1792364320";
+import { asText, firstInitial } from "./safeText.js?v=1792364320";
+import { entriesWithKey } from "../friends.js?v=1792364320";
 import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const EMOJIS = ["😊","😂","❤️","👍","🔥","🎮","😍","🤣","😭","💯",
@@ -18,7 +20,6 @@ const _lastSeenMsg    = new Map();
 const _notifReady     = new Set();
 const db              = getDatabase();
 
-function asText(v, fallback = "") { return String(v ?? fallback); }
 
 export function initChatUI({ onInviteFromChat }) {
   const emojiPicker = document.getElementById("emoji-picker");
@@ -66,8 +67,9 @@ export function openChat(friend) {
   const myUid = getCurrentUser()?.uid;
   // مسح الـ unread badge — نستخدم custom event بدل dynamic import
   document.dispatchEvent(new CustomEvent('chat:opened', { detail: friend.uid }));
-  document.getElementById("chat-with-name").textContent   = friend.name;
-  document.getElementById("chat-with-avatar").textContent = friend.name?.[0]?.toUpperCase() || "?";
+  // v36.0 (مراجعة 1.10): اسم ليس نصاً (يكتبه غيرنا) لا يكسر فتح المحادثة
+  document.getElementById("chat-with-name").textContent   = asText(friend.name, "لاعب");
+  document.getElementById("chat-with-avatar").textContent = firstInitial(friend.name);
   document.getElementById("chat-messages").innerHTML      = "";
   document.getElementById("chat-invite-btn").onclick = () => {
     document.getElementById("chat-panel").classList.add("hidden");
@@ -120,7 +122,8 @@ export function initChatNotifications() {
   if (!myUid) return;
   onValue(ref(db, `users/${myUid}/friends`), snap => {
     if (!snap.exists()) return;
-    Object.values(snap.val()).forEach(friend => {
+    // v36.0: المعرّف من مفتاح المدخل لا من حقل uid داخله (يكتبه الطرف الآخر)
+    entriesWithKey(snap.val()).forEach(friend => {
       if (_notifUnsubs.has(friend.uid)) return;
       const unsub = listenMessages(friend.uid, msgs => {
         const lastMsg = msgs[msgs.length - 1];

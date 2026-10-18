@@ -5,7 +5,7 @@ import { getDatabase, ref, get, update, onValue, remove }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getCurrentUser } from "./auth.js?v=1792313787";
+import { getCurrentUser } from "./auth.js?v=1792364320";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -26,9 +26,13 @@ export async function searchUsers(query) {
   const results = [];
   snap.forEach(child => {
     const user = child.val();
-    if (user.uid === getCurrentUser()?.uid) return; // استثني نفسك
-    if (user.name?.toLowerCase().includes(query.toLowerCase())) {
-      results.push(user);
+    if (!user || typeof user !== "object") return;
+    // v36.0: المعرّف هو مفتاح الملف — لا حقل uid بداخله (يكتبه صاحبه، وقد يغيب في ملف ناقص فيذهب الطلب لـ users/undefined)
+    const uid = child.key;
+    if (uid === getCurrentUser()?.uid) return; // استثني نفسك
+    // v36.0: الاسم يكتبه صاحبه — قد لا يكون نصاً (رقم/مصفوفة) فكان toLowerCase يكسر البحث لكل المستخدمين
+    if (String(user.name ?? "").toLowerCase().includes(String(query).toLowerCase())) {
+      results.push({ ...user, uid });
     }
   });
   return results.slice(0, 10);
@@ -44,11 +48,11 @@ export async function sendFriendRequest(toUid) {
   if (existing.exists()) return;
 
   const fromProfile = await get(ref(db, `users/${fromUid}`));
-  const fromData    = fromProfile.val();
+  const fromData    = fromProfile.val() || {};   // v36.0: ملف ناقص/غائب لا يكسر الإرسال
 
   await update(ref(db, `users/${toUid}/friendRequests/${fromUid}`), {
     uid:  fromUid,
-    name: fromData.name,
+    name: fromData.name ?? "لاعب",
     photo: fromData.photo || "",
     sentAt: Date.now(),
   });
@@ -60,20 +64,22 @@ export async function acceptFriendRequest(fromUid) {
   if (!myUid) return;
 
   const fromSnap = await get(ref(db, `users/${fromUid}`));
+  // v36.0: طلب بلا ملف لصاحبه (مفتاح وهمي أو حساب حُذف) طلبٌ بائد — يُحذف ولا تُكتب صداقة (مراجعة v36.0 الخامسة)
+  if (!fromSnap.exists()) { await remove(ref(db, `users/${myUid}/friendRequests/${fromUid}`)); return; }
   const mySnap   = await get(ref(db, `users/${myUid}`));
-  const fromData = fromSnap.val();
-  const myData   = mySnap.val();
+  const fromData = fromSnap.val() || {};   // v36.0: ملف ناقص/غائب (طلب بمفتاح لا ملف له) لا يكسر القبول
+  const myData   = mySnap.val() || {};
 
   // أضف كل واحد لقائمة أصدقاء الثاني
   await update(ref(db, `users/${myUid}/friends/${fromUid}`), {
     uid:   fromUid,
-    name:  fromData.name,
+    name:  fromData.name ?? "لاعب",
     photo: fromData.photo || "",
     since: Date.now(),
   });
   await update(ref(db, `users/${fromUid}/friends/${myUid}`), {
     uid:   myUid,
-    name:  myData.name,
+    name:  myData.name ?? "لاعب",
     photo: myData.photo || "",
     since: Date.now(),
   });
@@ -97,13 +103,22 @@ export async function removeFriend(friendUid) {
   await remove(ref(db, `users/${friendUid}/friends/${myUid}`));
 }
 
+// v36.0: كل مدخل (صديق أو طلب صداقة) قد يكتبه الطرف الآخر — المعرّف من مفتاحه، لا من حقل uid داخله. كان طلب مخزَّن
+// تحت مفتاح فلان ويدّعي uid غيره يجعل "قبول" يصادق شخصاً ثالثاً لم يطلب، وطلب بلا uid لا يُرفض أبداً (مراجعة v36.0 الرابعة)
+export function entriesWithKey(val) {
+  if (!val || typeof val !== "object") return [];
+  return Object.entries(val)
+    .filter(([, v]) => v && typeof v === "object")
+    .map(([key, v]) => ({ ...v, uid: key }));
+}
+
 // ─── جلب قائمة الأصدقاء ──────────────────────────────────────
 export async function getFriends() {
   const myUid = getCurrentUser()?.uid;
   if (!myUid) return [];
   const snap = await get(ref(db, `users/${myUid}/friends`));
   if (!snap.exists()) return [];
-  return Object.values(snap.val());
+  return entriesWithKey(snap.val());
 }
 
 // ─── الاستماع لطلبات الصداقة الواردة ────────────────────────
@@ -111,7 +126,7 @@ export function listenFriendRequests(cb) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid) return () => {};
   const unsub = onValue(ref(db, `users/${myUid}/friendRequests`), (snap) => {
-    const requests = snap.exists() ? Object.values(snap.val()) : [];
+    const requests = snap.exists() ? entriesWithKey(snap.val()) : [];
     cb(requests);
   });
   return unsub;
@@ -122,7 +137,7 @@ export function listenFriends(cb) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid) return () => {};
   const unsub = onValue(ref(db, `users/${myUid}/friends`), (snap) => {
-    const friends = snap.exists() ? Object.values(snap.val()) : [];
+    const friends = snap.exists() ? entriesWithKey(snap.val()) : [];
     cb(friends);
   });
   return unsub;

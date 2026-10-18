@@ -1,10 +1,11 @@
 // 📄 ui/gameSetup.js
 // شاشة إعداد اللعبة + بدء اللعبة المحلية
 // تصميم مرن: الأحجام/اللاعبين/الأوضاع تُبنى من مصفوفات (سهلة التعديل)
-import { config } from "../config/config.js?v=1792313787";
-import { AIPlayer } from "../ai/aiPlayer.js?v=1792313787";
-import { getCurrentUser } from "../auth.js?v=1792313787";
-import { state } from "../core/state.js?v=1792313787";
+import { config } from "../config/config.js?v=1792364320";
+import { AIPlayer } from "../ai/aiPlayer.js?v=1792364320";
+import { getCurrentUser } from "../auth.js?v=1792364320";
+import { state } from "../core/state.js?v=1792364320";
+import { esc } from "./safeText.js?v=1792364320";
 
 export let aiPlayer = null;
 
@@ -114,10 +115,10 @@ export function initGameSetup({ onGameStart, onOnlineRequested }) {
       const card = document.createElement("button");
       card.className = "mode-card" + (m.value === _mode ? " active" : "");
       card.innerHTML =
-        '<span class="mc-icon">' + m.icon + '</span>' +
+        '<span class="mc-icon">' + esc(m.icon) + '</span>' +
         '<span class="mc-text">' +
-          '<span class="mc-name">' + m.name + '</span>' +
-          '<span class="mc-desc">' + m.desc + '</span>' +
+          '<span class="mc-name">' + esc(m.name) + '</span>' +
+          '<span class="mc-desc">' + esc(m.desc) + '</span>' +
         '</span>' +
         '<span class="mc-check">✓</span>';
       card.addEventListener("click", (e) => {

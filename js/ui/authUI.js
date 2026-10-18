@@ -1,7 +1,8 @@
 // 📄 ui/authUI.js
 // واجهة تسجيل الدخول والتسجيل
 import { signInWithGoogle, logout, registerWithEmail, signInWithEmail,
-         loginAsGuest, upgradeGuestWithGoogle, upgradeGuestWithEmail, isGuest } from "../auth.js?v=1792313787";
+         loginAsGuest, upgradeGuestWithGoogle, upgradeGuestWithEmail, isGuest } from "../auth.js?v=1792364320";
+import { freshPage } from "../session.js?v=1792364320";
 
 function getAuthError(code) {
   const errors = {
@@ -69,6 +70,9 @@ export function initAuthUI({ beforeLogout } = {}) {
     emailRegisterBtn.disabled = true;
     try {
       await registerWithEmail(name, email, password);
+      // v36.0 (1.11): الشريط بُني لحظة الدخول — قبل أن يصل الاسم للحساب — فنعرضه الآن (كان "لاعب" حتى التحديث)
+      const userNameEl = document.getElementById("user-name");
+      if (userNameEl) userNameEl.textContent = name;
     } catch (e) {
       showAuthError(getAuthError(e.code));
       emailRegisterBtn.disabled = false;
@@ -173,11 +177,14 @@ function showUpgradeModal() {
   document.getElementById("upgrade-close").onclick = () => modal.remove();
 
   // Google
+  // v36.0 (1.11): بعد الترقية صفحة جديدة — المعرّف نفسه فلا ينطلق تغيّر الدخول، وكانت تبقى واجهة الضيف
+  // (الأصدقاء والأونلاين مخفية) حتى يحدّث الصفحة بنفسه
   document.getElementById("upgrade-google-btn").onclick = async () => {
     try {
       await upgradeGuestWithGoogle();
       modal.remove();
       document.getElementById("guest-upgrade-banner")?.classList.add("hidden");
+      freshPage();
     } catch (e) {
       document.getElementById("upgrade-error").textContent = e.message;
       document.getElementById("upgrade-error").classList.remove("hidden");
@@ -197,6 +204,7 @@ function showUpgradeModal() {
       await upgradeGuestWithEmail(name, email, password);
       modal.remove();
       document.getElementById("guest-upgrade-banner")?.classList.add("hidden");
+      freshPage();                // v36.0 (1.11): كترقية Google أعلاه
     } catch (e) {
       errEl.textContent = e.message;
       errEl.classList.remove("hidden");

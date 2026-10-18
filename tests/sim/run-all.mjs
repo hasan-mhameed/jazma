@@ -3,6 +3,7 @@
 import * as S from './scenarios.mjs';
 import * as RS from './results.mjs';
 import * as IV from './invites.mjs';
+import * as TS from './textsafety.mjs';
 
 const N = Number(process.argv.find(a => /^\d+$/.test(a)) || 100);
 const verbose = process.argv.includes('-v');
@@ -37,6 +38,7 @@ const sections = [
     () => IV.inviteInviterBlip(verbose), () => IV.inviteExpires(verbose), () => IV.inviteOneAtATime(verbose),
     () => IV.inviteReviewFixes(verbose), () => IV.inviteDuringPendingOp(verbose)]],
   ['🟢 الحضور', [() => IV.presenceFollowsMatch(verbose)]],
+  ['🔤 أمان النصوص', [() => TS.namesInSearchAndVote(verbose), () => TS.namesInCodeLobby(verbose), () => TS.roomMaxIsText(verbose)]],
 ];
 
 for (const [title, runs] of sections) {

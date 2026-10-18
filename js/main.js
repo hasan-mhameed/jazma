@@ -1,38 +1,40 @@
 // 📄 main.js — v13.9
 // Bootstrap فقط — يربط كل الـ modules
 
-import { config }                              from "./config/config.js?v=1792313787";
-import { state }                               from "./core/state.js?v=1792313787";
-import { startBoard, updateScoreboard, resetState } from "./board.js?v=1792313787";
-import { updateTurnUI }                        from "./ui/turnManager.js?v=1792313787";
-import { audioManager }                        from "./audio/audioManager.js?v=1792313787";
-import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1792313787";
-import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1792313787";
+import { config }                              from "./config/config.js?v=1792364320";
+import { state }                               from "./core/state.js?v=1792364320";
+import { startBoard, updateScoreboard, resetState } from "./board.js?v=1792364320";
+import { updateTurnUI }                        from "./ui/turnManager.js?v=1792364320";
+import { audioManager }                        from "./audio/audioManager.js?v=1792364320";
+import { onlineManager, cleanupOldRooms } from "./firebase.js?v=1792364320";
+import { onUserChange, getCurrentUser, getAllStats, isGuest } from "./auth.js?v=1792364320";
 
-import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1792313787";
-import { initPresence, setMyPresence } from "./presence.js?v=1792313787";
-import { initGameSetup }       from "./ui/gameSetup.js?v=1792313787";
-import { initTurnTimer, stopTurnTimer, startTurnTimer, TIME_BANKS, enableCentralClock, applyClockState } from "./ui/turnTimer.js?v=1792313787";
-import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator, leaveOnlineMatch, isOutOfMatch, noteMyExitPending } from "./ui/onlineGame.js?v=1792313787";
-import { initFriendsUI }       from "./ui/friendsUI.js?v=1792313787";
-import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1792313787";
-import { initInvites, resetInvites, startInvite, showInviteAlert, inviteEndText } from "./ui/inviteUI.js?v=1792313787";
-import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1792313787";
-import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1792313787";
-import { renderStatsModal }    from "./ui/statsModal.js?v=1792313787";
-import { initHistoryUI }       from "./ui/historyUI.js?v=1792313787";
-import { resetMatchTimer, endGame } from "./ui/gameEnd.js?v=1792313787";
-import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1792313787";
-import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1792313787";
-import { refreshCoinsBadge, getMatchCoins } from "./core/wallet.js?v=1792313787";
-import { loadLearnedPowers } from "./ui/powerTutorial.js?v=1792313787";
-import { initPowersUI, refreshInventory } from "./ui/powersUI.js?v=1792313787";
-import { POWERS, addPower } from "./core/powers.js?v=1792313787";
-import { spendCoins } from "./core/wallet.js?v=1792313787";
-import { extendTime, cutBank, getTimerMode, getBank } from "./ui/turnTimer.js?v=1792313787";
-import { activatePower, triggerAI, nextActivePlayer } from "./ui/boardRenderer.js?v=1792313787";
-import { initNavMenu }            from "./ui/navMenu.js?v=1792313787";
-import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1792313787";
+import { initAuthUI, initGuestUI }  from "./ui/authUI.js?v=1792364320";
+import { initPresence, setMyPresence } from "./presence.js?v=1792364320";
+import { initGameSetup }       from "./ui/gameSetup.js?v=1792364320";
+import { initTurnTimer, stopTurnTimer, startTurnTimer, TIME_BANKS, enableCentralClock, applyClockState } from "./ui/turnTimer.js?v=1792364320";
+import { initOnlineGame, launchOnlineGame, updateOnlineTurnIndicator, leaveOnlineMatch, isOutOfMatch, noteMyExitPending } from "./ui/onlineGame.js?v=1792364320";
+import { initFriendsUI }       from "./ui/friendsUI.js?v=1792364320";
+import { initLeaderboardUI }   from "./ui/leaderboardUI.js?v=1792364320";
+import { initInvites, resetInvites, startInvite, showInviteAlert, inviteEndText } from "./ui/inviteUI.js?v=1792364320";
+import { initChatUI, openChat, initChatNotifications } from "./ui/chatUI.js?v=1792364320";
+import { initMessagesUI, clearUnreadFor }              from "./ui/messagesUI.js?v=1792364320";
+import { renderStatsModal }    from "./ui/statsModal.js?v=1792364320";
+import { initHistoryUI }       from "./ui/historyUI.js?v=1792364320";
+import { resetMatchTimer, endGame } from "./ui/gameEnd.js?v=1792364320";
+import { initAchievementsUI }  from "./ui/achievementsUI.js?v=1792364320";
+import { initXPUI, refreshXPBar } from "./ui/xpUI.js?v=1792364320";
+import { refreshCoinsBadge, getMatchCoins } from "./core/wallet.js?v=1792364320";
+import { loadLearnedPowers } from "./ui/powerTutorial.js?v=1792364320";
+import { initPowersUI, refreshInventory } from "./ui/powersUI.js?v=1792364320";
+import { POWERS, addPower } from "./core/powers.js?v=1792364320";
+import { spendCoins } from "./core/wallet.js?v=1792364320";
+import { extendTime, cutBank, getTimerMode, getBank } from "./ui/turnTimer.js?v=1792364320";
+import { activatePower, triggerAI, nextActivePlayer } from "./ui/boardRenderer.js?v=1792364320";
+import { initNavMenu }            from "./ui/navMenu.js?v=1792364320";
+import { initDailyChallengeUI }  from "./ui/dailyChallengeUI.js?v=1792364320";
+import { safeImageSrc }          from "./ui/safeText.js?v=1792364320";
+import { sessionStep, freshPage } from "./session.js?v=1792364320";
 
 // ── رقم النسخة (للتأكد أي نسخة تعمل أثناء الاختبار) ──────────────
 // يُقرأ من رابط الملف نفسه (main.js?v=...) فيتحدّث تلقائياً مع كل إصدار
@@ -461,12 +463,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ── onUserChange ─────────────────────────────────────────────
   onUserChange(async user => {
+    // v36.0 (الخطوة 1.11): حساب واحد لكل تحميل صفحة — خروج (من الزر أو تبويب آخر أو انتهاء الجلسة) أو حساب
+    // آخر بعد بدء الجلسة = صفحة جديدة نظيفة، لا تهيئة ثانية فوق الأولى (دعوة تنتظر تُلغى قبلها)
+    const step = sessionStep(user);
+    if (step === "reload") { freshPage(() => resetInvites()); return; }
+    if (step === "same") return;
     if (user) {
       authScreen.classList.add("hidden");
       userBar.classList.remove("hidden");
       setupScreen.classList.remove("hidden");
-      userPhoto.src = user.photoURL || "";
-      userPhoto.style.display = user.photoURL ? "block" : "none";
+      const myPhoto = safeImageSrc(user.photoURL);   // v36.0: صور حسابات Google فقط، وبلا referrer
+      userPhoto.referrerPolicy = "no-referrer";
+      userPhoto.src = myPhoto;
+      userPhoto.style.display = myPhoto ? "block" : "none";
       userNameEl.textContent  = user.isAnonymous ? "👤 ضيف" : (user.displayName || "لاعب");
 
       // ── إخفاء ميزات غير متاحة للضيف ───────────────────────
@@ -526,6 +535,7 @@ document.addEventListener("DOMContentLoaded", () => {
         _deferredInstallPrompt = null;
       });
     } else {
+      // بلا دخول من أول التحميل (الخروج بعد جلسة يعيد الصفحة أعلاه — v36.0)
       resetInvites();             // لا دعوة معلّقة بعد تسجيل الخروج (v35.9)
       authScreen.classList.remove("hidden");
       userBar.classList.add("hidden");

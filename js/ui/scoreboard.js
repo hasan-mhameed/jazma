@@ -1,9 +1,10 @@
 // 📄 scoreboard.js — v35.5 (Nature cards + level badge — "من أنا" من مصدر واحد)
-import { state }  from "../core/state.js?v=1792313787";
-import { config } from "../config/config.js?v=1792313787";
-import { getXP, getLevelFromXP } from "../xp.js?v=1792313787";
-import { getCurrentUser } from "../auth.js?v=1792313787";
-import { getParticipants, getMyNum, getPlayerUid } from "../core/matchResult.js?v=1792313787";
+import { state }  from "../core/state.js?v=1792364320";
+import { config } from "../config/config.js?v=1792364320";
+import { getXP, getLevelFromXP } from "../xp.js?v=1792364320";
+import { getCurrentUser } from "../auth.js?v=1792364320";
+import { getParticipants, getMyNum, getPlayerUid } from "../core/matchResult.js?v=1792364320";
+import { esc } from "./safeText.js?v=1792364320";
 
 const AVATARS = ['🦊', '🤖', '🦅', '🐺'];
 const COLORS  = ['p1', 'p2', 'p3', 'p4'];
@@ -34,18 +35,19 @@ export function renderScoreboard(cfg) {
       Object.values(cfg.multiPlayers).some(p => p && p.num === i && p.active === false));
     if (isOut) card.classList.add('out');
 
+    // v36.0 (1.10): أسماء لاعبي الأونلاين يكتبها أصحابها — نص لا شيفرة (كل قيمة تُهرَّب)
     card.innerHTML = `
-      <div class="npc-avatar">${AVATARS[i-1] || '🎮'}</div>
+      <div class="npc-avatar">${esc(AVATARS[i-1] || '🎮')}</div>
       <div class="npc-info">
         <div class="npc-name-row">
-          <span class="npc-name">${playerName(cfg, i)}</span>
-          <span class="npc-level" id="plevel${i}">⭐ —</span>
+          <span class="npc-name">${esc(playerName(cfg, i))}</span>
+          <span class="npc-level" id="plevel${esc(i)}">⭐ —</span>
         </div>
         <div class="npc-turn-tag">دوره الآن</div>
         ${isOut ? '<span class="npc-out-badge">🚪 خرج</span>' : ''}
       </div>
-      <span class="npc-bank" id="pbank${i}"></span>
-      <div class="npc-score" id="p${i}">${scores[i] || 0}</div>`;
+      <span class="npc-bank" id="pbank${esc(i)}"></span>
+      <div class="npc-score" id="p${esc(i)}">${esc(scores[i] || 0)}</div>`;
 
     // ضغط البطاقة → معلومات اللاعب
     card.addEventListener('click', () => showPlayerInfo(cfg, i));
@@ -122,13 +124,14 @@ async function showPlayerInfo(cfg, i) {
 
   const modal = document.createElement('div');
   modal.id = 'player-info-modal';
+  // v36.0 (1.10): الاسم وXP اللاعب (من الخادم) — نص لا شيفرة
   modal.innerHTML = `
     <div id="player-info-box">
-      <div class="pinfo-avatar ${COLORS[i-1]}">${avatar}</div>
-      <h3>${name}</h3>
-      <div class="pinfo-level">${levelInfo}</div>
-      ${xpInfo ? `<div class="pinfo-xp">${xpInfo}</div>` : ''}
-      <div class="pinfo-score">النقاط الحالية: ${state.scores[i] || 0}</div>
+      <div class="pinfo-avatar ${esc(COLORS[i-1])}">${esc(avatar)}</div>
+      <h3>${esc(name)}</h3>
+      <div class="pinfo-level">${esc(levelInfo)}</div>
+      ${xpInfo ? `<div class="pinfo-xp">${esc(xpInfo)}</div>` : ''}
+      <div class="pinfo-score">النقاط الحالية: ${esc(state.scores[i] || 0)}</div>
       <button id="pinfo-close" type="button">حسناً</button>
     </div>`;
   document.body.appendChild(modal);
