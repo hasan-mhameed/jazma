@@ -1,17 +1,17 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1792364320";
-import { setMyPresence } from "../presence.js?v=1792364320";
-import { updateScoreboard } from "./scoreboard.js?v=1792364320";
-import { config } from "../config/config.js?v=1792364320";
-import { onlineManager } from "../firebase.js?v=1792364320";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1792364320";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1792364320";
-import { state } from "../core/state.js?v=1792364320";
-import { getCurrentUser } from "../auth.js?v=1792364320";
-import { endGame, recordForfeit, recordElimination } from "./gameEnd.js?v=1792364320";
-import { renderTurnText } from "./turnManager.js?v=1792364320";
-import { esc } from "./safeText.js?v=1792364320";
+import { audioManager } from "../audio/audioManager.js?v=1792488854";
+import { setMyPresence, presenceNote } from "../presence.js?v=1792488854";
+import { updateScoreboard } from "./scoreboard.js?v=1792488854";
+import { config } from "../config/config.js?v=1792488854";
+import { onlineManager } from "../firebase.js?v=1792488854";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1792488854";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1792488854";
+import { state } from "../core/state.js?v=1792488854";
+import { getCurrentUser } from "../auth.js?v=1792488854";
+import { endGame, recordForfeit, recordElimination } from "./gameEnd.js?v=1792488854";
+import { renderTurnText } from "./turnManager.js?v=1792488854";
+import { esc } from "./safeText.js?v=1792488854";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");
@@ -1174,13 +1174,24 @@ export function initOnlineGame({ onGameStart, gameSetupApi }) {
   // انتهت بأي شكل (والنتيجة ما زالت ظاهرة)، أو خرج من مباراة جماعية ما زالت جارية، أو يشاهد: "🟢 متصل" —
   // متاح للدعوة. (كانت "في مباراة" من دخول شاشة اللعب حتى الخروج منها، ولو انتهت المباراة.)
   // تُراجع كل ثانية ما دامت شاشة اللعب ظاهرة، وتتوقف وحدها بعد مغادرتها. الكتابة عند التغيّر فقط.
+  // v36.1 (1.14): كل تغيّر في النشاط يُسجَّل مع ما بُني عليه — سجل تشخيص الحضور (JAZAM_PRESENCE() في الـconsole)
+  let _lastSyncNote = "";
   function syncPresence() {
     const a = activity();
-    try { setMyPresence(a === "playing" ? "playing" : "online"); } catch {}
+    if (a !== _lastSyncNote) {
+      _lastSyncNote = a;
+      try {
+        const board = document.getElementById("board");
+        presenceNote("activity", `${a} [board=${board && !board.classList.contains("hidden") ? 1 : 0} fin=${state.gameFinished ? 1 : 0}`
+          + ` online=${config.online ? 1 : 0} spec=${config.spectator ? 1 : 0} out=${isOutOfMatch() ? 1 : 0}]`);
+      } catch {}
+    }
+    try { setMyPresence(a === "playing" ? "playing" : "online", "نشاط: " + a); } catch {}
     if (a !== "playing" && a !== "done") stopPresenceSync();      // غادر شاشة اللعب
   }
   function startPresenceSync() {
     stopPresenceSync();
+    _lastSyncNote = "";
     _presenceTimer = setInterval(syncPresence, 1000);
     syncPresence();
   }
@@ -1541,7 +1552,7 @@ export function launchOnlineMultiGame(myPlayerNum, onlineTurnInd, onGameStart) {
       // عودة الشبكة (زر الخروج بلا شبكة — مراجعة v35.7 الثانية)
       if (connected && !isOutOfMatch() && !state.gameFinished) onlineManager.clearMyDisconnectMark();
       // (v35.9: بعد نهايتها أو خروجي منها "متصل" — كان يعيد "في مباراة" مع كل عودة اتصال)
-      try { setMyPresence(connected ? ((state.gameFinished || isOutOfMatch()) ? "online" : "playing") : "away"); } catch {}
+      try { setMyPresence(connected ? ((state.gameFinished || isOutOfMatch()) ? "online" : "playing") : "away", "اتصال المباراة"); } catch {}
     });
   }, 800);
 }

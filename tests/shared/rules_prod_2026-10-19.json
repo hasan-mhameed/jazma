@@ -1,0 +1,40 @@
+{
+  "rules": {
+    "users": {
+      ".read": "auth !== null",
+      "$uid": {
+        ".write": "$uid === auth.uid"
+      }
+    },
+    "rooms": {
+      ".read": "auth !== null",
+      ".write": "auth !== null"
+    },
+    "invites": {
+      ".read": "auth !== null",
+      ".write": "auth !== null"
+    },
+    "inviteRejections": {
+      ".read": "auth !== null",
+      ".write": "auth !== null"
+    },
+    "chats": {
+      ".read": "auth !== null",
+      ".write": "auth !== null"
+    },
+    "chatStatus": {
+      ".read": "auth !== null",
+      ".write": "auth !== null"
+    },
+    "dailyChallenges": {
+      "$date": {
+        "results": {
+          ".read": "auth !== null",
+          "$uid": {
+            ".write": "$uid === auth.uid"
+          }
+        }
+      }
+    }
+  }
+}

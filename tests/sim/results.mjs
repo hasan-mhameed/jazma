@@ -119,7 +119,8 @@ const STUBS = {
     export function getMatchCoins() { return globalThis.__matchCoins || 0; }`,
 };
 const REAL = { 'gameEnd.js': '/js/ui/gameEnd.js', 'matchResult.js': '/js/core/matchResult.js',
-  'safeText.js': '/js/ui/safeText.js' };   // تهريب النصوص الحقيقي (v36.0 — 1.10)
+  'safeText.js': '/js/ui/safeText.js',      // تهريب النصوص الحقيقي (v36.0 — 1.10)
+  'statsKey.js': '/js/core/statsKey.js' };  // مفاتيح الإحصائيات الآمنة الحقيقية (v36.1 — 1.12)
 
 // بيئة معزولة واحدة (يمكن استدعاء أكثر من دالة فيها بالتتابع — لفحص "مرة واحدة لكل مباراة")
 export async function loadGameEnd({ user = { uid: 'uid_me' } } = {}) {

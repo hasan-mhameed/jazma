@@ -7,7 +7,9 @@
 // فحص الطفرات: JAZAM_FIREBASE_JS=<نسخة قديمة من firebase.js> npm test  (يجب أن تفشل) — وكذلك JAZAM_INVITE_JS وJAZAM_AUTH_JS
 import { pathToFileURL } from 'node:url';
 import { FakeRTDB } from './fakertdb.mjs';
-import { gen, genInvite, genAuth } from './gen.mjs';
+import { gen, genInvite, genAuth, genFriends, genPresence } from './gen.mjs';
+import { ref as dbRef, update as dbUpdate, get as dbGet } from 'firebase/database';
+import fsx from 'node:fs';
 import net from 'node:net';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -759,12 +761,12 @@ async function registrationProfile() {
   for (const [label, p] of profiles) {
     const S = new FakeRTDB(); const port = await S.listen();
     const P = await latencyProxy(port, p.oneWayMs, p.setupMs);
-    const A = await import(pathToFileURL(genAuth('R' + (++i), P.port)).href);
+    const email = `sara${i + 1}@x.com`, uid = 'uid_' + email.replace(/\W/g, '_');
+    const A = await import(pathToFileURL(genAuth('R' + (++i), P.port, uid)).href);   // هوية الجهاز عند الخادم = الحساب الذي سيُنشأ (القواعد)
     A.onUserChange(() => {}); A.onUserChange(() => {});          // كالتطبيق: main.js وpresence.js
     await wait(20);
     if (p.warm) await A.getUserProfile('warmup');               // شيء فتح الاتصال قبل التسجيل
     globalThis.__UPDATE_PROFILE_MS = p.upd;
-    const email = `sara${i}@x.com`, uid = 'uid_' + email.replace(/\W/g, '_');
     await A.registerWithEmail('سارة', email, 'Aa1!aaaa');
     await wait(Math.max(600, 4 * (2 * p.oneWayMs) + p.setupMs + 200));
     const prof = S.getAt(`users/${uid}`) || {};
@@ -775,13 +777,224 @@ async function registrationProfile() {
   globalThis.__UPDATE_PROFILE_MS = 0;
 }
 
+
+// ── الأصدقاء فوق قواعد الأمان المنشورة (v36.1 — الخطوة 1.13): friends.js الحقيقي على ثلاثة أجهزة ──
+// القواعد القديمة (الإنتاج حتى 2026-10-19) كانت ترفض كل كتابة في ملف الآخر: لا طلب يصل، والقبول والحذف من طرف واحد.
+// الآن: طلب = صندوقه + دليلي في ملفي، والقبول والحذف من الطرفين بكتابة واحدة — والخادم يطبّق القواعد على كل جهاز بهويته.
+const OLD_RULES = JSON.parse(fsx.readFileSync(new URL('../shared/rules_prod_2026-10-19.json', import.meta.url), 'utf8'));
+const denies = async (p) => { try { await p; return false; } catch (e) { return /permission_denied/i.test(String(e && (e.code || e.message))); } };
+async function friendsRealRules() {
+  const r = suite('الأصدقاء (friends.js الحقيقي) فوق القواعد المنشورة: طلب ← قبول ← حذف من الطرفين، ولا دخول بلا طلب، والقواعد القديمة ترفض كاملاً');
+  const S = new FakeRTDB(); const port = await S.listen();
+  S.setAt('users/uA', { uid: 'uA', name: 'أحمد' }); S.setAt('users/uB', { uid: 'uB', name: 'باسل' }); S.setAt('users/uO', { uid: 'uO', name: 'عمر' });
+  const A = await import(pathToFileURL(genFriends('A', port)).href);
+  const B = await import(pathToFileURL(genFriends('B', port)).href);
+  const X = await import(pathToFileURL(genFriends('X', port)).href);
+  let reqs = [], aFriends = [];
+  const unR = B.listenFriendRequests(x => { reqs = x; });
+  const unA = A.listenFriends(x => { aFriends = x; });
+  await wait(300);
+  await A.sendFriendRequest('uB'); await wait(300);
+  r.ok(!!S.getAt('users/uB/friendRequests/uA') && !!S.getAt('users/uA/sentRequests/uB'), 'الطلب ودليله لم يصلا الخادم');
+  r.ok(reqs.some(q => q.uid === 'uA'), 'باسل لا يرى طلب أحمد');
+  const res = await B.acceptFriendRequest('uA'); await wait(500);
+  r.ok(res && res.ok === true, `القبول: ${JSON.stringify(res)}`);
+  r.ok(!!S.getAt('users/uA/friends/uB') && !!S.getAt('users/uB/friends/uA') && !S.getAt('users/uB/friendRequests/uA'), 'لم تكتمل الصداقة من الطرفين أو بقي الطلب');
+  r.ok(aFriends.some(f => f.uid === 'uB'), 'قائمة أحمد لا تُظهر باسل');
+  r.ok(!S.getAt('users/uA/sentRequests/uB'), 'دليل الطلب بقي بعد القبول');
+  r.ok(await denies(dbUpdate(dbRef(X.__db), { 'users/uA/friends/uX': { name: 'متطفّل' } })) && !S.getAt('users/uA/friends/uX'), 'غريب أضاف نفسه لقائمة أحمد بلا طلب');
+  await A.removeFriend('uB'); await wait(400);
+  r.ok(!S.getAt('users/uA/friends/uB') && !S.getAt('users/uB/friends/uA'), 'الحذف لم يكن من الطرفين');
+  r.ok(await denies(dbUpdate(dbRef(B.__db), { 'users/uA/friends/uB': { name: 'باسل' } })) && !S.getAt('users/uA/friends/uB'), 'باسل أعاد نفسه لقائمة أحمد بعد الحذف بلا طلب جديد');
+  // طلب قديم بلا دليل في ملف مرسله (من نسخة قبل v36.1)
+  S.setAt('users/uB/friendRequests/uO', { uid: 'uO', name: 'عمر' }); await wait(200);
+  const stale = await B.acceptFriendRequest('uO'); await wait(300);
+  r.ok(stale && stale.reason === 'stale' && !S.getAt('users/uB/friendRequests/uO') && !S.getAt('users/uB/friends/uO') && !S.getAt('users/uO/friends/uB'),
+    `طلب بلا دليل: ${JSON.stringify(stale)}`);
+  // صداقة من طرف واحد (كأ وب بعد فحص 4): عند باسل أحمد، وعند أحمد لا — الإضافة من جديد تكملها
+  S.setAt('users/uB/friends/uA', { uid: 'uA', name: 'أحمد' }); await wait(200);
+  await A.sendFriendRequest('uB'); await wait(300);
+  const rep = await B.acceptFriendRequest('uA'); await wait(400);
+  r.ok(rep && rep.ok && !!S.getAt('users/uA/friends/uB') && !!S.getAt('users/uB/friends/uA'), `إصلاح صداقة من طرف واحد: ${JSON.stringify(rep)}`);
+  // الدليل إذنٌ لمرة واحدة: زياد يرسل وصفحته مغلقة (لا تنظيف منها) — قبول باسل نفسه يستهلكه، فبعد حذف الصداقة لا يعود
+  // باسل لقائمة زياد به؛ والرفض يستهلكه كذلك
+  S.setAt('users/uZ', { uid: 'uZ', name: 'زياد' });
+  const Z = await import(pathToFileURL(genFriends('Z', port)).href);
+  await Z.sendFriendRequest('uB'); await wait(300);
+  const zr = await B.acceptFriendRequest('uZ'); await wait(300);
+  r.ok(zr && zr.ok && !!S.getAt('users/uZ/friends/uB') && !S.getAt('users/uZ/sentRequests/uB'), `القبول لم يستهلك الدليل (صفحة المرسل مغلقة): ${JSON.stringify(zr)}`);
+  await B.removeFriend('uZ'); await wait(300);
+  r.ok(await denies(dbUpdate(dbRef(B.__db), { 'users/uZ/friends/uB': { name: 'باسل' } })) && !S.getAt('users/uZ/friends/uB'),
+    'بعد القبول والحذف: باسل أعاد نفسه لقائمة زياد بالدليل القديم');
+  const twice = await B.acceptFriendRequest('uZ'); await wait(200);
+  r.ok(twice && twice.reason === 'gone' && !S.getAt('users/uB/friends/uZ'), `قبول طلب لم يعد موجوداً ("لم يعد صالحاً" لا "نسخة قديمة"): ${JSON.stringify(twice)}`);
+  await Z.sendFriendRequest('uB'); await wait(300);
+  await B.rejectFriendRequest('uZ'); await wait(300);
+  r.ok(!S.getAt('users/uB/friendRequests/uZ') && !S.getAt('users/uZ/sentRequests/uB'), 'الرفض أبقى الطلب أو دليله');
+  // القواعد القديمة: كل عملية تُرفض كاملة (لا نصف كتابة)، والوعد يُرفض (الواجهة تقول "تعذّر")
+  S.rules = OLD_RULES;
+  r.ok(await denies(A.removeFriend('uB')), 'القواعد القديمة: الحذف لم يُرفض');
+  await wait(300);
+  r.ok(!!S.getAt('users/uA/friends/uB') && !!S.getAt('users/uB/friends/uA'), 'القواعد القديمة: حذف مرفوض كُتب نصفه');
+  r.ok(!!(await dbGet(dbRef(A.__db, 'users/uA/friends/uB'))).val(), 'القواعد القديمة: نسخة أحمد المحلية لم تعد بعد رفض الحذف');
+  S.setAt('users/uA/friends', null); S.setAt('users/uB/friends', null);
+  r.ok(await denies(A.sendFriendRequest('uB')), 'القواعد القديمة: الطلب لم يُرفض');
+  await wait(300);
+  r.ok(!S.getAt('users/uB/friendRequests/uA') && !S.getAt('users/uA/sentRequests/uB'), 'القواعد القديمة: طلب مرفوض كُتب نصفه (الدليل بلا طلب)');
+  unR(); unA();
+  S.close();
+}
+
+
+// ── 31) (v36.1 — الخطوة 1.14) الحضور يصحّح نفسه بالحزمة الحقيقية: الحزمة تُظهر الكتابة محلياً فوراً وتطبّق أوامر
+// الانقطاع محلياً لحظة الانقطاع — ما لا يحاكيه المحاكي. (أ) الخادم ينفّذ أمر الاتصال القديم بعد عودة الاتصال
+// (يلاحظ سقوطه متأخراً)، (ب) صفحة ثانية بالحساب نفسه تكتب حالتها الأدنى، (ج) ثم تُغلق — والصديق يرى الصحيح ──
+async function presenceHealsReal() {
+  const r = suite('الحضور (presence.js الحقيقي): أمر انقطاع قديم بعد العودة، وصفحة ثانية بالحساب نفسه تكتب ثم تُغلق → يصحّح نفسه بلا تعارك (1.14)');
+  const S = new FakeRTDB(); const port = await S.listen();
+  const info = console.info; console.info = () => {};
+  const mods = [];
+  try {
+    const load = async (dev, uid) => { const m = await import(pathToFileURL(genPresence(dev, port, uid)).href); mods.push(m); return m; };
+    const F = await load('F', 'uF');                              // صديق يتابع الحالتين كما تعرضهما قائمته
+    F.__setUser({ uid: 'uF' }); F.initPresence();
+    const seen = { uA: [], uB: [] };
+    F.watchPresence('uA', p => seen.uA.push(p.state)); F.watchPresence('uB', p => seen.uB.push(p.state));
+    const st = u => S.getAt(`users/${u}/presence/state`);
+    const merges = u => S.log.filter(l => l.startsWith(`merge users/${u}/presence `)).length;
+    const report = m => (typeof m.presenceReport === 'function' ? m.presenceReport() : null);
+    // (أ) أحمد في مباراة، وسقط اتصاله لحظة؛ الخادم يلاحظ سقوط الاتصال القديم بعد 2.5ث — بعد أن عاد
+    const A = await load('A', 'uA');
+    A.__setUser({ uid: 'uA' }); A.initPresence();
+    await wait(500);
+    A.setMyPresence('playing'); await wait(300);
+    r.ok(st('uA') === 'playing' && seen.uA.at(-1) === 'playing', `(أ) قبل الانقطاع: "في مباراة" (${st('uA')})`);
+    const aConn = [...S.conns].find(c => c.uid === 'uA');
+    S.detectDelay = c => (c === aConn ? 2500 : 0);
+    A.__off(); await wait(150); A.__on();
+    await wait(1500);
+    r.ok(st('uA') === 'playing', `(أ) عاد الاتصال: كتب حالته (${st('uA')})`);
+    const m0 = merges('uA');
+    await wait(1300);                                           // ~2.95ث: الخادم نفّذ أمر الاتصال القديم
+    const stale = st('uA');
+    await wait(2500);
+    r.ok(stale === 'offline' && seen.uA.includes('offline'), `(أ) الخادم كتب "غير متصل" متأخراً والصديق رآه — الحالة التي يُصلحها الفحص (${stale})`);
+    r.ok(st('uA') === 'playing' && seen.uA.at(-1) === 'playing', `(أ) صحّحت الصفحة حالتها والصديق يراها "في مباراة" (${st('uA')} / ${seen.uA.at(-1)})`);
+    r.ok(merges('uA') - m0 === 1 && report(A)?.heals === 1, `(أ) كتابة تصحيح واحدة (${merges('uA') - m0}، تصحيحات ${report(A)?.heals})`);
+    S.detectDelay = 0;
+    // (ب) باسل في مباراة على صفحة، ثم فتح صفحة ثانية بالحساب نفسه (حالتها "متصل") — تكتب فوقه
+    const B1 = await load('B1', 'uB'), B2 = await load('B2', 'uB');
+    B1.__setUser({ uid: 'uB' }); B1.initPresence(); await wait(400);
+    B1.setMyPresence('playing'); await wait(300);
+    B2.__setUser({ uid: 'uB' }); B2.initPresence();
+    await wait(400);
+    r.ok(st('uB') === 'online', `(ب) الصفحة الثانية كتبت "متصل" فوق "في مباراة" (${st('uB')})`);
+    await wait(2200);
+    r.ok(st('uB') === 'playing' && seen.uB.at(-1) === 'playing', `(ب) الصفحة التي في المباراة صحّحت: "في مباراة" (${st('uB')})`);
+    const mb = merges('uB');
+    await wait(6000);
+    r.ok(merges('uB') === mb && st('uB') === 'playing', `(ب) لا تعارك بين الصفحتين: لا كتابات في 6ث (${merges('uB') - mb})`);
+    r.ok(report(B2)?.heals === 0 && report(B1)?.heals === 1, `(ب) الثانية لم تكتب فوق الأعلى، والأولى صحّحت مرة (${report(B2)?.heals}/${report(B1)?.heals})`);
+    // (ج) أُغلقت الصفحة الثانية (أمر انقطاعها يكتب "غير متصل") والأولى ما زالت في المباراة
+    B2.__off();
+    await wait(400);
+    const after = st('uB');
+    await wait(6200);                                           // تصحيح ثانٍ خلال دقيقتين: بعد 5ث (تباعد)
+    r.ok(after === 'offline' && st('uB') === 'playing' && seen.uB.at(-1) === 'playing',
+      `(ج) أُغلقت الثانية: "غير متصل" لحظةً ثم "في مباراة" (${after} ← ${st('uB')})`);
+    // التقرير بلا معرّف الحساب
+    const rep = report(B1);
+    r.ok(!!rep && !rep.text.includes('uB') && rep.connected === true && rep.pending === 0, `التقرير: متصل، بلا كتابات معلّقة، وبلا معرّف الحساب`);
+  } finally {
+    console.info = info;
+    for (const m of mods) { try { m.__off(); } catch {} }
+    S.close();
+  }
+}
+
+
+// ── 32) (مراجعة v36.1) تعايش النسخ: صفحات v36.0 تبقى مفتوحة عند الناس بعد نشر القواعد ورفع v36.1 (لا تتحدّث إلا بإعادة
+// تحميلها) — الملفات القديمة نفسها من tests/fixtures/v36.0 ──
+const FIX36 = new URL('../fixtures/v36.0/', import.meta.url);
+async function mixedVersions() {
+  const r = suite('تعايش النسخ (صفحات v36.0 مفتوحة مع v36.1 والقواعد الجديدة): لا طلب بلا دليل، قبول وحذف قديمان يكتملان من الطرفين، و"في مباراة" من صفحة قديمة لا تمحوها صفحة جديدة');
+  const S = new FakeRTDB(); const port = await S.listen();
+  const info = console.info; console.info = () => {};
+  const mods = [];
+  const load = async (file) => { const m = await import(pathToFileURL(file).href); mods.push(m); return m; };
+  try {
+    S.setAt('users/uA', { uid: 'uA', name: 'أحمد' }); S.setAt('users/uB', { uid: 'uB', name: 'باسل' });
+    const oldA = await load(genFriends('oA', port, { uid: 'uA', src: new URL('friends.js', FIX36) }));
+    const newA = await load(genFriends('nA', port, { uid: 'uA' }));
+    const oldB = await load(genFriends('oB', port, { uid: 'uB', src: new URL('friends.js', FIX36) }));
+    // (1) إرسال من صفحة قديمة: يُرفض كما في القواعد السابقة — لا طلب بلا دليل يصنع قبولُه صداقةً من طرف واحد
+    r.ok(await denies(oldA.sendFriendRequest('uB')) && !S.getAt('users/uB/friendRequests/uA'), '(1) صفحة قديمة أنشأت طلباً بلا دليل');
+    // (2) طلب من v36.1 تقبله صفحة قديمة (ثلاث كتابات متتالية، طرفها أولاً): يكتمل من الطرفين، ودليله يُنظَّف بعد اكتمالها
+    const unA = newA.listenFriends(() => {}); await wait(200);
+    await newA.sendFriendRequest('uB'); await wait(300);
+    const acc = await oldB.acceptFriendRequest('uA').then(() => 'ok', e => 'ERR ' + (e.code || e.message)); await wait(800);
+    r.ok(acc === 'ok' && !!S.getAt('users/uA/friends/uB') && !!S.getAt('users/uB/friends/uA') && !S.getAt('users/uB/friendRequests/uA'),
+      `(2) قبول صفحة قديمة لطلب جديد لم يكتمل من الطرفين (${acc})`);
+    r.ok(!S.getAt('users/uA/sentRequests/uB'), '(2) دليل الطلب بقي بعد اكتمال الصداقة (التنظيف لم يعمل)');
+    // (3) حذف من صفحة قديمة (كتابتان متتاليتان): من الطرفين
+    const rm = await oldB.removeFriend('uA').then(() => 'ok', e => 'ERR ' + (e.code || e.message)); await wait(300);
+    r.ok(rm === 'ok' && !S.getAt('users/uA/friends/uB') && !S.getAt('users/uB/friends/uA'), `(3) حذف صفحة قديمة لم يكن من الطرفين (${rm})`);
+    unA();
+    // (4) الحضور: صفحة v36.1 خاملة وصفحة v36.0 بالحساب نفسه تبدأ مباراة — الجديدة لا تمحو "في مباراة" (كانت تظنّها كتابةً لها)
+    const N = await load(genPresence('pN', port, 'uP'));
+    const O = await load(genPresence('pO', port, 'uP', { src: new URL('presence.js', FIX36) }));
+    const st = () => S.getAt('users/uP/presence/state');
+    N.__setUser({ uid: 'uP' }); N.initPresence(); await wait(400);
+    O.__setUser({ uid: 'uP' }); O.initPresence(); await wait(400);
+    O.setMyPresence('playing'); await wait(300);
+    r.ok(st() === 'playing', `(4) الصفحة القديمة كتبت "في مباراة" (${st()})`);
+    await wait(6000);
+    r.ok(st() === 'playing' && N.presenceReport().heals === 0, `(4) الصفحة الجديدة محت "في مباراة" (${st()}، تصحيحات ${N.presenceReport().heals})`);
+    O.setMyPresence('online'); await wait(300);
+    r.ok(st() === 'online', `(4) انتهت مباراة الصفحة القديمة: "متصل" (${st()})`);
+  } finally {
+    console.info = info;
+    for (const m of mods) { try { m.__off(); } catch {} }
+    S.close();
+  }
+}
+
+// ── 33) (مراجعة v36.1) قبولان بنفس اللحظة من صفحتين بالحساب نفسه، ورفضٌ في صفحة وقبولٌ من بطاقة قديمة في أخرى ──
+async function twoTabAccept() {
+  const r = suite('قبولان بنفس اللحظة من صفحتين بالحساب نفسه: الاثنان "تم" والصداقة من الطرفين بلا بقايا؛ ورفضٌ ثم قبول من بطاقة قديمة: "لم يعد صالحاً"');
+  const S = new FakeRTDB(); const port = await S.listen();
+  const mods = [];
+  const load = async (file) => { const m = await import(pathToFileURL(file).href); mods.push(m); return m; };
+  try {
+    S.setAt('users/uA', { uid: 'uA', name: 'أحمد' }); S.setAt('users/uB', { uid: 'uB', name: 'باسل' }); S.setAt('users/uC', { uid: 'uC', name: 'كريم' });
+    const A = await load(genFriends('tA', port, { uid: 'uA' }));
+    const C = await load(genFriends('tC', port, { uid: 'uC' }));
+    const B1 = await load(genFriends('tB1', port, { uid: 'uB' })), B2 = await load(genFriends('tB2', port, { uid: 'uB' }));
+    await A.sendFriendRequest('uB'); await wait(300);
+    const settle = p => p.then(v => v, e => ({ err: e.code || e.message }));
+    const [x, y] = await Promise.all([settle(B1.acceptFriendRequest('uA')), settle(B2.acceptFriendRequest('uA'))]);
+    await wait(300);
+    r.ok(x && x.ok === true && y && y.ok === true, `القبولان: ${JSON.stringify(x)} / ${JSON.stringify(y)}`);
+    r.ok(!!S.getAt('users/uA/friends/uB') && !!S.getAt('users/uB/friends/uA') && !S.getAt('users/uB/friendRequests/uA') && !S.getAt('users/uA/sentRequests/uB'),
+      'الصداقة ليست من الطرفين أو بقي الطلب أو دليله');
+    await C.sendFriendRequest('uB'); await wait(300);
+    await B1.rejectFriendRequest('uC'); await wait(300);
+    const z = await settle(B2.acceptFriendRequest('uC')); await wait(200);
+    r.ok(z && z.ok === false && z.reason === 'gone' && !S.getAt('users/uB/friends/uC') && !S.getAt('users/uC/friends/uB'),
+      `رفضٌ ثم قبول من بطاقة قديمة: ${JSON.stringify(z)}`);
+  } finally {
+    for (const m of mods) { try { m.__off(); } catch {} }
+    S.close();
+  }
+}
+
 const all = [offlineExitThenReconnect, blipDuringWithdraw, onlineExit, creatorStamp, timeoutDuringBlip,
   secondExitClick, dropBeforeStartAcks, quietLeaveDuringDrop, spectatorLeaveDuringDrop,
   duoTwoJoiners, duoHostCancelAlone, duoCancelAfterJoin, duoCancelJoinSimultaneous, duoCancelOffline,
   duoCodeTwoJoiners, duoHostGoneAtJoin,
   duoCancelThenClose, duoJoinAckLost, duoCodeJoinAckLost, duoCreateBlip, duoAbortRetried, duoCancelDuringReopen,
   duoHostBlipRestores, duoRestoreKeepsGuestOut, duoEvictedGuestOp, duoOrphanNodeRestores, duoCancelStrayFinished,
-  inviteConditionalRemovals, registrationProfile];
+  inviteConditionalRemovals, registrationProfile, friendsRealRules, presenceHealsReal, mixedVersions, twoTabAccept];
 // ONLY=اسم1,اسم2 npm test — تشغيل فحوص بعينها (للتطوير وفحص الطفرات)
 const pick = process.env.ONLY ? all.filter(f => process.env.ONLY.split(',').includes(f.name)) : all;
 console.log('\n🔬 firebase.js بحزمة Firebase الحقيقية');

@@ -5,6 +5,8 @@
 // الحساب: onAuthStateChanged ينطلق أول مرة لكل مسجّل، ثم فقط حين يتغيّر المعرّف (سلوك Firebase الحقيقي —
 // تأكّدنا من كود الحزمة 1.7.3: lastNotifiedUid) — فالربط (ترقية الضيف) لا يطلقه.
 
+import { checkWrite, canRead, PERMISSION_DENIED } from '../shared/rulesEngine.mjs';
+
 const BASE = 'https://www.gstatic.com/firebasejs/10.12.0/';
 const clone = v => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
 const isSV = v => v && typeof v === 'object' && !Array.isArray(v) && v['.sv'] === 'timestamp';
@@ -67,7 +69,10 @@ function snap(key, value, ref) {
 // في الحزمة الحقيقية: المستمعون، ثم الكتابات المعلّقة، ثم القراءات المعلّقة (مراجعة v36.0 الثالثة: كتابة تسبق قراءة
 // "هل الملف موجود؟" تجعل الملف موجوداً ناقصاً). تبسيط معروف: الحزمة الحقيقية تُظهر الكتابة المعلّقة محلياً فوراً
 // للمستمعين على الجهاز نفسه؛ هنا لا تظهر إلا عند الاتصال — يكفي لفحص ما يصل الخادم، لا لفحص حالة الشاشة قبل الاتصال.
-export function createFirebase({ win, users = {}, cold = false } = {}) {
+// rules (v36.1 — الخطوة 1.13): قواعد الأمان المنشورة نفسها (database.rules.json) — كل قراءة وكتابة من كود اللعبة تمرّ بها
+// كما في الإنتاج (رفض = PERMISSION_DENIED ولا يُكتب شيء، والكتابة متعددة المسارات ذرّية). أدوات الفحص (fb.set) فوق القواعد.
+// والمسارات والمفاتيح تُفحص كالحزمة الحقيقية (. # $ [ ] ومحارف التحكم ممنوعة) — v36.1، الخطوة 1.12.
+export function createFirebase({ win, users = {}, cold = false, rules = null } = {}) {
   const later = (fn) => win.setTimeout(() => { try { fn(); } catch (e) { fb.errors.push(String(e && e.stack || e)); } }, 0);
   const fb = {
     root: null, listeners: new Set(), childListeners: new Set(), disconnectOps: [], keySeq: 0, writes: [], errors: [],
@@ -75,6 +80,8 @@ export function createFirebase({ win, users = {}, cold = false } = {}) {
     pending: [],                       // عمليات تنتظر الاتصال (cold): { kind: 'write'|'get'|'listen', run }
     failNextGet: null,                 // مسار: أول get عليه يُرفض (كرفض الصلاحيات أو انقطاع)
     batches: [],                       // كل set/update/remove كما وصل الخادم بترتيبه: { op, path, keys }
+    rules,                             // قواعد الأمان (null = بلا قواعد)
+    denied: [],                        // ما رفضته القواعد: { op, path }
     // ── أدوات الفحص ──
     get(path) { return clone(this.getAt(path)); },
     set(path, value) { this.write(path, value); },
@@ -88,6 +95,15 @@ export function createFirebase({ win, users = {}, cold = false } = {}) {
       q.filter(x => x.kind === 'write').forEach(x => x.run());
       q.filter(x => x.kind === 'get').forEach(x => x.run());
       notifyAll();
+    },
+    /** كتابة كأنها من جهاز مستخدم آخر (صديق يقبل/يحذف/يحاول) — تمرّ بقواعد الأمان نفسها، وذرّية: { ok, path } */
+    writeAs(uid, writes) {
+      if (this.rules) {
+        const res = checkWrite(this.rules, writes, { uid, root: this.root, now: now() });
+        if (!res.ok) { this.denied.push({ op: 'as:' + uid, path: res.path }); return { ok: false, path: res.path }; }
+      }
+      for (const [p, v] of writes) this.write(p, v);
+      return { ok: true };
     },
     /** يقطع الاتصال: تنفيذ أوامر onDisconnect المسجّلة (كما يفعل الخادم عند انقطاع الجهاز أو إعادة تحميل الصفحة) */
     dropConnection() {
@@ -121,6 +137,31 @@ export function createFirebase({ win, users = {}, cold = false } = {}) {
     if (fb.root && typeof fb.root === 'object' && !Object.keys(fb.root).length) fb.root = null;
     notifyAll();
   };
+
+  // ── قواعد الأمان والتحقق من المسارات (كالحزمة الحقيقية) ──
+  const uidNow = () => fb.auth?.currentUser?.uid ?? null;
+  const allowWrite = (op, writes) => {
+    if (!fb.rules) return true;
+    const res = checkWrite(fb.rules, writes, { uid: uidNow(), root: fb.root, now: now() });
+    if (!res.ok) fb.denied.push({ op, path: res.path });
+    return res.ok;
+  };
+  const allowRead = (path) => !fb.rules || canRead(fb.rules, path, { uid: uidNow(), root: fb.root, now: now() });
+  const BAD_PATH = /[\[\].#$\u0000-\u001F\u007F]/;
+  const BAD_KEY = /[\[\].#$\/\u0000-\u001F\u007F]/;
+  function assertPath(p, fnName) {
+    const s = String(p ?? '');
+    const body = s.startsWith('.info') ? s.slice(5) : s;          // .info في الجذر مسموح (validateRootPathString)
+    if (BAD_PATH.test(body)) throw new Error(`${fnName} failed: path argument was an invalid path = "${s}". Paths must be non-empty strings and can't contain ".", "#", "$", "[", or "]"`);
+  }
+  function assertData(v, fnName, where = '') {
+    if (v === null || typeof v !== 'object' || isSV(v)) return;
+    for (const k of Object.keys(v)) {
+      if (k === '.sv' || k === '.value' || k === '.priority') continue;
+      if (!k.length || BAD_KEY.test(k)) throw new Error(`${fnName} failed: value argument contains an invalid key (${k})${where ? ` in property '${where}'` : ''}.  Keys must be non-empty strings and can't contain ".", "#", "$", "/", "[", or "]"`);
+      assertData(v[k], fnName, where ? where + '.' + k : k);
+    }
+  }
 
   // ── المراجع والاستعلامات ──
   const DB = { app: null, _fake: true };
@@ -172,7 +213,7 @@ export function createFirebase({ win, users = {}, cold = false } = {}) {
 
   const database = {
     getDatabase: () => DB,
-    ref: (_db, path = '') => mkRef(path),
+    ref: (_db, path = '') => { assertPath(path, 'child'); return mkRef(path); },
     query: (r, ...constraints) => mkRef(r._path, [...(r._q || []), ...constraints]),
     orderByKey: () => ({ type: 'orderByKey' }),
     limitToLast: (n) => ({ type: 'limitToLast', n }),
@@ -182,6 +223,11 @@ export function createFirebase({ win, users = {}, cold = false } = {}) {
       fb.listeners.add(L);
       const first = () => later(() => {
         if (L.dead) return;
+        if (!allowRead(r._path)) {            // القواعد ترفض القراءة: يُلغى المستمع بخطأ (كالحقيقي)
+          L.dead = true; fb.listeners.delete(L); fb.denied.push({ op: 'listen', path: r._path });
+          if (typeof errCb === 'function') errCb(PERMISSION_DENIED());
+          return;
+        }
         const v = readAt(r); L.lastSer = JSON.stringify(v); L.ready = true;
         L.cb(snap(r.key, clone(v), r));
       });
@@ -201,16 +247,32 @@ export function createFirebase({ win, users = {}, cold = false } = {}) {
     get: (r) => new Promise((resolve, reject) => {
       const answer = () => later(() => {
         if (fb.failNextGet === r._path) { fb.failNextGet = null; reject(Object.assign(new Error('permission_denied'), { code: 'PERMISSION_DENIED' })); return; }
+        if (!allowRead(r._path)) { fb.denied.push({ op: 'get', path: r._path }); reject(PERMISSION_DENIED()); return; }
         resolve(snap(r.key, clone(readAt(r)), r));
       });
       if (fb.connected) answer(); else fb.pending.push({ kind: 'get', run: answer });
     }),
-    set: (r, value) => whenConnected(() => { fb.batches.push({ op: 'set', path: r._path, keys: value && typeof value === 'object' ? Object.keys(value) : [] }); fb.write(r._path, value); }),
-    update: (r, values) => whenConnected(() => {
-      fb.batches.push({ op: 'update', path: r._path, keys: Object.keys(values || {}) });
-      for (const [k, v] of Object.entries(values || {})) fb.write(parts(r._path).concat(parts(k)).join('/'), v);
+    set: (r, value) => {
+      assertData(value, 'set');
+      return whenConnected(() => {
+        if (!allowWrite('set', [[r._path, value]])) throw PERMISSION_DENIED();
+        fb.batches.push({ op: 'set', path: r._path, keys: value && typeof value === 'object' ? Object.keys(value) : [] }); fb.write(r._path, value);
+      });
+    },
+    update: (r, values) => {
+      for (const k of Object.keys(values || {})) assertPath(k, 'update');
+      for (const [k, v] of Object.entries(values || {})) assertData(v, 'update', k);
+      const writes = Object.entries(values || {}).map(([k, v]) => [parts(r._path).concat(parts(k)).join('/'), v]);
+      return whenConnected(() => {
+        if (!allowWrite('update', writes)) throw PERMISSION_DENIED();   // ذرّية: مسار مرفوض واحد يرفض الكل
+        fb.batches.push({ op: 'update', path: r._path, keys: Object.keys(values || {}) });
+        for (const [p, v] of writes) fb.write(p, v);
+      });
+    },
+    remove: (r) => whenConnected(() => {
+      if (!allowWrite('remove', [[r._path, null]])) throw PERMISSION_DENIED();
+      fb.batches.push({ op: 'remove', path: r._path, keys: [] }); fb.write(r._path, null);
     }),
-    remove: (r) => whenConnected(() => { fb.batches.push({ op: 'remove', path: r._path, keys: [] }); fb.write(r._path, null); }),
     push(r, value) {
       const key = '-Nfake' + String(++fb.keySeq).padStart(8, '0');
       const child = mkRef(r._path + '/' + key);
@@ -222,17 +284,23 @@ export function createFirebase({ win, users = {}, cold = false } = {}) {
         const cur = clone(fb.getAt(r._path));
         const res = fn(cur);
         if (res === undefined) return { committed: false, snapshot: snap(r.key, cur, r) };
+        if (!allowWrite('transaction', [[r._path, res]])) throw PERMISSION_DENIED();
         fb.write(r._path, res);
         return { committed: true, snapshot: snap(r.key, clone(fb.getAt(r._path)), r) };
       });
     },
     // أوامر الانقطاع لكل مسار؛ cancel() يلغي أوامر هذا المسار وما تحته فقط (كالحقيقي — مراجعة v36.0 الثانية)
     onDisconnect(r) {
-      const add = (run) => { fb.disconnectOps.push({ path: r._path, run }); return Promise.resolve(); };
+      // القواعد تُفحص لحظة التسجيل (الخادم يرفض الأمر نفسه) — وتُنفَّذ لاحقاً كما سُجّلت
+      const add = (run, writes) => {
+        if (!allowWrite('onDisconnect', writes)) return Promise.reject(PERMISSION_DENIED());
+        fb.disconnectOps.push({ path: r._path, run }); return Promise.resolve();
+      };
       return {
-        set: (v) => add(() => fb.write(r._path, v)),
-        update: (vals) => add(() => { for (const [k, v] of Object.entries(vals || {})) fb.write(parts(r._path).concat(parts(k)).join('/'), v); }),
-        remove: () => add(() => fb.write(r._path, null)),
+        set: (v) => add(() => fb.write(r._path, v), [[r._path, v]]),
+        update: (vals) => add(() => { for (const [k, v] of Object.entries(vals || {})) fb.write(parts(r._path).concat(parts(k)).join('/'), v); },
+          Object.entries(vals || {}).map(([k, v]) => [parts(r._path).concat(parts(k)).join('/'), v])),
+        remove: () => add(() => fb.write(r._path, null), [[r._path, null]]),
         cancel: () => {
           const under = p => p === r._path || p.startsWith(r._path + '/') || r._path === '';
           for (let i = fb.disconnectOps.length - 1; i >= 0; i--) if (under(fb.disconnectOps[i].path)) fb.disconnectOps.splice(i, 1);

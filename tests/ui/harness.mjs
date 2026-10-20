@@ -34,7 +34,7 @@ function importsOf(src) {
  * يجهّز نافذة بصفحة اللعبة الحقيقية ويرجع أداة تحميل وحدات.
  * stubs: { 'js/auth.js': { getCurrentUser: () => ... }, ... } — مسارات من جذر المشروع
  */
-export function boot({ stubs = {}, firebase = false, polyfills = false, users = {}, cold = false } = {}) {
+export function boot({ stubs = {}, firebase = false, polyfills = false, users = {}, cold = false, rules = null } = {}) {
   const html = fs.readFileSync(path.join(PROJECT, 'index.html'), 'utf8');
   const errors = [];
   const state = { reloads: 0 };
@@ -58,7 +58,7 @@ export function boot({ stubs = {}, firebase = false, polyfills = false, users = 
   win.confirm = () => false;
   if (polyfills) addPolyfills(win);
   // Firebase وهمي (app/auth/database) بدل وحدات gstatic — لتشغيل الكود الحقيقي كله فوقه
-  const fb = firebase ? createFirebase({ win, users, cold }) : null;
+  const fb = firebase ? createFirebase({ win, users, cold, rules }) : null;
   const urlStubs = fb ? fb.modules : {};
   const ctx = dom.getInternalVMContext();
   const cache = new Map();          // مسار أو رابط → وحدة

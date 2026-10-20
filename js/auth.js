@@ -8,6 +8,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getDatabase, ref, get, update, remove }
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { localStatsKey, isSafeKey }   from "./core/statsKey.js?v=1792488854";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -166,10 +167,8 @@ export async function updateAIStats(result) {
 
 export async function updateLocalStats(result, vsName) {
   if (!currentUser) return;
-  const key  = vsName
-    ? `vs_${vsName.trim().toLowerCase().replace(/\s+/g, '_')}`
-    : '__general__';
-  const base = `users/${currentUser.uid}/stats/local/${key}`;
+  // v36.1 (1.12): مفتاح آمن — الاسم كما كُتب كان يُستعمل مفتاحاً (". # $ [ ]" تُفشل الحفظ، و"/" يقسم المسار)
+  const base = `users/${currentUser.uid}/stats/local/${localStatsKey(vsName)}`;
   // نحفظ الاسم مرة واحدة على المسار الرئيسي
   await update(ref(db, base), { name: vsName || '' });
   const r = result === 'win' ? 'w' : result === 'loss' ? 'l' : 'd';
@@ -177,7 +176,8 @@ export async function updateLocalStats(result, vsName) {
 }
 
 export async function updateOnlineStats(result, opponentUid, opponentName) {
-  if (!currentUser || !opponentUid) return;
+  // v36.1 (1.12): معرّف الخصم من قائمة لاعبي الغرفة (يكتبه هو) — يصير مفتاحاً فقط إن كان معرّفاً سليماً
+  if (!currentUser || !isSafeKey(opponentUid)) return;
   const base = `users/${currentUser.uid}/stats/online/${opponentUid}`;
   await update(ref(db, base), { name: opponentName || opponentUid });
   const r = result === 'win' ? 'w' : result === 'loss' ? 'l' : 'd';

@@ -2,18 +2,19 @@
 // النهايات: اكتمال اللوحة، نفاد بنك الوقت، انسحاب/انقطاع الخصوم (نافذة النتيجة + التسجيل)،
 // والانسحاب بالزر (تسجيل الخسارة فقط — recordForfeit)، والخروج من مباراة جماعية جارية
 // (نفاد الوقت أو الانقطاع بلا عودة — recordElimination، v35.7).
-import { audioManager } from "../audio/audioManager.js?v=1792364320";
+import { audioManager } from "../audio/audioManager.js?v=1792488854";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1792364320";
-import { saveMatch } from "../history.js?v=1792364320";
-import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1792364320";
-import { showNewAchievements } from "./achievementsUI.js?v=1792364320";
-import { calcXP, addXP } from "../xp.js?v=1792364320";
-import { showXPGain } from "./xpUI.js?v=1792364320";
-import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1792364320";
-import { commitMatchCoins, getMatchCoins } from "../core/wallet.js?v=1792364320";
-import { computeMatchResult, multiHistoryResult, getMyNum, OUT_LABELS } from "../core/matchResult.js?v=1792364320";
-import { esc } from "./safeText.js?v=1792364320";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1792488854";
+import { saveMatch } from "../history.js?v=1792488854";
+import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1792488854";
+import { showNewAchievements } from "./achievementsUI.js?v=1792488854";
+import { calcXP, addXP } from "../xp.js?v=1792488854";
+import { showXPGain } from "./xpUI.js?v=1792488854";
+import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1792488854";
+import { commitMatchCoins, getMatchCoins } from "../core/wallet.js?v=1792488854";
+import { computeMatchResult, multiHistoryResult, getMyNum, OUT_LABELS } from "../core/matchResult.js?v=1792488854";
+import { esc } from "./safeText.js?v=1792488854";
+import { localStatsKey, isSafeKey } from "../core/statsKey.js?v=1792488854";
 
 export let _matchStartTime = Date.now();
 // مرة واحدة لكل مباراة: نهايتان متزامنتان (مثلاً آخر حركة + خروج خصم) لا تسجّلان مرتين
@@ -66,51 +67,59 @@ async function doRecord(cfg, R, scores, { silent = false, startedAt, daily }) {
   // v36.0: الاسم من الغرفة (يكتبه الخصم) — يُحفظ نصاً دائماً في السجل والإحصائيات
   const oppName = (oppNum != null && String(cfg.onlinePlayerNames?.[oppNum] ?? "").trim()) || "الخصم";
 
-  if (R.category === 'multi') {
-    // ── متعدد اللاعبين (3 فأكثر لعبوا فعلاً): مركزي أنا ونقاطي ──
-    await updateMultiStats(R.myRank, R.count, R.myScore);
+  // v36.1 (1.12): فشل الإحصائيات (مفتاح، شبكة، صلاحيات) لا يُسقط ما بعدها — كان أي خطأ هنا يلغي بصمت حفظ المباراة في
+  // السجل والسلسلة والإنجازات والخبرة (اسم لاعب 2 فيه نقطة = مباراة لا تُحسب أبداً). مربع "أنت vs" يُخفى وحده.
+  try {
+    if (R.category === 'multi') {
+      // ── متعدد اللاعبين (3 فأكثر لعبوا فعلاً): مركزي أنا ونقاطي ──
+      await updateMultiStats(R.myRank, R.count, R.myScore);
 
-    // نجلب الإحصائيات الفردية لعرضها
-    const stats   = await getAllStats(currentUser.uid);
-    const history = stats.multi?.history || {};
-    const records = Object.values(history);
-    const total   = records.length;
-    const wins    = records.filter(r => r.rank === 1).length;
-    const avgScore = total > 0
-      ? (records.reduce((s, r) => s + (r.score || 0), 0) / total).toFixed(1)
-      : 0;
-    headToHead = {
-      isMulti: true,
-      total, wins, avgScore,
-      myRank:  R.myRank,
-      players: R.count,
-      label: `${R.count} لاعبين`,
-    };
+      // نجلب الإحصائيات الفردية لعرضها
+      const stats   = await getAllStats(currentUser.uid);
+      const history = stats.multi?.history || {};
+      const records = Object.values(history);
+      const total   = records.length;
+      const wins    = records.filter(r => r.rank === 1).length;
+      const avgScore = total > 0
+        ? (records.reduce((s, r) => s + (r.score || 0), 0) / total).toFixed(1)
+        : 0;
+      headToHead = {
+        isMulti: true,
+        total, wins, avgScore,
+        myRank:  R.myRank,
+        players: R.count,
+        label: `${R.count} لاعبين`,
+      };
 
-  } else if (R.category === 'ai') {
-    await updateAIStats(myResult);
-    const stats   = await getAllStats(currentUser.uid);
-    const { w, l, d } = fromHistory(stats.ai?.history);
-    headToHead = { myW: w, myL: l, myD: d, label: "أنت vs الكمبيوتر" };
+    } else if (R.category === 'ai') {
+      await updateAIStats(myResult);
+      const stats   = await getAllStats(currentUser.uid);
+      const { w, l, d } = fromHistory(stats.ai?.history);
+      headToHead = { myW: w, myL: l, myD: d, label: "أنت vs الكمبيوتر" };
 
-  } else if (R.category === 'online') {
-    // واحد ضد واحد: الخصم الحقيقي (من قائمة لاعبي المباراة في الغرفة الجماعية)
-    // لا cfg.onlineOpponentUid وحده — قد يكون متبقّياً من مباراة ثنائية سابقة
-    const opponentUid = R.opponent ? R.opponent.uid : null;
-    await updateOnlineStats(myResult, opponentUid, oppName);
-    const stats = await getAllStats(currentUser.uid);
-    const { w, l, d } = fromHistory(opponentUid ? stats.online?.[opponentUid]?.history : null);
-    headToHead = { myW: w, myL: l, myD: d, label: `أنت vs ${oppName}` };
+    } else if (R.category === 'online') {
+      // واحد ضد واحد: الخصم الحقيقي (من قائمة لاعبي المباراة في الغرفة الجماعية)
+      // لا cfg.onlineOpponentUid وحده — قد يكون متبقّياً من مباراة ثنائية سابقة
+      const opponentUid = R.opponent ? R.opponent.uid : null;
+      await updateOnlineStats(myResult, opponentUid, oppName);
+      if (opponentUid && !isSafeKey(opponentUid)) {
+        headToHead = null;   // v36.1: معرّف لا يصلح مفتاحاً لم يُحفظ له شيء — لا مربع 0–0 مضلِّل
+      } else {
+        const stats = await getAllStats(currentUser.uid);
+        const { w, l, d } = fromHistory(opponentUid ? stats.online?.[opponentUid]?.history : null);
+        headToHead = { myW: w, myL: l, myD: d, label: `أنت vs ${oppName}` };
+      }
 
-  } else {
-    const p2 = cfg.localPlayerNames?.[2] || '';
-    await updateLocalStats(myResult, p2);
-    const stats = await getAllStats(currentUser.uid);
-    const key   = p2
-      ? `vs_${p2.trim().toLowerCase().replace(/\s+/g, '_')}`
-      : '__general__';
-    const { w, l, d } = fromHistory(stats.local?.[key]?.history);
-    headToHead = { myW: w, myL: l, myD: d, label: p2 ? `أنت vs ${p2}` : "محلي" };
+    } else {
+      const p2 = cfg.localPlayerNames?.[2] || '';
+      await updateLocalStats(myResult, p2);
+      const stats = await getAllStats(currentUser.uid);
+      const { w, l, d } = fromHistory(stats.local?.[localStatsKey(p2)]?.history);   // المفتاح نفسه الذي كُتب (v36.1)
+      headToHead = { myW: w, myL: l, myD: d, label: p2 ? `أنت vs ${p2}` : "محلي" };
+    }
+  } catch (e) {
+    console.warn("recordMyResult: stats", e);
+    headToHead = null;
   }
 
   window._refreshStats?.();
@@ -151,25 +160,31 @@ async function doRecord(cfg, R, scores, { silent = false, startedAt, daily }) {
 
   // ── التحقق من الإنجازات ──────────────────────────────────
   const mainResult = myResult;
+  const mode = cfg.aiMode === 'online' ? 'online' : R.category;   // 'ai' | 'local' | 'multi'
+  // v36.1: فشلٌ هنا (قراءة السلسلة أو السجل أو الإحصائيات) لا يُسقط الخبرة بعده — كالإحصائيات أعلاه
+  let newAchievements = [];
+  try {
+    const [streak, totalMatches, allStats] = await Promise.all([
+      updateStreak(mainResult),       // يحدث السلسلة ويرجع القيمة الجديدة
+      getTotalMatches(currentUser.uid),
+      getAllStats(currentUser.uid),
+    ]);
 
-  const [streak, totalMatches, allStats] = await Promise.all([
-    updateStreak(mainResult),       // يحدث السلسلة ويرجع القيمة الجديدة
-    getTotalMatches(currentUser.uid),
-    getAllStats(currentUser.uid),
-  ]);
+    const matchData = {
+      mode,
+      result:        mainResult,
+      myScore:       R.myScore,
+      oppScore:      R.bestOppScore,   // أعلى نقاط بين خصومي (لإنجاز "فوز بفارق")
+      aiDifficulty:  cfg.aiDifficulty || 'easy',
+      currentStreak: streak,
+    };
 
-  const matchData = {
-    mode:          cfg.aiMode === 'online' ? 'online' : R.category,   // 'ai' | 'local' | 'multi'
-    result:        mainResult,
-    myScore:       R.myScore,
-    oppScore:      R.bestOppScore,   // أعلى نقاط بين خصومي (لإنجاز "فوز بفارق")
-    aiDifficulty:  cfg.aiDifficulty || 'easy',
-    currentStreak: streak,
-  };
-
-  const newAchievements = await checkAchievements(matchData, allStats, totalMatches);
-  if (newAchievements.length > 0 && !silent) {
-    setTimeout(() => showNewAchievements(newAchievements), 1500);
+    newAchievements = await checkAchievements(matchData, allStats, totalMatches);
+    if (newAchievements.length > 0 && !silent) {
+      setTimeout(() => showNewAchievements(newAchievements), 1500);
+    }
+  } catch (e) {
+    console.warn("recordMyResult: achievements", e);
   }
 
   // ── XP ────────────────────────────────────────────────────
@@ -182,7 +197,7 @@ async function doRecord(cfg, R, scores, { silent = false, startedAt, daily }) {
     );
   } else {
     const xpData = {
-      mode:         matchData.mode,
+      mode,
       result:       mainResult,
       aiDifficulty: cfg.aiDifficulty || 'easy',
       gridSize:     cfg.rows,

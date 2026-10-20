@@ -3,10 +3,12 @@
 // (1) الحارس الثابت: لا قيمة غير مُهرَّبة تُدرج في HTML في أي ملف من js/
 // (2) العرض الحقيقي: كل واجهة تعرض أسماء/رسائل/أرقاماً يكتبها غيرنا، بكودها الحقيقي في صفحة اللعبة (jsdom)
 // (3) اللعبة كاملة: main.js الحقيقي فوق Firebase وهمي — الدخول والخروج وتغيّر الحساب وترقية الضيف والأصدقاء
+// (4) قواعد الأمان المنشورة (v36.1): database.rules.json يُفحص وحده، واللعبة كلها تعمل فوقه (الوهمي يطبّقه)
 import { runGuard } from './guard.mjs';
 import { guardProbes } from './guardProbes.mjs';
 import { ALL } from './render.mjs';
 import { APP_ALL } from './app.mjs';
+import { RULES_ALL } from './rules.mjs';
 
 const only = (process.argv.find(a => a.startsWith('--only=')) || '').slice(7);
 let bad = 0;
@@ -22,6 +24,15 @@ if (!only || 'الحارس'.includes(only) || only === 'guard') {
   console.log(`${pr.fail ? '❌' : '✅'} ${pr.title} — ${pr.pass}/${pr.pass + pr.fail}`);
   pr.notes.forEach(n => console.log('     ' + n));
   if (pr.fail) bad++;
+}
+
+console.log('\n🔐 قواعد الأمان المنشورة (database.rules.json)');
+for (const t of RULES_ALL) {
+  const r = await t();
+  if (only && !r.title.includes(only) && only !== 'القواعد') continue;
+  console.log(`${r.fail ? '❌' : '✅'} ${r.title} — ${r.pass}/${r.pass + r.fail}`);
+  r.notes.forEach(n => console.log('     ' + n));
+  if (r.fail) bad++;
 }
 
 console.log('\n🔤 العرض الحقيقي بأسماء ورسائل خبيثة (jsdom + صفحة اللعبة)');

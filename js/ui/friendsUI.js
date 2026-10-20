@@ -1,11 +1,12 @@
 // 📄 ui/friendsUI.js
 // قائمة الأصدقاء + البحث + الإجراءات
-import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1792364320";
+import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1792488854";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend,
-         listenFriendRequests, listenFriends } from "../friends.js?v=1792364320";
-import { outgoingInvite, onInviteStateChange } from "./inviteUI.js?v=1792364320";
-import { asText, firstInitial, safeImageSrc } from "./safeText.js?v=1792364320";
+         listenFriendRequests, listenFriends } from "../friends.js?v=1792488854";
+import { outgoingInvite, onInviteStateChange } from "./inviteUI.js?v=1792488854";
+import { asText, firstInitial, safeImageSrc } from "./safeText.js?v=1792488854";
+import { getCurrentUser } from "../auth.js?v=1792488854";
 
 // زر "دعوة" يعكس حالة الدعوة الصادرة (v35.9): ⏳ للصديق المدعوّ ما دامت دعوته قائمة، ويرجع مع أي نهاية لها
 // (قبول ثم مباراة، رفض، "في مباراة"، انتهاء المهلة، إلغاء، فشل) — كان لا يرجع إلا عند الرفض
@@ -25,6 +26,8 @@ let _cardStops = [];
 function stopFriendCards() {
   _cardStops.splice(0).forEach(stop => { try { stop(); } catch {} });
 }
+// أصدقائي الحاليون (مفاتيح قائمتي) — نتيجة البحث عن صديق حالي تقول "✓ صديقك" بدل "➕ إضافة" (v36.1)
+const _friendKeys = new Set();
 
 
 // onInviteFriend يُمرر من main.js لأن إطلاق اللعبة يحتاج config
@@ -41,6 +44,24 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
   const friendReqBadge     = document.getElementById("friend-requests-badge");
 
   friendsBtn?.addEventListener("click", () => friendsPanel.classList.remove("hidden"));
+
+  // رسالة قصيرة في لوحة الأصدقاء عند فشل عملية (v36.1 — الخطوة 1.13): كانت كل الأخطاء صامتة
+  // ("✅ أُرسل" قبل الكتابة، والحذف يترك صداقة من طرف واحد بلا كلمة)
+  let flashEl = document.getElementById("friends-flash");
+  if (!flashEl && searchResults?.parentNode) {
+    flashEl = document.createElement("p");
+    flashEl.id = "friends-flash";
+    flashEl.className = "friends-empty hidden";
+    searchResults.parentNode.insertBefore(flashEl, searchResults);
+  }
+  let flashTimer = null;
+  function flash(text) {
+    if (!flashEl) return;
+    flashEl.textContent = text;
+    flashEl.classList.remove("hidden");
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => flashEl.classList.add("hidden"), 6000);
+  }
 
   // تحديث كل أزرار "دعوة" الظاهرة مع كل تغيّر في الدعوة الصادرة (اشتراك واحد ولو تكرّرت التهيئة)
   try { _inviteStateUnsub?.(); } catch {}
@@ -136,21 +157,58 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
       actions.appendChild(btn); return btn;
     }
 
-    if (type === "search")  addAction("btn-add", "➕ إضافة");
+    if (type === "search") {
+      // "✓ صديقك" للصداقة من الطرفين فقط. في قائمتي وحدي (صداقة من طرف واحد بقيت من v36.0): "➕ إضافة" — طلب جديد
+      // يقبله فتكتمل (كان "✓ صديقك" يخفي الزر فلا يصلحها من جهتي شيء — مراجعة v36.1)
+      const me = getCurrentUser()?.uid;
+      const back = me && user.friends && typeof user.friends === "object" ? user.friends[me] : null;
+      const mutual = _friendKeys.has(user.uid) && !!back && typeof back === "object";   // مدخل صداقة = كائن (كالقائمة نفسها)
+      if (mutual) { const b = addAction("btn-add-done", "✓ صديقك"); b.disabled = true; }
+      else addAction("btn-add", "➕ إضافة");
+    }
     if (type === "request") { addAction("btn-accept", "✓ قبول"); addAction("btn-reject", "✕ رفض"); }
     if (type === "friend")  { addAction("btn-invite", "🎮 دعوة"); addAction("btn-chat", "💬"); addAction("btn-remove", "حذف"); }
 
     if (presenceEl) card.append(presenceEl, avatar, name, actions);
     else card.append(avatar, name, actions);
 
+    // v36.1 (1.13): كل عملية تنتظر نتيجتها الفعلية من الخادم، والفشل يُقال بوضوح (لا خطأ صامت في الـconsole)
     card.querySelector(".btn-add")?.addEventListener("click", async e => {
-      e.target.textContent = "✅ أُرسل"; e.target.disabled = true;
-      await sendFriendRequest(user.uid);
+      const btn = e.currentTarget;
+      btn.disabled = true; btn.textContent = "⏳";
+      try {
+        await sendFriendRequest(user.uid);
+        btn.textContent = "✅ أُرسل";
+      } catch {
+        btn.textContent = "⚠️ لم يُرسل";
+        flash(`⚠️ تعذّر إرسال الطلب إلى ${userName} — حاول مجدداً`);
+        setTimeout(() => { btn.textContent = "➕ إضافة"; btn.disabled = false; }, 3000);
+      }
     });
-    card.querySelector(".btn-accept")?.addEventListener("click", () => acceptFriendRequest(user.uid));
-    card.querySelector(".btn-reject")?.addEventListener("click", () => rejectFriendRequest(user.uid));
-    card.querySelector(".btn-remove")?.addEventListener("click", async () => {
-      if (confirm(`حذف ${userName} من الأصدقاء؟`)) await removeFriend(user.uid);
+    const requestBtns = () => [...card.querySelectorAll(".btn-accept, .btn-reject")];
+    const setBusy = (on) => requestBtns().forEach(b => { b.disabled = on; });
+    card.querySelector(".btn-accept")?.addEventListener("click", async () => {
+      setBusy(true);
+      try {
+        const res = await acceptFriendRequest(user.uid);
+        if (res?.reason === "stale") flash(`📭 طلب ${userName} من نسخة قديمة من اللعبة — اطلب منه تحديث الصفحة وإرساله من جديد`);
+        else if (res?.reason === "gone") flash("📭 هذا الطلب لم يعد صالحاً");
+      } catch {
+        flash(`⚠️ تعذّر قبول طلب ${userName} — حاول مجدداً`);
+        setBusy(false);
+      }
+    });
+    card.querySelector(".btn-reject")?.addEventListener("click", async () => {
+      setBusy(true);
+      try { await rejectFriendRequest(user.uid); }
+      catch { flash(`⚠️ تعذّر رفض طلب ${userName} — حاول مجدداً`); setBusy(false); }
+    });
+    card.querySelector(".btn-remove")?.addEventListener("click", async e => {
+      if (!confirm(`حذف ${userName} من الأصدقاء؟`)) return;
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try { await removeFriend(user.uid); }
+      catch { flash(`⚠️ تعذّر حذف ${userName} — حاول مجدداً`); btn.disabled = false; }
     });
     card.querySelector(".btn-chat")?.addEventListener("click",   () => onOpenChat?.(user));
     const inviteBtn = card.querySelector(".btn-invite");
@@ -178,6 +236,8 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
   });
 
   listenFriends(friends => {
+    _friendKeys.clear();
+    friends.forEach(f => _friendKeys.add(f.uid));
     stopFriendCards();
     friendsList.innerHTML = "";
     if (friends.length === 0) {

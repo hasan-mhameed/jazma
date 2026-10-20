@@ -37,7 +37,7 @@ const sections = [
     () => IV.inviteCancelled(verbose), () => IV.inviteBusy(verbose), () => IV.inviteFromWaiting(verbose),
     () => IV.inviteInviterBlip(verbose), () => IV.inviteExpires(verbose), () => IV.inviteOneAtATime(verbose),
     () => IV.inviteReviewFixes(verbose), () => IV.inviteDuringPendingOp(verbose)]],
-  ['🟢 الحضور', [() => IV.presenceFollowsMatch(verbose)]],
+  ['🟢 الحضور', [() => IV.presenceFollowsMatch(verbose), () => IV.presenceHeals(verbose)]],
   ['🔤 أمان النصوص', [() => TS.namesInSearchAndVote(verbose), () => TS.namesInCodeLobby(verbose), () => TS.roomMaxIsText(verbose)]],
 ];
 

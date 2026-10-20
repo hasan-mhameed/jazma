@@ -1,10 +1,10 @@
 // 📄 scoreboard.js — v35.5 (Nature cards + level badge — "من أنا" من مصدر واحد)
-import { state }  from "../core/state.js?v=1792364320";
-import { config } from "../config/config.js?v=1792364320";
-import { getXP, getLevelFromXP } from "../xp.js?v=1792364320";
-import { getCurrentUser } from "../auth.js?v=1792364320";
-import { getParticipants, getMyNum, getPlayerUid } from "../core/matchResult.js?v=1792364320";
-import { esc } from "./safeText.js?v=1792364320";
+import { state }  from "../core/state.js?v=1792488854";
+import { config } from "../config/config.js?v=1792488854";
+import { getXP, getLevelFromXP } from "../xp.js?v=1792488854";
+import { getCurrentUser } from "../auth.js?v=1792488854";
+import { getParticipants, getMyNum, getPlayerUid } from "../core/matchResult.js?v=1792488854";
+import { esc } from "./safeText.js?v=1792488854";
 
 const AVATARS = ['🦊', '🤖', '🦅', '🐺'];
 const COLORS  = ['p1', 'p2', 'p3', 'p4'];

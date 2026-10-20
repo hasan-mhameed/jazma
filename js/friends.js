@@ -1,11 +1,11 @@
-// 📄 friends.js — v12.1
-// نظام الأصدقاء الكامل
+// 📄 friends.js — v12.1 (أُعيد بناء الإرسال والقبول والحذف في v36.1 — الخطوة 1.13)
+// نظام الأصدقاء الكامل — يعمل مع قواعد الأمان في database.rules.json (كل واحد يكتب في ملفه، وفي ملف غيره ما يخصّه فقط)
 
 import { getDatabase, ref, get, update, onValue, remove }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getCurrentUser } from "./auth.js?v=1792364320";
+import { getCurrentUser } from "./auth.js?v=1792488854";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -39,68 +39,94 @@ export async function searchUsers(query) {
 }
 
 // ─── إرسال طلب صداقة ─────────────────────────────────────────
+// v36.1 (الخطوة 1.13): كتابة واحدة ذرّية — الطلب في صندوق المستقبل + دليل الطلب في ملفي (sentRequests/<المستقبل>).
+// قواعد الأمان لا تسمح لأحد أن يضيف نفسه لقائمة غيره إلا بهذا الدليل، وهو في ملف المرسل وحده فلا يزوّره أحد
+// (صندوق المستقبل يملكه هو). فشل الكتابة يصل من يستدعيها: الواجهة تقول "لم يُرسل" — كانت تقول "أُرسل" قبل الكتابة.
 export async function sendFriendRequest(toUid) {
   const fromUid = getCurrentUser()?.uid;
-  if (!fromUid) return;
-
-  // تحقق إذا موجود مسبقاً
-  const existing = await get(ref(db, `users/${toUid}/friendRequests/${fromUid}`));
-  if (existing.exists()) return;
-
-  const fromProfile = await get(ref(db, `users/${fromUid}`));
-  const fromData    = fromProfile.val() || {};   // v36.0: ملف ناقص/غائب لا يكسر الإرسال
-
-  await update(ref(db, `users/${toUid}/friendRequests/${fromUid}`), {
-    uid:  fromUid,
-    name: fromData.name ?? "لاعب",
-    photo: fromData.photo || "",
-    sentAt: Date.now(),
+  if (!fromUid || !toUid || toUid === fromUid) throw new Error("طلب صداقة غير صالح");
+  const fromData = (await get(ref(db, `users/${fromUid}`))).val() || {};   // ملف ناقص/غائب لا يكسر الإرسال
+  const at = Date.now();
+  await update(ref(db), {
+    [`users/${toUid}/friendRequests/${fromUid}`]: {
+      uid: fromUid,                       // للنسخ القديمة فقط — الجديدة تأخذ المعرّف من المفتاح
+      name: fromData.name ?? "لاعب",
+      photo: fromData.photo || "",
+      sentAt: at,
+    },
+    [`users/${fromUid}/sentRequests/${toUid}`]: at,
   });
 }
 
 // ─── قبول طلب صداقة ──────────────────────────────────────────
+// v36.1: الطرفان وحذف الطلب واستهلاك دليله بكتابة واحدة — صداقة كاملة أو لا شيء (لا صداقة من طرف واحد أبداً)،
+// والدليل إذنٌ لمرة واحدة: بعد القبول لا يعيد به أحدٌ نفسه لقائمة المرسل (القواعد تسمح للمستقبل بحذفه فقط).
+// يرجع { ok: true } أو { ok: false, reason }: "gone" صاحب الطلب لا ملف له؛ "stale" طلب بلا دليل في ملف مرسله
+// (من نسخة قبل v36.1) — لا يمكن إتمامه، فيُحذف ويُطلب من صاحبه إرساله من جديد.
 export async function acceptFriendRequest(fromUid) {
   const myUid = getCurrentUser()?.uid;
-  if (!myUid) return;
-
-  const fromSnap = await get(ref(db, `users/${fromUid}`));
-  // v36.0: طلب بلا ملف لصاحبه (مفتاح وهمي أو حساب حُذف) طلبٌ بائد — يُحذف ولا تُكتب صداقة (مراجعة v36.0 الخامسة)
-  if (!fromSnap.exists()) { await remove(ref(db, `users/${myUid}/friendRequests/${fromUid}`)); return; }
-  const mySnap   = await get(ref(db, `users/${myUid}`));
-  const fromData = fromSnap.val() || {};   // v36.0: ملف ناقص/غائب (طلب بمفتاح لا ملف له) لا يكسر القبول
+  if (!myUid || !fromUid) throw new Error("طلب صداقة غير صالح");
+  const [fromSnap, mySnap, proofSnap] = await Promise.all([
+    get(ref(db, `users/${fromUid}`)),
+    get(ref(db, `users/${myUid}`)),
+    get(ref(db, `users/${fromUid}/sentRequests/${myUid}`)),
+  ]);
+  const dropRequest = () => remove(ref(db, `users/${myUid}/friendRequests/${fromUid}`));
+  // طلب بلا ملف لصاحبه (مفتاح وهمي أو حساب حُذف) طلبٌ بائد — يُحذف ولا تُكتب صداقة (مراجعة v36.0 الخامسة)
+  if (!fromSnap.exists()) { await dropRequest(); return { ok: false, reason: "gone" }; }
+  const fromData = fromSnap.val() || {};
   const myData   = mySnap.val() || {};
-
-  // أضف كل واحد لقائمة أصدقاء الثاني
-  await update(ref(db, `users/${myUid}/friends/${fromUid}`), {
-    uid:   fromUid,
-    name:  fromData.name ?? "لاعب",
-    photo: fromData.photo || "",
-    since: Date.now(),
-  });
-  await update(ref(db, `users/${fromUid}/friends/${myUid}`), {
-    uid:   myUid,
-    name:  myData.name ?? "لاعب",
-    photo: myData.photo || "",
-    since: Date.now(),
-  });
-
-  // احذف الطلب
-  await remove(ref(db, `users/${myUid}/friendRequests/${fromUid}`));
+  if (!proofSnap.exists()) {
+    // قُبل للتو من صفحة أخرى لي (القبول يستهلك الدليل) والصداقة قائمة من الطرفين: لا شيء ناقص
+    if (isEntry(myData.friends?.[fromUid]) && isEntry(fromData.friends?.[myUid])) { await dropRequest(); return { ok: true }; }
+    // أو حُسم من صفحة أخرى (رُفض): لم يعد في صندوقي — بطاقة قديمة، لا "نسخة قديمة"
+    if (!isEntry(myData.friendRequests?.[fromUid])) return { ok: false, reason: "gone" };
+    await dropRequest();
+    return { ok: false, reason: "stale" };
+  }
+  const since = Date.now();
+  try {
+    await update(ref(db), {
+      [`users/${myUid}/friends/${fromUid}`]: { uid: fromUid, name: fromData.name ?? "لاعب", photo: fromData.photo || "", since },
+      [`users/${fromUid}/friends/${myUid}`]: { uid: myUid, name: myData.name ?? "لاعب", photo: myData.photo || "", since },
+      [`users/${myUid}/friendRequests/${fromUid}`]: null,
+      [`users/${fromUid}/sentRequests/${myUid}`]: null,
+    });
+  } catch (e) {
+    // قبولان بنفس اللحظة من صفحتين لي: الأول استهلك الدليل فرُفض الثاني — والصداقة قائمة من الطرفين: نجاح لا خطأ
+    const [mine, theirs] = await Promise.all([
+      get(ref(db, `users/${myUid}/friends/${fromUid}`)),
+      get(ref(db, `users/${fromUid}/friends/${myUid}`)),
+    ]).catch(() => [null, null]);
+    if (mine?.exists() && theirs?.exists()) { await dropRequest().catch(() => {}); return { ok: true }; }
+    throw e;
+  }
+  return { ok: true };
 }
+const isEntry = v => !!v && typeof v === "object";
 
 // ─── رفض طلب صداقة ───────────────────────────────────────────
+// v36.1: ومعه دليل الطلب في ملف مرسله (إذنه ينتهي برفضه) — خطوة ثانية لا تُفشل الرفض: طلب قديم بلا دليل، أو
+// القواعد القديمة قبل نشر الجديدة (ترفض حذفه)، لا يضرّ بقاؤه
 export async function rejectFriendRequest(fromUid) {
   const myUid = getCurrentUser()?.uid;
-  if (!myUid) return;
+  if (!myUid || !fromUid) throw new Error("طلب صداقة غير صالح");
   await remove(ref(db, `users/${myUid}/friendRequests/${fromUid}`));
+  await remove(ref(db, `users/${fromUid}/sentRequests/${myUid}`)).catch(() => {});
 }
 
 // ─── حذف صديق ────────────────────────────────────────────────
+// v36.1: من الطرفين بكتابة واحدة (كانت كتابتين: الثانية ترفضها القواعد فتبقى صداقة من طرف واحد بصمت)، ومعها
+// سحب طلبي إليه إن بقي (من صندوقه، ودليله من ملفي) — فلا يعيد نفسه لقائمتي بطلب قديم، ولا يقبل طلباً سحبته
 export async function removeFriend(friendUid) {
   const myUid = getCurrentUser()?.uid;
-  if (!myUid) return;
-  await remove(ref(db, `users/${myUid}/friends/${friendUid}`));
-  await remove(ref(db, `users/${friendUid}/friends/${myUid}`));
+  if (!myUid || !friendUid) throw new Error("صديق غير صالح");
+  await update(ref(db), {
+    [`users/${myUid}/friends/${friendUid}`]: null,
+    [`users/${friendUid}/friends/${myUid}`]: null,
+    [`users/${friendUid}/friendRequests/${myUid}`]: null,
+    [`users/${myUid}/sentRequests/${friendUid}`]: null,
+  });
 }
 
 // v36.0: كل مدخل (صديق أو طلب صداقة) قد يكتبه الطرف الآخر — المعرّف من مفتاحه، لا من حقل uid داخله. كان طلب مخزَّن
@@ -133,12 +159,33 @@ export function listenFriendRequests(cb) {
 }
 
 // ─── الاستماع للأصدقاء ───────────────────────────────────────
+// v36.1: ومعه تنظيف أدلة الطلبات — دليل طلبي لمن صارت الصداقة معه من الطرفين أدّى مهمته، فيُسحب ولا يبقى إذنٌ مفتوح
+// يعيد به نفسه لقائمتي بعد أن أحذفه (القبول من v36.1 يستهلكه بنفسه؛ هذا لما قبلته نسخة أقدم). صديقٌ في قائمتي وحدها
+// (صداقة من طرف واحد من v36.0) أرسلت له طلباً لإصلاحها: دليله باقٍ حتى يقبل — كان التنظيف يمحوه فوراً (مراجعة v36.1)
+const _sweeping = new Set();   // مفاتيح قيد الفحص — المستمع مشترك بين واجهتين في الصفحة
 export function listenFriends(cb) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid) return () => {};
-  const unsub = onValue(ref(db, `users/${myUid}/friends`), (snap) => {
-    const friends = snap.exists() ? entriesWithKey(snap.val()) : [];
-    cb(friends);
+  let friendsVal = null, sentVal = null;
+  const sweep = () => {
+    if (!friendsVal || !sentVal || typeof sentVal !== "object") return;
+    for (const k of Object.keys(sentVal)) {
+      if (!isEntry(friendsVal[k]) || _sweeping.has(k)) continue;
+      _sweeping.add(k);
+      get(ref(db, `users/${k}/friends/${myUid}`))
+        .then(s => (isEntry(s.val()) ? remove(ref(db, `users/${myUid}/sentRequests/${k}`)) : null))
+        .catch(() => {})
+        .finally(() => _sweeping.delete(k));
+    }
+  };
+  const unsubFriends = onValue(ref(db, `users/${myUid}/friends`), (snap) => {
+    friendsVal = snap.val() || {};
+    cb(entriesWithKey(friendsVal));
+    sweep();
   });
-  return unsub;
+  const unsubSent = onValue(ref(db, `users/${myUid}/sentRequests`), (snap) => {
+    sentVal = snap.val() || {};
+    sweep();
+  });
+  return () => { unsubFriends(); unsubSent(); };
 }

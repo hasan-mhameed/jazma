@@ -570,6 +570,113 @@ export async function presenceFollowsMatch(verbose = false) {
   return r;
 }
 
+// ── الحضور يصحّح نفسه (v36.1 — الخطوة 1.14) ──
+// فحص 5 لـv36.0: "أ" ظهر "متصل" عند صديقه وهو في مباراة، وتحديث الصفحة أصلحه — الحالة تُكتب عند تغيّرها فقط، فإن
+// خالفت القاعدةُ الصفحةَ بقيت خاطئة. هنا ما يفعله الواقع بالقيمة دون علم الصفحة: أمر انقطاع قديم ينفّذه الخادم بعد
+// عودة الاتصال، وصفحة أخرى بالحساب نفسه تكتب فوقها (أو تُغلق)، وانقطاع طويل — والصفحة تصحّحها بلا عاصفة كتابات.
+const presOf = c => c.world.server.getAt('users/' + c.uid + '/presence') || {};
+const otherWrites = (w, c, state) => { w.server.setAt('users/' + c.uid + '/presence', { state, lastSeen: clock.now, by: 'tab2' }); w.server.notify(); };
+const localGame = c => {   // كما في main.js (launchGame) للعبة ضد الكمبيوتر: لا غرفة ولا أوامر انقطاع للمباراة
+  c.event('act', 'لعبة ضد الكمبيوتر'); c.mods.config.online = false; c.mods.state.gameFinished = false;
+  c.el('board').classList.remove('hidden'); c.onlineUI.startPresenceSync();
+};
+export async function presenceHeals(verbose = false) {
+  const r = suite('الحضور يصحّح نفسه: أمر انقطاع متأخر، صفحة أخرى بالحساب نفسه، انقطاع طويل — بلا عاصفة كتابات (1.14)'); r.verbose = verbose;
+  const hasReport = c => typeof c.mods.pres.presenceReport === 'function';
+  // (أ) أمر انقطاع قديم ينفّذه الخادم بعد عودة الاتصال (يلاحظ سقوط الاتصال القديم متأخراً)
+  for (const playing of [false, true]) {
+    const tag = playing ? '(أ2 في مباراة)' : '(أ1 في القائمة)';
+    const want = playing ? 'playing' : 'online';
+    const w = new World(); w.quiet = true;
+    const A = await w.client('أحمد');
+    await w.run(1000);
+    if (playing) { localGame(A); await w.run(1500); }
+    r.ok(pres(A) === want, `${tag} قبل الانقطاع: ${want} (${pres(A)})`);
+    A.drop({ offlineMs: 1000, serverDetectMs: 4000 });
+    await w.run(1500);
+    r.ok(pres(A) === want, `${tag} عاد الاتصال: كتب حالته (${pres(A)})`);
+    const k = A.presence.length;
+    await w.run(2600);                                       // 4.1ث: الخادم نفّذ أمر الاتصال القديم
+    const stale = pres(A);
+    await w.run(2500);
+    r.ok(stale === 'offline', `${tag} الخادم كتب "غير متصل" متأخراً — الحالة التي يُصلحها الفحص (${stale})`);
+    r.ok(pres(A) === want, `${tag} بعد ثانيتين: صحّحت الصفحة حالتها إلى ${want} (${pres(A)})`);
+    const healed = A.presence.length - k;
+    await w.run(20000);
+    r.ok(healed === 1 && A.presence.length - k === 1, `${tag} كتابة تصحيح واحدة ثم هدوء (${healed} ثم ${A.presence.length - k})`);
+    noErr(r, w); w.dispose();
+  }
+  // (ب) صفحة أخرى بالحساب نفسه (جوال مفتوح في الخلفية) تكتب "متصل" وهو في مباراة هنا — مرة، ثم كل 3 ثوانٍ
+  {
+    const w = new World(); w.quiet = true;
+    const A = await w.client('أحمد');
+    await w.run(1000); localGame(A); await w.run(1500);
+    let k = A.presence.length;
+    otherWrites(w, A, 'online');
+    await w.run(300);
+    r.ok(pres(A) === 'online', `(ب) الصفحة الأخرى كتبت "متصل" (${pres(A)})`);
+    await w.run(2500);
+    r.ok(pres(A) === 'playing' && presOf(A).by !== 'tab2' && A.presence.length - k === 1, `(ب) عادت "في مباراة" بكتابة واحدة (${pres(A)}، ${A.presence.length - k})`);
+    k = A.presence.length;
+    for (let i = 0; i < 20; i++) { otherWrites(w, A, 'online'); await w.run(3000); }   // دقيقة كاملة
+    const n = A.presence.length - k;
+    r.ok(n >= 3 && n <= 6, `(ب) كتابة كل 3ث لدقيقة: تصحيحات متباعدة لا عاصفة (${n} مقابل 20)`);
+    await w.run(70000);
+    r.ok(pres(A) === 'playing', `(ب) بعد توقّفها: "في مباراة" (${pres(A)})`);
+    noErr(r, w); w.dispose();
+  }
+  // (ب2) الصفحة الأخرى في مباراة وهذه في القائمة: لا تكتب فوقها (الأعلى يبقى — لا تعارك)
+  {
+    const w = new World(); w.quiet = true;
+    const A = await w.client('أحمد');
+    await w.run(1000);
+    const k = A.presence.length;
+    otherWrites(w, A, 'playing');
+    await w.run(10000);
+    r.ok(pres(A) === 'playing' && A.presence.length === k, `(ب2) صفحة أخرى "في مباراة": تبقى، وهذه لا تكتب (${pres(A)}، ${A.presence.length - k})`);
+    // ثم أُغلقت الصفحة الأخرى (أمر انقطاعها) وهذه ما زالت مفتوحة: تعود "متصل"
+    otherWrites(w, A, 'offline');
+    await w.run(2500);
+    r.ok(pres(A) === 'online', `(ج) أُغلقت الصفحة الأخرى وهذه مفتوحة: "متصل" لا "غير متصل" (${pres(A)})`);
+    noErr(r, w); w.dispose();
+  }
+  // (د) انقطاع طويل: لا محاولات تصحيح وهو منقطع، وعند العودة حالته صحيحة بلا كتابات زائدة
+  {
+    const w = new World(); w.quiet = true;
+    const A = await w.client('أحمد');
+    await w.run(1000);
+    A.drop({ offlineMs: 20000, serverDetectMs: 1500 });
+    await w.run(2000);
+    const k = A.presence.length;
+    await w.run(17000);
+    r.ok(pres(A) === 'offline' && A.presence.length === k, `(د) منقطع: "غير متصل" ولا محاولات كتابة (${pres(A)}، ${A.presence.length - k})`);
+    await w.run(4000);
+    r.ok(pres(A) === 'online' && A.presence.length - k === 1, `(د) عاد: "متصل" بكتابة واحدة (${pres(A)}، ${A.presence.length - k})`);
+    noErr(r, w); w.dispose();
+  }
+  // (هـ) سجل التشخيص: JAZAM_PRESENCE() في الـconsole — الأحداث بلا معرّف الحساب
+  {
+    const w = new World(); w.quiet = true;
+    const A = await w.client('أحمد');
+    await w.run(1000); localGame(A); await w.run(1500);
+    otherWrites(w, A, 'online'); await w.run(3000);
+    r.ok(hasReport(A) && typeof A.ctx.JAZAM_PRESENCE === 'function', '(هـ) JAZAM_PRESENCE() موجود');
+    if (hasReport(A)) {
+      const rep = A.mods.pres.presenceReport();
+      const evs = rep.events.map(e => e.ev);
+      r.ok(rep.myState === 'playing' && rep.connected === true && rep.heals === 1, `(هـ) الملخّص: الحالة والاتصال والتصحيحات (${rep.myState}/${rep.connected}/${rep.heals})`);
+      r.ok(['start', 'conn', 'activity', 'set', 'write', 'db', 'heal'].every(e => evs.includes(e)), `(هـ) الأحداث كلها مسجّلة (${[...new Set(evs)].join(',')})`);
+      r.ok(/activity\s+playing \[board=1 fin=0 online=0 spec=0 out=0\]/.test(rep.text), '(هـ) نشاط اللاعب وما بُني عليه في السجل');
+      r.ok(!rep.text.includes(A.uid) && !JSON.stringify(rep).includes(A.uid) && !rep.text.includes(A.name), '(هـ) لا معرّف حساب ولا اسم في التقرير');
+      r.ok(String(A.ctx.JAZAM_PRESENCE()).includes('انسخ'), '(هـ) الأمر يطبع التقرير');
+      for (let i = 0; i < 150; i++) A.mods.pres.presenceNote('x', i);
+      r.ok(A.mods.pres.presenceReport().events.length === 100, '(هـ) السجل محدود (آخر 100 حدث)');
+    }
+    noErr(r, w); w.dispose();
+  }
+  return r;
+}
+
 // ── مستكشف عشوائي: دعوات/قبول/رفض/إلغاء/بحث/انقطاع/إغلاق بين 3 أصدقاء داخل نوافذ السباق ──
 // الثوابت بعد الهدوء: لا غرفة منتظرة بلا صاحب حاضر ينتظر فيها، لا دعوة صادرة بلا غرفتها، لا مباراة بطرف واحد،
 // ≤2 في كل غرفة ثنائية، لا لاعب في مباراتين، ولا إشعار ظاهر لدعوة غرفتها لا تنتظر

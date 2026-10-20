@@ -1,8 +1,8 @@
 // 📄 ui/authUI.js
 // واجهة تسجيل الدخول والتسجيل
 import { signInWithGoogle, logout, registerWithEmail, signInWithEmail,
-         loginAsGuest, upgradeGuestWithGoogle, upgradeGuestWithEmail, isGuest } from "../auth.js?v=1792364320";
-import { freshPage } from "../session.js?v=1792364320";
+         loginAsGuest, upgradeGuestWithGoogle, upgradeGuestWithEmail, isGuest } from "../auth.js?v=1792488854";
+import { freshPage } from "../session.js?v=1792488854";
 
 function getAuthError(code) {
   const errors = {

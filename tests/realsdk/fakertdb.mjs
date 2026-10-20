@@ -4,6 +4,16 @@
 import http from 'node:http';
 import Websocket from 'faye-websocket';
 import { __nodeFromJSON } from './.gen/sdk-hash.mjs';   // يولّده prepare.mjs
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { checkWrite, canRead } from '../shared/rulesEngine.mjs';
+
+// قواعد الأمان المنشورة (v36.1 — الخطوة 1.13): الخادم الوهمي يطبّقها على كل طلب كما يفعل Firebase — بهوية الجهاز
+// من رمز المصادقة الوهمي (mockUserToken في connectDatabaseEmulator). المشروع المفحوص: JAZAM_DIR أو جذر المشروع.
+const PROJECT = process.env.JAZAM_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+export const RULES = JSON.parse(fs.readFileSync(path.join(PROJECT, 'database.rules.json'), 'utf8'));
+const jwtSub = (tok) => { try { const p = JSON.parse(Buffer.from(String(tok).split('.')[1], 'base64url').toString('utf8')); return p.sub || p.user_id || null; } catch { return null; } };
 
 const parts = p => String(p || '').split('/').filter(Boolean);
 const clone = v => (v == null ? null : JSON.parse(JSON.stringify(v)));
@@ -18,7 +28,8 @@ function resolveSV(v, now) {
 }
 export class FakeRTDB {
   // detectDelay: الخادم يلاحظ سقوط اتصال بعد مهلة (كالخادم الحقيقي مع الجوال) — أوامر onDisconnect تُنفَّذ متأخرة
-  constructor() { this.root = null; this.conns = new Set(); this.log = []; this.delay = 5; this.delayFor = null; this.replyDelayFor = null; this.detectDelay = 0; }
+  // rules: قواعد الأمان (الافتراضي: database.rules.json للمشروع؛ null = بلا قواعد). denied: ما رُفض { conn, a, p }
+  constructor({ rules = RULES } = {}) { this.root = null; this.conns = new Set(); this.log = []; this.delay = 5; this.delayFor = null; this.replyDelayFor = null; this.detectDelay = 0; this.rules = rules; this.denied = []; }
   close() { for (const c of this.conns) { try { c.ws.close(); } catch {} } try { this.srv.close(); } catch {} }
   getAt(p) { let c = this.root; for (const k of parts(p)) { if (c == null || typeof c !== 'object') return null; c = c[k]; if (c === undefined) return null; } return c ?? null; }
   setAt(p, v) {
@@ -39,7 +50,7 @@ export class FakeRTDB {
   }
   send(conn, msg, ms = null) { if (!conn.closed) setTimeout(() => { if (!conn.closed) conn.ws.send(JSON.stringify(msg)); }, typeof ms === 'number' ? ms : this.delay); }
   accept(ws) {
-    const conn = { ws, listens: new Set(), ondisc: [], closed: false, id: Math.random().toString(36).slice(2, 7), paused: false, queue: [] };
+    const conn = { ws, listens: new Set(), ondisc: [], closed: false, id: Math.random().toString(36).slice(2, 7), paused: false, queue: [], uid: null };
     this.conns.add(conn);
     ws.send(JSON.stringify({ t: 'c', d: { t: 'h', d: { ts: Date.now(), v: '5', h: `localhost:${this.port}`, s: 'sess_' + conn.id } } }));
     // delayFor(msg, conn): تأخير رسالة بعينها (رفع بطيء، تأكيد يتأخر حتى يسبقه انقطاع) — وإلا this.delay
@@ -86,6 +97,21 @@ export class FakeRTDB {
     const { r, a, b } = m.d;
     const now = Date.now();
     const rd = this.replyDelayFor ? this.replyDelayFor(m, conn) : null;
+    // المصادقة: هوية الاتصال من الرمز (لقواعد الأمان)
+    if (a === 'auth' || a === 'gauth') { conn.uid = jwtSub(b && b.cred); return this.reply(conn, r, 'ok', { auth: { uid: conn.uid } }, rd); }
+    if (a === 'unauth') { conn.uid = null; return this.reply(conn, r, 'ok', {}, rd); }
+    // قواعد الأمان: قراءة (استماع/قراءة) وكتابة (put/merge، وأوامر الانقطاع لحظة تسجيلها) — رفض = permission_denied
+    if (this.rules) {
+      const deny = () => { this.denied.push({ conn: conn.id, uid: conn.uid, a, p: b && b.p }); this.log.push(`DENIED ${a} ${b && b.p} (${conn.uid})`); return this.reply(conn, r, 'permission_denied', 'Permission denied', rd); };
+      if ((a === 'q' || a === 'g') && !canRead(this.rules, b.p, { uid: conn.uid, root: this.root, now })) return deny();
+      if (a === 'p' || a === 'o') {
+        if (!checkWrite(this.rules, [[b.p, resolveSV(b.d, now)]], { uid: conn.uid, root: this.root, now }).ok) return deny();
+      }
+      if (a === 'm' || a === 'om') {
+        const writes = Object.entries(b.d || {}).map(([k, v]) => [parts(b.p).concat(parts(k)).join('/'), resolveSV(v, now)]);
+        if (!checkWrite(this.rules, writes, { uid: conn.uid, root: this.root, now }).ok) return deny();
+      }
+    }
     if (a === 'q') { const p = parts(b.p).join('/'); conn.listens.add(p); this.send(conn, { t: 'd', d: { a: 'd', b: { p: '/' + p, d: clone(this.getAt(p)) } } }); return this.reply(conn, r, 'ok', {}, rd); }
     if (a === 'n') { conn.listens.delete(parts(b.p).join('/')); return this.reply(conn, r, 'ok', {}, rd); }
     if (a === 'p') {
