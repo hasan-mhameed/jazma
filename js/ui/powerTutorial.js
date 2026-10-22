@@ -4,10 +4,10 @@
 
 import { getDatabase, ref, get, update }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "../auth.js?v=1792488854";
-import { POWERS } from "../core/powers.js?v=1792488854";
-import { getPowerIcon } from "./powerIcons.js?v=1792488854";
-import { esc } from "./safeText.js?v=1792488854";
+import { currentUser } from "../auth.js?v=1792621208";
+import { POWERS } from "../core/powers.js?v=1792621208";
+import { getPowerIcon } from "./powerIcons.js?v=1792621208";
+import { esc } from "./safeText.js?v=1792621208";
 
 const db = getDatabase();
 

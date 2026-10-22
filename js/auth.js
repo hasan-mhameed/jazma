@@ -8,7 +8,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getDatabase, ref, get, update, remove }
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { localStatsKey, isSafeKey }   from "./core/statsKey.js?v=1792488854";
+import { localStatsKey, isSafeKey }   from "./core/statsKey.js?v=1792621208";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",

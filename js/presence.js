@@ -9,7 +9,7 @@
 // وسجل تشخيص لآخر الأحداث يُطلب من الـconsole: JAZAM_PRESENCE()
 import { getDatabase, ref, onValue, onDisconnect, update, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser, onUserChange } from "./auth.js?v=1792488854";
+import { getCurrentUser, onUserChange } from "./auth.js?v=1792621208";
 
 const db = getDatabase();
 

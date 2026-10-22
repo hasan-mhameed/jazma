@@ -629,7 +629,7 @@ function pixiStub() {
 // الكمبيوتر من شاشة الإعداد الحقيقية، ثم ما يجعل القاعدة تخالف الصفحة دون علمها (أمر انقطاع ينفّذه الخادم متأخراً
 // والصفحة متصلة، وكتابة ترفضها القواعد)، والصفحة تصحّحها وحدها؛ وتقرير JAZAM_PRESENCE() بلا بيانات الحساب.
 export async function presenceSelfHeal() {
-  const r = checker('الحضور في اللعبة كاملة: "في مباراة" ضد الكمبيوتر، ويصحّح نفسه بعد أمر انقطاع متأخر أو كتابة مرفوضة، وJAZAM_PRESENCE() بلا بيانات الحساب (1.14)');
+  const r = checker('الحضور في اللعبة كاملة: "في مباراة" في كل مباراة بالصفحة نفسها (ضد الكمبيوتر ومحلي)، ويصحّح نفسه بعد أمر انقطاع متأخر أو كتابة مرفوضة، وJAZAM_PRESENCE() بلا بيانات الحساب (1.14)');
   const U = { uid: 'u7f3aQ', displayName: 'سرّي', email: 'secret@example.com', photoURL: GPHOTO, isAnonymous: false, providerData: [] };
   const sleep = ms => new Promise(res => setTimeout(res, ms));
   const data = { 'users/u7f3aQ': { uid: 'u7f3aQ', name: 'سرّي', email: 'secret@example.com' } };
@@ -662,6 +662,34 @@ export async function presenceSelfHeal() {
       r.ok(!['u7f3aQ', 'secret@example.com', 'سرّي'].some(x => text.includes(x)), 'التقرير فيه معرّف الحساب أو الإيميل أو الاسم');
       r.ok(H.errors.length === 0 && !H.logs.some(l => l.startsWith('error:')), 'أخطاء' + errText(H) + ' ' + H.logs.filter(l => l.startsWith('error:')).join(' | ').slice(0, 200));
     } catch (e) { r.ok(false, 'خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  // (ج) مباريات متتالية في الصفحة نفسها (فحص 5 لـv36.1 — السبب الحقيقي لـ1.14): اللوحة تُبنى من جديد مع كل مباراة،
+  // والمرجع المحفوظ لها كان يجعل الحضور يرى لحظة البدء لوحةً مخفية فيتوقف — "متصل" في كل مباراة بعد الأولى
+  {
+    const H = await bootApp({ user: U, data });
+    const pres = () => H.fb.get('users/u7f3aQ/presence') || {};
+    const startMode = async (txt) => {
+      H.win.PIXI = pixiStub();
+      const card = [...H.doc.querySelectorAll('#mode-cards .mode-card')].find(c => c.textContent.includes(txt));
+      card?.click(); $(H, 'start-game').click(); await H.settle(0, 20); await sleep(1100); await H.settle(0, 10);
+    };
+    const exit = async () => { $(H, 'restart').click(); await H.settle(0, 20); await sleep(1100); await H.settle(0, 10); };
+    try {
+      const seen = [];
+      for (const [i, mode] of [[1, 'الكمبيوتر'], [2, 'الكمبيوتر'], [3, 'محليون'], [4, 'الكمبيوتر']]) {
+        await startMode(mode);
+        seen.push(`${i}:${pres().state}`);
+        r.ok(pres().state === 'playing' && !$(H, 'board').classList.contains('hidden'),
+          `(ج) المباراة ${i} (${mode}) في الصفحة نفسها: "في مباراة" (${pres().state})`);
+        await exit();
+        r.ok(pres().state === 'online', `(ج) بعد الخروج من المباراة ${i}: "متصل" (${pres().state})`);
+      }
+      const rep = (await H.import('js/presence.js')).presenceReport();
+      r.ok(rep.events.filter(e => e.ev === 'activity' && /^playing \[board=1/.test(e.detail)).length === 4,
+        `(ج) السجل: نشاط "playing" ولوحة ظاهرة عند بدء كل مباراة (${rep.events.filter(e => e.ev === 'activity').map(e => e.detail.split(' ')[0]).join('،')})`);
+      r.ok(H.errors.length === 0 && !H.logs.some(l => l.startsWith('error:')), '(ج) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(ج) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
     H.close();
   }
   // (ب2) تراجع مرفوض: انتهت المباراة و"متصل" رُفضت (القاعدة ما زالت على "في مباراة" التي كتبتها هذه الصفحة) — يُصحَّح
