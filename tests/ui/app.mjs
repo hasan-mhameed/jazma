@@ -356,6 +356,8 @@ export async function namesAndPhotosInDomUIs() {
 const searchFor = async (H, q) => { $(H, 'friends-search-input').value = q; $(H, 'friends-search-btn').click(); await H.settle(0, 10); };
 const flashText = H => ($(H, 'friends-flash') && !$(H, 'friends-flash').classList.contains('hidden')) ? $(H, 'friends-flash').textContent : '';
 // قبول من جهاز الطرف الآخر كما يفعل friends.js (يستهلك الدليل)؛ consume=false: كما تفعل نسخة أقدم (يبقى الدليل لتنظيف المرسل)
+// زر بطاقة شخص في نتائج البحث كما هو الآن (يُعاد رسمه مع كل تغيّر — v36.2)
+const searchBtn = (H, uid) => $(H, 'search-results').querySelector(`button[data-uid="${uid}"]`);
 const acceptAs = (H, accepter, sender, names = {}, { consume = true } = {}) => H.fb.writeAs(accepter, [
   [`users/${accepter}/friends/${sender}`, { uid: sender, name: names[sender] || sender, since: 1 }],
   [`users/${sender}/friends/${accepter}`, { uid: accepter, name: names[accepter] || accepter, since: 1 }],
@@ -378,7 +380,7 @@ export async function friendsUnderRules() {
       add?.click(); await H.settle(0, 20);
       r.ok(!!H.fb.get('users/b/friendRequests/me') && !!H.fb.get('users/me/sentRequests/b'),
         `(أ) الطلب لم يصل صندوقه أو بلا دليل في ملفي (طلب: ${!!H.fb.get('users/b/friendRequests/me')}, دليل: ${!!H.fb.get('users/me/sentRequests/b')})`);
-      r.ok(add?.textContent === '✅ أُرسل', `(أ) الزر بعد الإرسال "${add?.textContent}"`);
+      r.ok(searchBtn(H, 'b')?.textContent === '✅ أُرسل', `(أ) الزر بعد الإرسال "${searchBtn(H, 'b')?.textContent}"`);
       const ok = acceptAs(H, 'b', 'me', { b: 'باسل', me: 'أنا' }); await H.settle(0, 20);
       r.ok(ok.ok, `(أ) قبول باسل من جهازه رفضته القواعد (${ok.path})`);
       r.ok(stateOf(H, 'باسل') === 'online', `(أ) باسل لم يظهر في قائمتي بحالته بعد قبوله (${stateOf(H, 'باسل')})${errText(H)}`);
@@ -516,7 +518,7 @@ export async function friendsUnderRules() {
       await searchFor(H, 'باسل');
       const add = $(H, 'search-results').querySelector('.btn-add');
       add?.click(); await H.settle(0, 20);
-      r.ok(add?.textContent === '⚠️ لم يُرسل' && /تعذّر إرسال/.test(flashText(H)), `(د) فشل الإرسال لم يُقل: الزر "${add?.textContent}"، الرسالة "${flashText(H)}"`);
+      r.ok(searchBtn(H, 'b')?.textContent === '⚠️ لم يُرسل' && /تعذّر إرسال/.test(flashText(H)), `(د) فشل الإرسال لم يُقل: الزر "${searchBtn(H, 'b')?.textContent}"، الرسالة "${flashText(H)}"`);
       r.ok(H.fb.get('users/b/friendRequests/me') == null && H.fb.get('users/me/sentRequests/b') == null, '(د) كُتب نصف الطلب (الدليل بلا طلب)');
       cardOf(H, 'فرح')?.querySelector('.btn-remove')?.click(); await H.settle(0, 20);
       r.ok(!!H.fb.get('users/me/friends/f') && !!H.fb.get('users/f/friends/me') && /تعذّر حذف/.test(flashText(H)),
@@ -735,5 +737,142 @@ export async function presenceSelfHeal() {
   return r;
 }
 
+
+// ─── 9. ملاحظات الواجهة من فحوص v36.1 (v36.2 — الخطوة 1.15) ─────────
+// (أ) زر بطاقة البحث يتبع الواقع بلا إعادة فتح القائمة؛ (ب) إشعار عابر لطلب صداقة يصل والصفحة مفتوحة؛ (ج) نافذة
+// الإحصائيات بقراءة واحدة من الخادم مهما تبدّلت التبويبات
+export async function uiNotes115() {
+  const r = checker('واجهة الأصدقاء والإحصائيات (1.15): زر البحث يتبع القبول والرفض والحذف، إشعار طلب الصداقة، والإحصائيات بقراءة واحدة');
+  const notif = H => $(H, 'chat-notification');
+  const sleep = ms => new Promise(res => setTimeout(res, ms));
+  const notifShown = H => !!notif(H) && notif(H).style.display === 'flex';
+  // (أ) زر بطاقة البحث
+  {
+    const H = await bootApp({ data: {
+      'users/me': { uid: 'me', name: 'أنا', friends: { c: { uid: 'c', name: 'كريم' } } },
+      'users/b': { uid: 'b', name: 'باسل' },
+      'users/c': { uid: 'c', name: 'كريم' },   // في قائمتي وحدي (صداقة من طرف واحد)
+      'users/q': { uid: 'q', name: 'قيس', sentRequests: { me: 1 } },
+      'users/l': { uid: 'l', name: 'ليث' },     // دليل طلبٍ قديم بقي بلا طلب في صندوقه (رفضته نسخة أقدم)
+      'users/n': { uid: 'n', name: 'نادر' },
+    } });
+    H.fb.set('users/me/friendRequests/q', { uid: 'q', name: 'قيس' });
+    H.fb.set('users/me/sentRequests/l', 1);
+    H.win.confirm = () => true;
+    try {
+      $(H, 'friends-btn').click(); await H.settle();
+      await searchFor(H, 'باسل');
+      const label = () => searchBtn(H, 'b')?.textContent;
+      r.ok(label() === '➕ إضافة', `(أ) البداية "${label()}"`);
+      searchBtn(H, 'b').click(); await H.settle(0, 30);
+      r.ok(label() === '✅ أُرسل' && !!H.fb.get('users/me/sentRequests/b'), `(أ) بعد الإرسال "${label()}"`);
+      acceptAs(H, 'b', 'me', { b: 'باسل', me: 'أنا' }); await H.settle(0, 30);
+      r.ok(label() === '✓ صديقك', `(أ) قَبِل وأنا أنظر — بلا إعادة فتح: "${label()}" (كانت تبقى "✅ أُرسل")`);
+      cardOf(H, 'باسل')?.querySelector('.btn-remove')?.click(); await H.settle(0, 30);
+      r.ok(label() === '➕ إضافة' && H.fb.get('users/me/friends/b') == null, `(أ) حذفته: "${label()}"`);
+      searchBtn(H, 'b').click(); await H.settle(0, 30);
+      r.ok(label() === '✅ أُرسل', `(أ) طلب جديد: "${label()}"`);
+      const rej = H.fb.writeAs('b', [['users/b/friendRequests/me', null], ['users/me/sentRequests/b', null]]); await H.settle(0, 10);
+      r.ok(rej.ok && label() === '⏳', `(أ) رفضه: لحظة حسم "⏳" لا "➕ إضافة" عابرة (${label()})`);
+      await sleep(1000); await H.settle(0, 10);
+      r.ok(label() === '➕ إضافة', `(أ) رفضه: "${label()}"`);
+      searchBtn(H, 'b').click(); await H.settle(0, 30);
+      $(H, 'close-friends-btn').click(); await H.settle();
+      $(H, 'friends-btn').click(); await H.settle();
+      await searchFor(H, 'باسل');
+      r.ok(label() === '✅ أُرسل', `(أ) إعادة فتح القائمة والبحث وطلبي قائم: "${label()}" (من القاعدة)`);
+      // صداقة من طرف واحد من جهتي: طلب إصلاح ثم قبوله → "✓ صديقك" (كان في قائمتي قبلها)
+      await searchFor(H, 'كريم');
+      const cl = () => searchBtn(H, 'c')?.textContent;
+      r.ok(cl() === '➕ إضافة', `(أ) طرف واحد: "${cl()}"`);
+      searchBtn(H, 'c').click(); await H.settle(0, 30);
+      r.ok(cl() === '✅ أُرسل', `(أ) طرف واحد — طلب الإصلاح: "${cl()}"`);
+      H.fb.getDelay = p => (p === 'users/c/friends/me' ? 1300 : 0);    // قراءة التأكيد بطيئة (جوال/إعادة اتصال)
+      acceptAs(H, 'c', 'me', { c: 'كريم', me: 'أنا' }); await H.settle(0, 40);
+      await sleep(1600); await H.settle(0, 10);
+      H.fb.getDelay = null;
+      r.ok(cl() === '✓ صديقك', `(أ) طرف واحد — قَبِل (والتأكيد أبطأ من مهلة الحسم): "${cl()}"`);
+      // هو أرسل لي وأنا أنظر إلى بطاقته في البحث: أقبل من قائمة الطلبات → "✓ صديقك" (لا طلب لي يتغيّر)
+      await searchFor(H, 'قيس');
+      const ql = () => searchBtn(H, 'q')?.textContent;
+      r.ok(ql() === '➕ إضافة', `(أ) أرسل لي: "${ql()}"`);
+      const qc = [...$(H, 'friend-requests-list').querySelectorAll('.friend-card')].find(c => c.querySelector('.friend-name')?.textContent === 'قيس');
+      qc?.querySelector('.btn-accept')?.click(); await H.settle(0, 40);
+      r.ok(!!H.fb.get('users/q/friends/me') && ql() === '✓ صديقك', `(أ) قبلتُ طلبه وبطاقته ظاهرة: "${ql()}"`);
+      // دليل بقي بلا طلب: "➕ إضافة" لا "✅ أُرسل" إلى الأبد — وإرساله من جديد يعمل
+      await searchFor(H, 'ليث');
+      const ll = () => searchBtn(H, 'l')?.textContent;
+      r.ok(ll() === '➕ إضافة', `(أ) دليل قديم بلا طلب في صندوقه: "${ll()}" (كان "✅ أُرسل" دائماً)`);
+      searchBtn(H, 'l').click(); await H.settle(0, 30);
+      r.ok(ll() === '✅ أُرسل' && !!H.fb.get('users/l/friendRequests/me'), `(أ) أرسلتُ من جديد: "${ll()}"`);
+      // ورفضته نسخته الأقدم (تحذف الطلب من صندوقه وتترك دليلي) — بحث جديد يُظهر "➕ إضافة"
+      H.fb.writeAs('l', [['users/l/friendRequests/me', null]]); await H.settle(0, 10);
+      await searchFor(H, 'ليث');
+      r.ok(ll() === '➕ إضافة', `(أ) رُفض من نسخة أقدم ثم بحث جديد: "${ll()}"`);
+      // دخل قائمتي من طرفي وحده (كما تكتب نسخة أقدم): لا "✓ صديقك" قبل أن تؤكّده القاعدة
+      await searchFor(H, 'نادر');
+      H.fb.set('users/me/friends/n', { uid: 'n', name: 'نادر' }); await H.settle(0, 30); await sleep(1000); await H.settle(0, 10);
+      r.ok(searchBtn(H, 'n')?.textContent === '➕ إضافة', `(أ) دخل قائمتي من طرف واحد: "${searchBtn(H, 'n')?.textContent}"`);
+      r.ok(H.errors.length === 0, '(أ) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(أ) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  // (ب) إشعار طلب الصداقة
+  {
+    const H = await bootApp({ data: {
+      'users/me': { uid: 'me', name: 'أنا', friendRequests: { o: { uid: 'o', name: 'عمر' } } },
+      'users/o': { uid: 'o', name: 'عمر', sentRequests: { me: 1 } },
+      'users/k': { uid: 'k', name: 'كمال' },
+      'users/x': { uid: 'x', name: XSS_NAME },
+      'users/z': { uid: 'z', name: 'زياد' },
+    } });
+    try {
+      r.ok(!notifShown(H) && $(H, 'friend-requests-badge').textContent === '1', '(ب) طلب قائم عند الدخول: إشعار (تكفيه الشارة)');
+      const sent = H.fb.writeAs('k', [['users/me/friendRequests/k', { uid: 'k', name: 'كمال' }], ['users/k/sentRequests/me', 1]]);
+      await H.settle(0, 20);
+      r.ok(sent.ok && notifShown(H) && notif(H).textContent.includes('كمال') && notif(H).textContent.includes('طلب صداقة'),
+        `(ب) طلب جديد: لا إشعار أو نصه خاطئ ("${notif(H)?.textContent || ''}")`);
+      r.ok($(H, 'friend-requests-badge').textContent === '2', '(ب) الشارة لم تصر 2');
+      notif(H).click(); await H.settle();
+      r.ok(!$(H, 'friends-panel').classList.contains('hidden') && !notifShown(H), '(ب) النقر لا يفتح قائمة الأصدقاء');
+      H.fb.writeAs('z', [['users/me/friendRequests/z', { uid: 'z', name: 'زياد' }], ['users/z/sentRequests/me', 1]]); await H.settle(0, 20);
+      r.ok(!notifShown(H), '(ب) إشعار والقائمة مفتوحة (الطلب ظاهر فيها)');
+      $(H, 'close-friends-btn').click(); await H.settle();
+      // سحب طلبه وإعادته (إزعاج): لا إشعار ثانٍ للمرسل نفسه خلال 10 دقائق
+      H.fb.writeAs('k', [['users/me/friendRequests/k', null]]); await H.settle(0, 10);
+      H.fb.writeAs('k', [['users/me/friendRequests/k', { uid: 'k', name: 'كمال' }], ['users/k/sentRequests/me', 1]]); await H.settle(0, 20);
+      r.ok(!notifShown(H), '(ب) سحب طلبه وإعادته: إشعار ثانٍ (إزعاج)');
+      H.fb.writeAs('x', [['users/me/friendRequests/x', { uid: 'x', name: XSS_NAME }], ['users/x/sentRequests/me', 1]]); await H.settle(0, 20);
+      r.ok(notifShown(H) && injected(H) === 0, `(ب) اسم خبيث في الإشعار: نص لا شيفرة (${injected(H)})`);
+      r.ok(H.errors.length === 0, '(ب) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(ب) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  // (ج) نافذة الإحصائيات: قراءة واحدة عند الفتح، والتبويبات من الذاكرة
+  {
+    const now = Date.now();
+    const H = await bootApp({ data: {
+      'users/me': { uid: 'me', name: 'أنا', stats: { ai: { history: { [now - 40 * 86400000]: { r: 'w' }, [now - 1000]: { r: 'l' } } } } },
+    } });
+    try {
+      const statsReads = () => H.fb.gets.filter(p => p === 'users/me/stats').length;
+      const r0 = statsReads();
+      $(H, 'stats-btn').click(); await H.settle(0, 20);
+      const aiRow = () => $(H, 'stats-content').querySelector('.stats-vs-row')?.textContent.replace(/\s+/g, ' ').trim() || $(H, 'stats-content').querySelector('.stats-empty')?.textContent || '';
+      r.ok(statsReads() - r0 === 1 && /🏆 1/.test(aiRow()) && /💔 1/.test(aiRow()), `(ج) الفتح: قراءة واحدة (${statsReads() - r0}) و"كل الوقت" (${aiRow()})`);
+      const tab = id => $(H, 'stats-content').querySelector(`.sft-btn[data-filter="${id}"]`);
+      for (let i = 0; i < 3; i++) for (const id of ['month', 'last10', 'all']) { tab(id).click(); await H.settle(0, 2); }
+      tab('month').click(); await H.settle(0, 5);
+      r.ok(statsReads() - r0 === 1, `(ج) عشر نقرات تبويب بلا قراءة من الخادم (${statsReads() - r0 - 1} قراءة زائدة)`);
+      r.ok(tab('month').classList.contains('active') && /🏆 0/.test(aiRow()) && /💔 1/.test(aiRow()), `(ج) "هذا الشهر" يُرسم من الذاكرة (${aiRow()})`);
+      await H.win._refreshStats(); await H.settle(0, 10);
+      r.ok(statsReads() - r0 === 2 && tab('month').classList.contains('active'), `(ج) تحديث بعد مباراة: قراءة واحدة جديدة والتبويب نفسه (${statsReads() - r0})`);
+      r.ok(H.errors.length === 0 && !H.logs.some(l => l.startsWith('error:')), '(ج) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(ج) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  return r;
+}
+
 export const APP_ALL = [friendPresenceAcrossRerender, logoutFreshPage, accountChangesSamePage, guestUpgrade, registrationName,
-  repeatedSameAccountEvent, namesAndPhotosInDomUIs, friendsUnderRules, localStatsKeys, presenceSelfHeal];
+  repeatedSameAccountEvent, namesAndPhotosInDomUIs, friendsUnderRules, localStatsKeys, presenceSelfHeal, uiNotes115];

@@ -79,6 +79,8 @@ export function createFirebase({ win, users = {}, cold = false, rules = null } =
     connected: !cold,
     pending: [],                       // عمليات تنتظر الاتصال (cold): { kind: 'write'|'get'|'listen', run }
     failNextGet: null,                 // مسار: أول get عليه يُرفض (كرفض الصلاحيات أو انقطاع)
+    gets: [],                          // مسارات كل get بترتيبها (v36.2 — عدد القراءات من الخادم)
+    getDelay: null,                    // (path) => ms: ردّ get على هذا المسار يتأخّر (شبكة بطيئة — v36.2)
     batches: [],                       // كل set/update/remove كما وصل الخادم بترتيبه: { op, path, keys }
     rules,                             // قواعد الأمان (null = بلا قواعد)
     denied: [],                        // ما رفضته القواعد: { op, path }
@@ -245,12 +247,15 @@ export function createFirebase({ win, users = {}, cold = false, rules = null } =
       for (const C of [...fb.childListeners]) if (C.path === r._path) { C.dead = true; fb.childListeners.delete(C); }
     },
     get: (r) => new Promise((resolve, reject) => {
+      fb.gets.push(r._path);
       const answer = () => later(() => {
         if (fb.failNextGet === r._path) { fb.failNextGet = null; reject(Object.assign(new Error('permission_denied'), { code: 'PERMISSION_DENIED' })); return; }
         if (!allowRead(r._path)) { fb.denied.push({ op: 'get', path: r._path }); reject(PERMISSION_DENIED()); return; }
         resolve(snap(r.key, clone(readAt(r)), r));
       });
-      if (fb.connected) answer(); else fb.pending.push({ kind: 'get', run: answer });
+      const delay = (typeof fb.getDelay === 'function' && fb.getDelay(r._path)) || 0;
+      const go = () => (delay ? win.setTimeout(answer, delay) : answer());
+      if (fb.connected) go(); else fb.pending.push({ kind: 'get', run: go });
     }),
     set: (r, value) => {
       assertData(value, 'set');

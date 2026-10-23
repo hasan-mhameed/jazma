@@ -1,9 +1,13 @@
 // 📄 ui/statsModal.js
 // عرض modal الإحصائيات مع فلتر زمني
-import { getAllStats } from "../auth.js?v=1792621208";
-import { esc } from "./safeText.js?v=1792621208";
+import { getAllStats } from "../auth.js?v=1792711190";
+import { esc } from "./safeText.js?v=1792711190";
 
 let _statsFilter = 'all';
+// v36.2 (1.15): تحميل واحد عند فتح النافذة (أو تحديثها بعد مباراة)، والتبديل بين التبويبات من الذاكرة فوراً — كانت كل
+// نقرة تبويب تعيد قراءة كل الإحصائيات من الخادم، فتتكدّس الطلبات مع النقر السريع ويتأخّر الرسم ثواني (فحص 4 لـv36.1)
+let _stats = null;
+let _loadSeq = 0;
 
 // ── حساب 1v1 من history ─────────────────────────────────────────
 export function computeFromHistory(historyObj, filter) {
@@ -68,12 +72,27 @@ function sortByLast(entries) {
   });
 }
 
-// ── الدالة الرئيسية ──────────────────────────────────────────────
+// ── الدالة الرئيسية: فتح النافذة أو تحديثها — قراءة واحدة ثم رسم ─────
 export async function renderStatsModal(uid) {
   const statsContent = document.getElementById('stats-content');
   if (!statsContent) return;
+  const seq = ++_loadSeq;
+  let stats;
+  try { stats = await getAllStats(uid); }
+  catch (e) {
+    if (seq !== _loadSeq) return;
+    console.warn("renderStatsModal", e);
+    statsContent.innerHTML = '<p class="stats-empty">⚠️ تعذّر تحميل الإحصائيات — حاول مجدداً</p>';
+    return;
+  }
+  if (seq !== _loadSeq) return;          // ردّ قراءة أقدم وصل بعد أحدث — الأحدث هو المعتمد
+  _stats = stats;
+  paintStats(statsContent);
+}
 
-  const stats = await getAllStats(uid);
+// الرسم من الإحصائيات المحمّلة (بلا شبكة) — التبويبات تعيد الرسم فقط
+function paintStats(statsContent) {
+  const stats = _stats || {};
 
   // تبويبات الفلتر
   const tabs = [
@@ -155,11 +174,11 @@ export async function renderStatsModal(uid) {
 
   statsContent.innerHTML = html;
 
-  // ربط تبويبات الفلتر
+  // ربط تبويبات الفلتر — من الذاكرة فوراً
   statsContent.querySelectorAll('.sft-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       _statsFilter = btn.dataset.filter;
-      renderStatsModal(uid);
+      paintStats(statsContent);
     });
   });
 }

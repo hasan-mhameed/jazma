@@ -1,11 +1,11 @@
 // 📄 ui/chatUI.js
 // المحادثة بين الأصدقاء + الإشعارات
-import { sendMessage, listenMessages, listenUnread, markAsRead, markDelivered, markRead } from "../chat.js?v=1792621208";
-import { getCurrentUser } from "../auth.js?v=1792621208";
-import { audioManager } from "../audio/audioManager.js?v=1792621208";
-import { playNotifSound } from "../audio/notif.js?v=1792621208";
-import { asText, firstInitial } from "./safeText.js?v=1792621208";
-import { entriesWithKey } from "../friends.js?v=1792621208";
+import { sendMessage, listenMessages, listenUnread, markAsRead, markDelivered, markRead } from "../chat.js?v=1792711190";
+import { getCurrentUser } from "../auth.js?v=1792711190";
+import { audioManager } from "../audio/audioManager.js?v=1792711190";
+import { playNotifSound } from "../audio/notif.js?v=1792711190";
+import { asText, firstInitial } from "./safeText.js?v=1792711190";
+import { entriesWithKey } from "../friends.js?v=1792711190";
 import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const EMOJIS = ["😊","😂","❤️","👍","🔥","🎮","😍","🤣","😭","💯",
@@ -149,26 +149,40 @@ export function initChatNotifications() {
   });
 }
 
-function _showChatNotification(friend, text) {
+// بطاقة إشعار عابرة (5 ثوانٍ مع صوت، والنقر ينفّذ onClick) — مشتركة منذ v36.2 (1.15): رسالة جديدة هنا، وطلب صداقة
+// جديد من friendsUI. مكان واحد على الشاشة: الأحدث يحلّ محل السابق. النصوص كلها textContent
+export function showNotificationCard({ icon, title, text, onClick, systemTitle, systemBody }) {
   let notif = document.getElementById("chat-notification");
   if (!notif) { notif = document.createElement("div"); notif.id = "chat-notification"; document.body.appendChild(notif); }
   notif.textContent = "";
-  const icon = document.createElement("span"); icon.style.fontSize = "1.2rem"; icon.textContent = "💬";
+  const iconEl  = document.createElement("span"); iconEl.style.fontSize = "1.2rem"; iconEl.textContent = icon;
   const content = document.createElement("div"); content.className = "notif-text";
-  const name    = document.createElement("div"); name.className = "notif-name"; name.textContent = asText(friend.name, "لاعب");
-  const preview = document.createElement("div");
-  const safe    = asText(text); preview.textContent = safe.length > 30 ? `${safe.slice(0, 30)}...` : safe;
-  content.append(name, preview); notif.append(icon, content);
+  const name    = document.createElement("div"); name.className = "notif-name"; name.textContent = title;
+  const preview = document.createElement("div"); preview.textContent = text;
+  content.append(name, preview); notif.append(iconEl, content);
   notif.style.display = "flex";
   notif.onclick = () => {
     audioManager.playButtonClick();
     notif.style.display = "none";
-    document.getElementById("friends-panel").classList.remove("hidden");
-    openChat(friend);
+    onClick?.();
   };
   if (chatNotifTimeout) clearTimeout(chatNotifTimeout);
   chatNotifTimeout = setTimeout(() => { notif.style.display = "none"; }, 5000);
-  if ("Notification" in window && Notification.permission === "granted")
-    new Notification(`💬 ${friend.name}`, { body: text, icon: "/jazma/images/google.svg" });
+  if (systemTitle && "Notification" in window && Notification.permission === "granted")
+    new Notification(systemTitle, { body: systemBody || "", icon: "/jazma/images/google.svg" });
   playNotifSound();
+}
+
+function _showChatNotification(friend, text) {
+  const safe = asText(text);
+  showNotificationCard({
+    icon: "💬",
+    title: asText(friend.name, "لاعب"),
+    text: safe.length > 30 ? `${safe.slice(0, 30)}...` : safe,
+    onClick: () => {
+      document.getElementById("friends-panel").classList.remove("hidden");
+      openChat(friend);
+    },
+    systemTitle: `💬 ${friend.name}`, systemBody: text,
+  });
 }

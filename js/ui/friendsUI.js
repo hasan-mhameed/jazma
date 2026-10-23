@@ -1,12 +1,13 @@
 // 📄 ui/friendsUI.js
 // قائمة الأصدقاء + البحث + الإجراءات
-import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1792621208";
+import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1792711190";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend,
-         listenFriendRequests, listenFriends } from "../friends.js?v=1792621208";
-import { outgoingInvite, onInviteStateChange } from "./inviteUI.js?v=1792621208";
-import { asText, firstInitial, safeImageSrc } from "./safeText.js?v=1792621208";
-import { getCurrentUser } from "../auth.js?v=1792621208";
+         listenFriendRequests, listenFriends, listenSentRequests, isMutualFriend } from "../friends.js?v=1792711190";
+import { outgoingInvite, onInviteStateChange } from "./inviteUI.js?v=1792711190";
+import { asText, firstInitial, safeImageSrc } from "./safeText.js?v=1792711190";
+import { getCurrentUser } from "../auth.js?v=1792711190";
+import { showNotificationCard } from "./chatUI.js?v=1792711190";
 
 // زر "دعوة" يعكس حالة الدعوة الصادرة (v35.9): ⏳ للصديق المدعوّ ما دامت دعوته قائمة، ويرجع مع أي نهاية لها
 // (قبول ثم مباراة، رفض، "في مباراة"، انتهاء المهلة، إلغاء، فشل) — كان لا يرجع إلا عند الرفض
@@ -28,6 +29,43 @@ function stopFriendCards() {
 }
 // أصدقائي الحاليون (مفاتيح قائمتي) — نتيجة البحث عن صديق حالي تقول "✓ صديقك" بدل "➕ إضافة" (v36.1)
 const _friendKeys = new Set();
+
+// ── زر بطاقة البحث من الواقع لحظة بلحظة (v36.2 — الخطوة 1.15) ──
+// كان لقطة لحظة البحث: يبقى "✅ أُرسل" بعد قبوله حتى إعادة فتح القائمة (فحص 1 لـv36.1). الآن يُعاد رسمه مع كل تغيّر في
+// قائمتي أو في طلباتي القائمة: "✓ صديقك" (من الطرفين) | "✅ أُرسل" (طلبي قائم) | "➕ إضافة" | "⏳" أثناء الإرسال |
+// "⚠️ لم يُرسل" (3 ثوانٍ). و"✅ أُرسل" بعد تأكيد الخادم فقط — الكتابة المعلّقة لا تُظهرها
+const _pendingSent = new Set();   // طلباتي القائمة (users/<أنا>/sentRequests)
+const _knownMutual = new Set();   // صاروا أصدقاء من الطرفين ونتيجة البحث أقدم منه (قبولٌ يكتب الطرفين معاً)
+const _sending     = new Set();   // إرسال جارٍ
+const _sendFailed  = new Set();   // فشل للتو (يُعرض 3 ثوانٍ)
+const _sentHere    = new Set();   // أرسلتُ له من هذه الصفحة (نتيجة البحث أقدم من طلبي)
+const _settling    = new Set();   // تغيّر يُحسم الآن (طلب انتهى، أو دخل قائمتي) — "⏳" لا "➕ إضافة" عابرة قابلة للنقر
+const _searchCards = new Map();   // uid ← إعادة رسم زر بطاقته في نتائج البحث الظاهرة
+const repaintSearch = () => { for (const paint of _searchCards.values()) { try { paint(); } catch {} } };
+const isObj = v => !!v && typeof v === "object";
+function searchState(user) {
+  if (_sending.has(user.uid) || _settling.has(user.uid)) return "sending";
+  if (_sendFailed.has(user.uid)) return "failed";
+  const me = getCurrentUser()?.uid;
+  const back  = me && isObj(user.friends) ? user.friends[me] : null;
+  const myReq = me && isObj(user.friendRequests) ? user.friendRequests[me] : null;
+  // "✓ صديقك" للصداقة من الطرفين فقط. في قائمتي وحدي (صداقة من طرف واحد بقيت من v36.0): "➕ إضافة" — طلب جديد
+  // يقبله فتكتمل (كان "✓ صديقك" يخفي الزر فلا يصلحها من جهتي شيء — مراجعة v36.1). مدخل صداقة = كائن
+  if (_friendKeys.has(user.uid) && (isObj(back) || _knownMutual.has(user.uid))) return "friend";
+  // "✅ أُرسل": طلبي قائم في القاعدة وفي صندوقه فعلاً — دليل بقي بلا طلب (رفضته نسخة أقدم) لا يمنع إرساله من جديد
+  if (_pendingSent.has(user.uid) && (isObj(myReq) || _sentHere.has(user.uid))) return "sent";
+  return "add";
+}
+// انتظار حسم تغيّر (بحدّ أقصى — لا "⏳" عالقة)، وتأكيد الصداقة من الطرفين بقراءة واحدة (لا افتراض)
+function settle(k, ms = 800) {
+  _settling.add(k); repaintSearch();
+  const done = () => { if (_settling.delete(k)) repaintSearch(); };
+  setTimeout(done, ms);
+  return done;
+}
+const confirmMutual = (k) => isMutualFriend(k)
+  .then(m => { if (m && _friendKeys.has(k)) _knownMutual.add(k); else _knownMutual.delete(k); repaintSearch(); })
+  .catch(() => {});
 
 
 // onInviteFriend يُمرر من main.js لأن إطلاق اللعبة يحتاج config
@@ -72,6 +110,7 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
   closeFriendsBtn?.addEventListener("click", () => {
     friendsPanel.classList.add("hidden");
     searchResults.innerHTML    = "";
+    _searchCards.clear();
     friendsSearchInput.value   = "";
   });
 
@@ -79,6 +118,7 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
     if (e.target === friendsPanel) {
       friendsPanel.classList.add("hidden");
       searchResults.innerHTML = "";
+      _searchCards.clear();
     }
   });
 
@@ -94,6 +134,8 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
     catch { results = null; }
     finally { friendsSearchBtn.textContent = "🔍"; }   // v36.0: الزر يرجع ولو فشل البحث
     searchResults.innerHTML = "";
+    _searchCards.clear();
+    _sentHere.clear();      // نتيجة البحث الجديدة أحدث من أي إرسال قبلها (طلبي في صندوقه يظهر فيها)
     if (!Array.isArray(results)) {
       searchResults.innerHTML = `<p class="friends-empty">تعذّر البحث — حاول مجدداً</p>`;
       return;
@@ -157,14 +199,35 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
       actions.appendChild(btn); return btn;
     }
 
-    if (type === "search") {
-      // "✓ صديقك" للصداقة من الطرفين فقط. في قائمتي وحدي (صداقة من طرف واحد بقيت من v36.0): "➕ إضافة" — طلب جديد
-      // يقبله فتكتمل (كان "✓ صديقك" يخفي الزر فلا يصلحها من جهتي شيء — مراجعة v36.1)
-      const me = getCurrentUser()?.uid;
-      const back = me && user.friends && typeof user.friends === "object" ? user.friends[me] : null;
-      const mutual = _friendKeys.has(user.uid) && !!back && typeof back === "object";   // مدخل صداقة = كائن (كالقائمة نفسها)
-      if (mutual) { const b = addAction("btn-add-done", "✓ صديقك"); b.disabled = true; }
-      else addAction("btn-add", "➕ إضافة");
+    if (type === "search" && user.uid) {
+      const paint = () => {
+        const st = searchState(user);
+        const btn = document.createElement("button");
+        btn.dataset.uid = asText(user.uid);
+        if (st === "add") {
+          btn.className = "btn-add"; btn.textContent = "➕ إضافة";
+          // v36.1 (1.13): ينتظر نتيجته الفعلية من الخادم، والفشل يُقال بوضوح (لا خطأ صامت في الـconsole)
+          btn.addEventListener("click", async () => {
+            _sending.add(user.uid); repaintSearch();
+            try {
+              await sendFriendRequest(user.uid);
+              _sentHere.add(user.uid);
+            } catch {
+              _sendFailed.add(user.uid);
+              flash(`⚠️ تعذّر إرسال الطلب إلى ${userName} — حاول مجدداً`);
+              setTimeout(() => { _sendFailed.delete(user.uid); repaintSearch(); }, 3000);
+            } finally {
+              _sending.delete(user.uid); repaintSearch();
+            }
+          });
+        } else {
+          btn.className = "btn-add-done"; btn.disabled = true;
+          btn.textContent = { friend: "✓ صديقك", sent: "✅ أُرسل", sending: "⏳", failed: "⚠️ لم يُرسل" }[st];
+        }
+        actions.replaceChildren(btn);
+      };
+      _searchCards.set(user.uid, paint);
+      paint();
     }
     if (type === "request") { addAction("btn-accept", "✓ قبول"); addAction("btn-reject", "✕ رفض"); }
     if (type === "friend")  { addAction("btn-invite", "🎮 دعوة"); addAction("btn-chat", "💬"); addAction("btn-remove", "حذف"); }
@@ -173,18 +236,6 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
     else card.append(avatar, name, actions);
 
     // v36.1 (1.13): كل عملية تنتظر نتيجتها الفعلية من الخادم، والفشل يُقال بوضوح (لا خطأ صامت في الـconsole)
-    card.querySelector(".btn-add")?.addEventListener("click", async e => {
-      const btn = e.currentTarget;
-      btn.disabled = true; btn.textContent = "⏳";
-      try {
-        await sendFriendRequest(user.uid);
-        btn.textContent = "✅ أُرسل";
-      } catch {
-        btn.textContent = "⚠️ لم يُرسل";
-        flash(`⚠️ تعذّر إرسال الطلب إلى ${userName} — حاول مجدداً`);
-        setTimeout(() => { btn.textContent = "➕ إضافة"; btn.disabled = false; }, 3000);
-      }
-    });
     const requestBtns = () => [...card.querySelectorAll(".btn-accept, .btn-reject")];
     const setBusy = (on) => requestBtns().forEach(b => { b.disabled = on; });
     card.querySelector(".btn-accept")?.addEventListener("click", async () => {
@@ -222,7 +273,31 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
   }
 
   // ── الاستماع لطلبات الأصدقاء والقائمة ──────────────────────
+  // v36.2 (1.15): طلب جديد يصل والصفحة مفتوحة → بطاقة إشعار عابرة (كإشعار الرسائل)، والنقر يفتح القائمة على الطلب —
+  // كانت الشارة وحدها (فحص 3 لـv36.1). الطلبات القائمة عند الدخول (أول لقطة) تكفيها الشارة، ولا إشعار واللوحة مفتوحة،
+  // ولا أكثر من إشعار لكل مرسل في 10 دقائق (سحب طلبه وإعادته مراراً لا يصير إزعاجاً — مراجعة v36.2)
+  let _reqSeen = null;
+  const _toastedAt = new Map();
+  const TOAST_GAP_MS = 10 * 60 * 1000;
+  const notifyRequests = (fresh) => {
+    const names = fresh.map(r => asText(r.name, "لاعب"));
+    const title = names.length === 1 ? names[0] : "طلبات صداقة جديدة";
+    const text  = names.length === 1 ? "أرسل لك طلب صداقة" : names.slice(0, 3).join("، ");
+    showNotificationCard({
+      icon: "📩", title, text,
+      onClick: () => friendsPanel?.classList.remove("hidden"),
+      systemTitle: `📩 ${title}`, systemBody: text,
+    });
+  };
   listenFriendRequests(requests => {
+    const now = Date.now();
+    const fresh = (_reqSeen ? requests.filter(r => !_reqSeen.has(r.uid)) : [])
+      .filter(r => now - (_toastedAt.get(r.uid) || 0) > TOAST_GAP_MS);
+    _reqSeen = new Set(requests.map(r => r.uid));
+    if (fresh.length && friendsPanel?.classList.contains("hidden")) {
+      fresh.forEach(r => _toastedAt.set(r.uid, now));
+      try { notifyRequests(fresh); } catch {}
+    }
     if (requests.length > 0) {
       friendReqBadge.textContent = requests.length;
       friendReqBadge.classList.remove("hidden");
@@ -235,9 +310,31 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
     }
   });
 
+  // طلباتي القائمة: "✅ أُرسل" ما دام قائماً. وطلبٌ انتهى (قُبل، أو رُفض، أو نظّفه التنظيف): يُحسم قبل الرسم — لمن في
+  // قائمتي: هل صارت من الطرفين؟ (قراءة واحدة)؛ ولغيره: حدث القائمة القادم إن كان قبولاً، وإلا "➕ إضافة" بعد مهلة قصيرة
+  let _sentReady = false;
+  listenSentRequests(keys => {
+    const gone = _sentReady ? [..._pendingSent].filter(k => !keys.includes(k)) : [];
+    _pendingSent.clear(); keys.forEach(k => _pendingSent.add(k));
+    _sentReady = true;
+    for (const k of gone) {
+      if (_knownMutual.has(k)) continue;
+      const done = settle(k);
+      if (_friendKeys.has(k)) confirmMutual(k).finally(done);
+    }
+    repaintSearch();
+  });
+
+  let _friendsReady = false;
   listenFriends(friends => {
+    const before = new Set(_friendKeys);
     _friendKeys.clear();
     friends.forEach(f => _friendKeys.add(f.uid));
+    // من دخل قائمتي وأنا أنظر: من الطرفين؟ — قراءة واحدة تؤكّده (نسخة أقدم قد تكتب طرفي وحده — مراجعة v36.2)
+    if (_friendsReady) for (const k of _friendKeys) if (!before.has(k)) { const done = settle(k); confirmMutual(k).finally(done); }
+    for (const k of [..._knownMutual]) if (!_friendKeys.has(k)) _knownMutual.delete(k);
+    _friendsReady = true;
+    repaintSearch();
     stopFriendCards();
     friendsList.innerHTML = "";
     if (friends.length === 0) {

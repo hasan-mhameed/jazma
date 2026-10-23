@@ -5,7 +5,7 @@ import { getDatabase, ref, get, update, onValue, remove }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getCurrentUser } from "./auth.js?v=1792621208";
+import { getCurrentUser } from "./auth.js?v=1792711190";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -156,6 +156,25 @@ export function listenFriendRequests(cb) {
     cb(requests);
   });
   return unsub;
+}
+
+// ─── طلباتي القائمة (لم يُقبل أو يُرفض بعد) ─────────────────────
+// v36.2 (1.15): مفاتيح users/<أنا>/sentRequests — بطاقة البحث تقول "✅ أُرسل" ما دام الطلب قائماً، وتعود
+// "➕ إضافة" إن رُفض أو سحبته، ولو أُعيد البحث أو فُتحت اللوحة من جديد (من القاعدة لا من ذاكرة الصفحة)
+export function listenSentRequests(cb) {
+  const myUid = getCurrentUser()?.uid;
+  if (!myUid) return () => {};
+  return onValue(ref(db, `users/${myUid}/sentRequests`), (snap) => {
+    const v = snap.val();
+    cb(v && typeof v === "object" ? Object.keys(v) : []);
+  });
+}
+
+// هل أنا في قائمته؟ (صداقة من الطرفين — v36.2: بطاقة البحث بعد قبول طلب إصلاح صداقة من طرف واحد)
+export async function isMutualFriend(uid) {
+  const myUid = getCurrentUser()?.uid;
+  if (!myUid || !uid) return false;
+  return isEntry((await get(ref(db, `users/${uid}/friends/${myUid}`))).val());
 }
 
 // ─── الاستماع للأصدقاء ───────────────────────────────────────

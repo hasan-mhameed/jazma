@@ -9,9 +9,9 @@
 //    شاشة نتيجة يُنهي ما هو فيه بهدوء ثم ينضم؛ وقبول دعوة لم تعد متاحة يعرض رسالة واضحة.
 // الواجهة الخارجية (الشاشات وبدء المباراة) يمرّرها main.js عبر initInvites(hooks).
 import { sendGameInvite, listenForInvites, watchInviteRoom, replyToInvite, listenForInviteReplies,
-         removeInviteReply, clearMyInviteReplies, clearInviteIf, withdrawInvite } from "../invite.js?v=1792621208";
-import { onlineManager } from "../firebase.js?v=1792621208";
-import { getCurrentUser } from "../auth.js?v=1792621208";
+         removeInviteReply, clearMyInviteReplies, clearInviteIf, withdrawInvite } from "../invite.js?v=1792711190";
+import { onlineManager } from "../firebase.js?v=1792711190";
+import { getCurrentUser } from "../auth.js?v=1792711190";
 
 export const INVITE_TTL_SEC = 60;        // مهلة الرد على الدعوة (عند صاحبها: عدّ تنازلي في شاشة الانتظار)
 const ROOM_GONE_GRACE_MS   = 10000;      // غرفة دعوة اختفت: انقطاع لحظي عند صاحبها؟ تعود كما كانت — ننتظرها قليلاً
