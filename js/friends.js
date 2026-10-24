@@ -5,7 +5,7 @@ import { getDatabase, ref, get, update, onValue, remove }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getCurrentUser } from "./auth.js?v=1792711190";
+import { getCurrentUser } from "./auth.js?v=1792834692";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -21,7 +21,8 @@ const db  = getDatabase(app);
 
 // ─── البحث عن مستخدم بالاسم ──────────────────────────────────
 export async function searchUsers(query) {
-  const snap = await get(ref(db, "users"));
+  // 3.3أ (الخصوصية): البحث من الملفات العامة profiles (الاسم/الصورة/الخبرة) — users صار لصاحبه وحده
+  const snap = await get(ref(db, "profiles"));
   if (!snap.exists()) return [];
   const results = [];
   snap.forEach(child => {
@@ -66,28 +67,29 @@ export async function sendFriendRequest(toUid) {
 export async function acceptFriendRequest(fromUid) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid || !fromUid) throw new Error("طلب صداقة غير صالح");
-  const [fromSnap, mySnap, proofSnap] = await Promise.all([
-    get(ref(db, `users/${fromUid}`)),
+  // 3.3أ: لا نقرأ ملف المرسل الكامل (صار لصاحبه وحده). اسمه وصورته من طلبه في صندوقي (كتبهما هو عند الإرسال)،
+  // والدليل وصداقته لي من مسارين تسمح القاعدة لي بقراءتهما: sentRequests/<أنا> وfriends/<أنا> في ملفه
+  const [mySnap, proofSnap, fromFriendsMe] = await Promise.all([
     get(ref(db, `users/${myUid}`)),
     get(ref(db, `users/${fromUid}/sentRequests/${myUid}`)),
+    get(ref(db, `users/${fromUid}/friends/${myUid}`)),
   ]);
-  const dropRequest = () => remove(ref(db, `users/${myUid}/friendRequests/${fromUid}`));
-  // طلب بلا ملف لصاحبه (مفتاح وهمي أو حساب حُذف) طلبٌ بائد — يُحذف ولا تُكتب صداقة (مراجعة v36.0 الخامسة)
-  if (!fromSnap.exists()) { await dropRequest(); return { ok: false, reason: "gone" }; }
-  const fromData = fromSnap.val() || {};
   const myData   = mySnap.val() || {};
+  const reqEntry = (myData.friendRequests && myData.friendRequests[fromUid]) || null;
+  const dropRequest = () => remove(ref(db, `users/${myUid}/friendRequests/${fromUid}`));
   if (!proofSnap.exists()) {
     // قُبل للتو من صفحة أخرى لي (القبول يستهلك الدليل) والصداقة قائمة من الطرفين: لا شيء ناقص
-    if (isEntry(myData.friends?.[fromUid]) && isEntry(fromData.friends?.[myUid])) { await dropRequest(); return { ok: true }; }
-    // أو حُسم من صفحة أخرى (رُفض): لم يعد في صندوقي — بطاقة قديمة، لا "نسخة قديمة"
-    if (!isEntry(myData.friendRequests?.[fromUid])) return { ok: false, reason: "gone" };
+    if (isEntry(myData.friends?.[fromUid]) && isEntry(fromFriendsMe.val())) { await dropRequest(); return { ok: true }; }
+    // لم يعد في صندوقي: حُسم من صفحة أخرى (رُفض) — بطاقة قديمة
+    if (!isEntry(reqEntry)) return { ok: false, reason: "gone" };
+    // طلب في صندوقي بلا دليل: نسخة قبل v36.1 — يُحذف ويُطلب إرساله من جديد
     await dropRequest();
     return { ok: false, reason: "stale" };
   }
   const since = Date.now();
   try {
     await update(ref(db), {
-      [`users/${myUid}/friends/${fromUid}`]: { uid: fromUid, name: fromData.name ?? "لاعب", photo: fromData.photo || "", since },
+      [`users/${myUid}/friends/${fromUid}`]: { uid: fromUid, name: reqEntry?.name ?? "لاعب", photo: reqEntry?.photo || "", since },
       [`users/${fromUid}/friends/${myUid}`]: { uid: myUid, name: myData.name ?? "لاعب", photo: myData.photo || "", since },
       [`users/${myUid}/friendRequests/${fromUid}`]: null,
       [`users/${fromUid}/sentRequests/${myUid}`]: null,
@@ -175,6 +177,14 @@ export async function isMutualFriend(uid) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid || !uid) return false;
   return isEntry((await get(ref(db, `users/${uid}/friends/${myUid}`))).val());
+}
+
+// هل طلبي الصادر ما زال في صندوقه؟ (3.3أ: أقرأ مدخلي أنا وحده في صندوق طلباته — friendRequests/<أنا>).
+// دليلٌ بقي في ملفي بلا طلب في صندوقه (رفضته نسخة أقدم فلم يستهلك الدليل) لا يُبقي بطاقة البحث "✅ أُرسل" للأبد
+export async function isRequestPending(uid) {
+  const myUid = getCurrentUser()?.uid;
+  if (!myUid || !uid) return false;
+  return isEntry((await get(ref(db, `users/${uid}/friendRequests/${myUid}`))).val());
 }
 
 // ─── الاستماع للأصدقاء ───────────────────────────────────────

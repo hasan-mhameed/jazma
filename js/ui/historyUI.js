@@ -1,9 +1,9 @@
 // 📄 ui/historyUI.js
 // عرض تاريخ المباريات مع فلتر وpagination
 
-import { fetchHistory } from "../history.js?v=1792711190";
-import { getCurrentUser } from "../auth.js?v=1792711190";
-import { esc } from "./safeText.js?v=1792711190";
+import { fetchHistory } from "../history.js?v=1792834692";
+import { getCurrentUser } from "../auth.js?v=1792834692";
+import { esc } from "./safeText.js?v=1792834692";
 
 let _filter   = 'all';   // 'all' | 'ai' | 'local' | 'online' | 'multi'
 let _lastKey  = null;

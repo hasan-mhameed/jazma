@@ -22,9 +22,20 @@ const injected = H => H.doc.querySelectorAll('.xss').length + (H.win.__xss !== u
 // والقواعد القديمة (الإنتاج حتى 2026-10-19) لفحص التصرّف حين تُرفض الكتابة
 export const RULES = JSON.parse(fs.readFileSync(path.join(PROJECT, 'database.rules.json'), 'utf8'));
 export const OLD_RULES = JSON.parse(fs.readFileSync(new URL('../shared/rules_prod_2026-10-19.json', import.meta.url), 'utf8'));
-export async function bootApp({ user = ME, data = {}, cold = false, rules = RULES } = {}) {
+export async function bootApp({ user = ME, data = {}, cold = false, rules = RULES, autoProfiles = true } = {}) {
   const H = boot({ firebase: true, polyfills: true, cold, rules });
   for (const [p, v] of Object.entries(data)) H.fb.set(p, v);
+  // 3.3أ: في الواقع كل لاعب له ملف عام profiles/<uid> (يكتبه saveUserProfile عند دخوله) — منه البحث والمتصدرون
+  // وخبرة الخصم. نشتقّه تلقائياً من كل لاعب مزروع في users حتى تعمل هذه القراءات (أطفئه بـautoProfiles:false
+  // لفحص التعايش: لاعب قديم بلا ملف عام بعدُ). ملف عام مزروع صراحةً (profiles/<uid>) لا يُلمَس.
+  if (autoProfiles) {
+    const usersRoot = H.fb.get('users') || {};
+    for (const [uid, u] of Object.entries(usersRoot)) {
+      if (u && typeof u === 'object' && H.fb.get(`profiles/${uid}`) == null) {
+        H.fb.set(`profiles/${uid}`, { name: u.name ?? 'لاعب', photo: u.photo ?? '', xp: typeof u.xp === 'number' ? u.xp : 0 });
+      }
+    }
+  }
   if (user) H.fb.auth.currentUser = JSON.parse(JSON.stringify(user));
   await H.loaded();
   // المؤقّتات الدورية القائمة (لكشف التسرّب)
@@ -49,9 +60,10 @@ const errText = H => H.errors.length ? ': ' + H.errors[0].slice(0, 160) : '';
 export async function friendPresenceAcrossRerender() {
   const r = checker('حالة الأصدقاء تبقى حيّة بعد إضافة صديق أو حذفه، بلا مستمعين أو مؤقّتات تتراكم (1.11-أ)');
   const H = await bootApp({ data: {
+    // 3.3أ: حالة الحضور يقرؤها أصدقاء صاحبها فقط — فالصداقة من الطرفين (ب وكريم يحملانني في قائمتيهما)
     'users/me': { uid: 'me', name: 'أنا', friends: { b: { uid: 'b', name: 'باسل' } } },
-    'users/b': { uid: 'b', name: 'باسل', presence: { state: 'online', lastSeen: 1 } },
-    'users/c': { uid: 'c', name: 'كريم', presence: { state: 'online', lastSeen: 1 } },
+    'users/b': { uid: 'b', name: 'باسل', friends: { me: { uid: 'me', name: 'أنا' } }, presence: { state: 'online', lastSeen: 1 } },
+    'users/c': { uid: 'c', name: 'كريم', friends: { me: { uid: 'me', name: 'أنا' } }, presence: { state: 'online', lastSeen: 1 } },
   } });
   try {
     r.ok(stateOf(H, 'باسل') === 'online', `البداية: باسل ليس "متصل" (${stateOf(H, 'باسل')})${errText(H)}`);
@@ -110,8 +122,9 @@ export async function logoutFreshPage() {
 export async function accountChangesSamePage() {
   const r = checker('خروج من تبويب آخر، أو دخول ثانٍ بنفس الصفحة، أو حساب آخر: صفحة جديدة — لا تهيئة فوق تهيئة (1.11-ب)');
   const data = {
+    // 3.3أ: الصداقة من الطرفين حتى يُقرأ حضور باسل (يقرؤه أصدقاؤه فقط)
     'users/me': { uid: 'me', name: 'أنا', friends: { b: { uid: 'b', name: 'باسل' } } },
-    'users/b': { uid: 'b', name: 'باسل', presence: { state: 'online', lastSeen: 1 } },
+    'users/b': { uid: 'b', name: 'باسل', friends: { me: { uid: 'me', name: 'أنا' } }, presence: { state: 'online', lastSeen: 1 } },
   };
   // (أ) خروج لم يأتِ من الزر (تبويب آخر / انتهاء الجلسة) ثم دخول من جديد بنفس الصفحة
   let H = await bootApp({ data });
@@ -290,8 +303,8 @@ export async function namesAndPhotosInDomUIs() {
     r.ok($(H, 'friends-search-btn').textContent === '🔍', `زر البحث بقي "${$(H, 'friends-search-btn').textContent}" (البحث تعطّل)`);
     $(H, 'friends-search-input').value = '77'; $(H, 'friends-search-btn').click(); await H.settle(0, 10);
     r.ok($(H, 'search-results').textContent.includes('77'), 'ملف اسمه رقم لا يظهر في البحث');
-    // فشل البحث نفسه (صلاحيات/شبكة): الزر يرجع ورسالة واضحة
-    H.fb.failNextGet = 'users';
+    // فشل البحث نفسه (صلاحيات/شبكة): الزر يرجع ورسالة واضحة — 3.3أ: البحث يقرأ profiles
+    H.fb.failNextGet = 'profiles';
     $(H, 'friends-search-input').value = 'غادة'; $(H, 'friends-search-btn').click(); await H.settle(0, 10);
     r.ok($(H, 'friends-search-btn').textContent === '🔍' && $(H, 'search-results').textContent.includes('تعذّر البحث'),
       `فشل البحث: الزر "${$(H, 'friends-search-btn').textContent}" والنتيجة "${$(H, 'search-results').textContent.trim().slice(0, 40)}"`);
@@ -321,7 +334,9 @@ export async function namesAndPhotosInDomUIs() {
     r.ok(!!notif && notif.style.display === 'flex' && notif.textContent.includes('فادي') && notif.textContent.includes(XSS_MSG.slice(0, 30)) && injected(H) === 0,
       `إشعار رسالة الصديق لم يصل أو حُقن (${notif ? notif.textContent.slice(0, 50) : 'لا إشعار'})`);
     // المعرّف من مفتاح الملف لا من حقل uid داخله (يكتبه صاحبه): طلب الصداقة يذهب لصاحب الملف نفسه
+    // 3.3أ: البحث من profiles — نزرع ملفه العام (المعرّف من المفتاح k1، لا من حقل uid المزوّر "victim")
     H.fb.set('users/k1', { uid: 'victim', name: 'خداع' });
+    H.fb.set('profiles/k1', { name: 'خداع', photo: '', xp: 0 });
     $(H, 'friends-search-input').value = 'خداع'; $(H, 'friends-search-btn').click(); await H.settle(0, 10);
     $(H, 'search-results').querySelector('.btn-add')?.click(); await H.settle(0, 20);
     r.ok(!!H.fb.get('users/k1/friendRequests/me') && !!H.fb.get('users/me/sentRequests/k1') && H.fb.get('users/victim') == null,
@@ -504,7 +519,8 @@ export async function friendsUnderRules() {
     } catch (e) { r.ok(false, '(ج2) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
     H.close();
   }
-  // (د) القواعد القديمة (لو رُفعت الشيفرة قبل نشر القواعد): الفشل يُقال، ولا شيء يُكتب نصفه، ولا خطأ صامت
+  // (د) قواعد بلا profiles (لو رُفعت الشيفرة قبل نشر قواعد المرحلة 1): البحث يتعطّل بلطف، وفشل الكتابة في ملف
+  // الآخر (قواعد ما قبل v36.1) يُقال، ولا شيء يُكتب نصفه، ولا رفض بلا معالج (خطأ صامت)
   {
     const H = await bootApp({ rules: OLD_RULES, data: {
       'users/me': { uid: 'me', name: 'أنا', friends: { f: { uid: 'f', name: 'فرح' } }, friendRequests: { q: { uid: 'q', name: 'قيس' } } },
@@ -515,11 +531,11 @@ export async function friendsUnderRules() {
     H.win.confirm = () => true;
     try {
       $(H, 'friends-btn').click(); await H.settle();
+      // 3.3أ: الكود الجديد يقرأ profiles — تحت قواعد بلا profiles، البحث يتعطّل بلطف (رسالة واضحة، الزر يرجع،
+      // بلا انهيار ولا رفض بلا معالج) لا أن ينهار
       await searchFor(H, 'باسل');
-      const add = $(H, 'search-results').querySelector('.btn-add');
-      add?.click(); await H.settle(0, 20);
-      r.ok(searchBtn(H, 'b')?.textContent === '⚠️ لم يُرسل' && /تعذّر إرسال/.test(flashText(H)), `(د) فشل الإرسال لم يُقل: الزر "${searchBtn(H, 'b')?.textContent}"، الرسالة "${flashText(H)}"`);
-      r.ok(H.fb.get('users/b/friendRequests/me') == null && H.fb.get('users/me/sentRequests/b') == null, '(د) كُتب نصف الطلب (الدليل بلا طلب)');
+      r.ok($(H, 'friends-search-btn').textContent === '🔍' && /تعذّر البحث/.test($(H, 'search-results').textContent),
+        `(د) تحت قواعد بلا profiles: البحث لم يتعطّل بلطف (الزر "${$(H, 'friends-search-btn').textContent}"، "${$(H, 'search-results').textContent.trim().slice(0, 40)}")`);
       cardOf(H, 'فرح')?.querySelector('.btn-remove')?.click(); await H.settle(0, 20);
       r.ok(!!H.fb.get('users/me/friends/f') && !!H.fb.get('users/f/friends/me') && /تعذّر حذف/.test(flashText(H)),
         `(د) حذف مرفوض: صار من طرف واحد أو بلا رسالة (عندي: ${!!H.fb.get('users/me/friends/f')}, عندها: ${!!H.fb.get('users/f/friends/me')}, "${flashText(H)}")`);
@@ -874,5 +890,38 @@ export async function uiNotes115() {
   return r;
 }
 
+// ─── 12. الخصوصية (3.3أ): الإيميل خارج القاعدة، الملف العام profiles يُكتب ويُطابق، والخبرة في المكانين ───
+export async function privacyProfileSplit() {
+  const r = checker('الخصوصية (3.3أ): الإيميل خارج القاعدة، الملف العام profiles يُكتب ويطابق، والخبرة في users وprofiles معاً');
+  // ملف قديم فيه إيميل مخزَّن من نسخة سابقة، وخبرة قائمة
+  const H = await bootApp({ autoProfiles: false, data: { 'users/me': { uid: 'me', name: 'أنا', email: 'me@x.com', photo: GPHOTO, xp: 5, stats: { ai: {} } } } });
+  try {
+    // الإيميل القديم يُمسح عند الدخول، ولا يُكتب جديد (اللعبة لا تستعمله — يبقى في حساب Firebase)
+    r.ok(H.fb.get('users/me/email') == null, `الإيميل بقي في القاعدة (${JSON.stringify(H.fb.get('users/me/email'))})`);
+    // الملف العام يُكتب عند الدخول (الاسم/الصورة/الخبرة) — منه البحث والمتصدرون وخبرة الخصم
+    const prof = H.fb.get('profiles/me') || {};
+    r.ok(prof.name === 'أنا' && prof.photo === GPHOTO && prof.xp === 5, `الملف العام ناقص أو لا يطابق (${JSON.stringify(prof)})`);
+    // addXP يكتب الخبرة في الملف الخاص (الموثوق) والعام معاً
+    const X = await H.import('js/xp.js');
+    await X.addXP(10); await H.settle(0, 10);
+    r.ok(H.fb.get('users/me/xp') === 15 && H.fb.get('profiles/me/xp') === 15,
+      `الخبرة لم تتطابق في المكانين (users ${H.fb.get('users/me/xp')}، profiles ${H.fb.get('profiles/me/xp')})`);
+    // getXP يقرأ من الملف العام (يصلح لي ولغيري)
+    r.ok((await X.getXP('me')) === 15, `getXP لا يقرأ من الملف العام (${await X.getXP('me')})`);
+    r.ok(H.errors.length === 0, 'أخطاء' + errText(H));
+  } catch (e) { r.ok(false, 'خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+  H.close();
+  // حساب جديد (ملف لم يُنشأ بعد): الإيميل لا يُكتب أصلاً، والملف العام يُنشأ باسمه
+  const H2 = await bootApp({ autoProfiles: false, user: ME });
+  try {
+    r.ok(H2.fb.get('users/me/email') == null, `حساب جديد: الإيميل كُتب (${JSON.stringify(H2.fb.get('users/me/email'))})`);
+    r.ok((H2.fb.get('users/me') || {}).name === ME.displayName, 'حساب جديد: الملف لم يُنشأ باسمه');
+    r.ok((H2.fb.get('profiles/me') || {}).name === ME.displayName, 'حساب جديد: الملف العام لم يُنشأ');
+    r.ok(H2.errors.length === 0, '(جديد) أخطاء' + errText(H2));
+  } catch (e) { r.ok(false, '(جديد) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+  H2.close();
+  return r;
+}
+
 export const APP_ALL = [friendPresenceAcrossRerender, logoutFreshPage, accountChangesSamePage, guestUpgrade, registrationName,
-  repeatedSameAccountEvent, namesAndPhotosInDomUIs, friendsUnderRules, localStatsKeys, presenceSelfHeal, uiNotes115];
+  repeatedSameAccountEvent, namesAndPhotosInDomUIs, friendsUnderRules, localStatsKeys, presenceSelfHeal, uiNotes115, privacyProfileSplit];

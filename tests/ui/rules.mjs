@@ -70,21 +70,37 @@ export function rulesMatrix() {
   r.ok(!W(NEW, 'A', [['users/A/friends/B', null], ['users/B/xp', 0]]), 'كتابة متعددة فيها مسار مرفوض تمرّ (يجب أن تُرفض كلها)');
   // بلا دخول: لا شيء
   r.ok(!W(NEW, null, [['users/A/xp', 1]]) && !W(NEW, null, [['rooms/1', { a: 1 }]]) && !canRead(NEW, 'users', { uid: null }), 'زائر بلا دخول يقرأ أو يكتب');
-  // باقي القواعد كما كانت تماماً (لا تغيير خارج الأصدقاء حتى 3.3)
-  const same = (rules, uid, writes) => W(rules, uid, writes) === W(OLD, uid, writes);
-  const probes = [
-    ['A', [['rooms/123', { status: 'waiting' }]]], ['A', [['invites/B/A', { at: 1 }]]], ['A', [['inviteRejections/A', { r: 1 }]]],
-    ['A', [['chats/A_B/m1', { text: 'x' }]]], ['A', [['chatStatus/A', { t: 1 }]]], ['A', [['dailyChallenges/d1/results/A', { s: 1 }]]],
-    ['A', [['dailyChallenges/d1/results/B', { s: 1 }]]], ['A', [['users/A/presence', { state: 'online' }]]], ['A', [['other/x', 1]]],
-    [null, [['chats/A_B/m1', { text: 'x' }]]],
-  ];
-  r.ok(probes.every(([uid, w]) => same(NEW, uid, w)), 'تغيّر شيء خارج الأصدقاء عن القواعد السابقة');
-  // بنيوياً: بلا أقسام الأصدقاء الثلاثة، الملف هو قواعد الإنتاج حرفاً بحرف
-  const bare = JSON.parse(JSON.stringify(NEW));
-  for (const k of ['friendRequests', 'friends', 'sentRequests']) delete bare.rules.users.$uid[k];
-  r.ok(JSON.stringify(bare) === JSON.stringify(OLD), 'خارج أقسام الأصدقاء الثلاثة يختلف الملف عن قواعد الإنتاج');
-  r.ok(['users', 'rooms', 'invites', 'inviteRejections', 'chats', 'chatStatus', 'dailyChallenges/d1/results'].every(p =>
-    canRead(NEW, p, { uid: 'A' }) === canRead(OLD, p, { uid: 'A' })), 'تغيّرت صلاحيات القراءة');
+  // ── 3.3أ (الخصوصية): من يقرأ ماذا ──────────────────────────────────
+  const R = (rules, uid, p, root = base) => canRead(rules, p, { uid, root });
+  // الملف العام profiles: يقرؤه كل مسجّل، ويكتبه صاحبه فقط
+  r.ok(R(NEW, 'A', 'profiles') && R(NEW, 'A', 'profiles/B') && R(NEW, 'B', 'profiles/A'), 'الملف العام profiles لا يقرؤه كل مسجّل');
+  r.ok(!R(NEW, null, 'profiles/A') && !R(NEW, null, 'profiles'), 'زائر بلا دخول يقرأ الملفات العامة');
+  r.ok(W(NEW, 'A', [['profiles/A', { name: 'أ', xp: 9 }]]) && !W(NEW, 'A', [['profiles/B', { name: 'x' }]]), 'الملف العام: لا يكتبه إلا صاحبه');
+  // الملف الكامل users لصاحبه وحده — لا الغير ولا الإيميل ولا الكل دفعة واحدة
+  const withEmail = JSON.parse(JSON.stringify(base)); withEmail.users.B.email = 'b@x.com'; withEmail.users.A.email = 'a@x.com';
+  r.ok(R(NEW, 'A', 'users/A', withEmail) && R(NEW, 'A', 'users/A/xp') && R(NEW, 'A', 'users/A/email', withEmail), 'لا أقرأ ملفي الكامل');
+  r.ok(!R(NEW, 'A', 'users/B', withEmail) && !R(NEW, 'A', 'users/B/xp') && !R(NEW, 'A', 'users/B/email', withEmail), 'أقرأ ملف غيري أو إيميله');
+  r.ok(!R(NEW, 'A', 'users'), 'أقرأ كل الملفات دفعة واحدة (users)');
+  // الحضور: لأصدقاء صاحبه فقط (ب يحمل أ في قائمته، والضحية لا)، ولصاحبه
+  const withPres = JSON.parse(JSON.stringify(base)); withPres.users.B.presence = { state: 'online' }; withPres.users.V.presence = { state: 'online' };
+  r.ok(R(NEW, 'A', 'users/B/presence', withPres), 'الصديق لا يقرأ حضور صديقه');
+  r.ok(R(NEW, 'B', 'users/B/presence', withPres), 'صاحبه لا يقرأ حضوره');
+  r.ok(!R(NEW, 'A', 'users/V/presence', withPres), 'من ليس صديقاً يقرأ الحضور');
+  r.ok(!R(NEW, null, 'users/B/presence', withPres), 'زائر بلا دخول يقرأ الحضور');
+  // friends/<أنا> وsentRequests/<أنا>: يقرؤها الطرف المعني وحده (هل أنا صديقه؟ ودليل القبول) — لا القائمة/الصندوق كاملاً
+  r.ok(R(NEW, 'A', 'users/B/friends/A', withToken), 'لا أقرأ مدخلي في قائمة من يُفترض صداقته');
+  r.ok(!R(NEW, 'A', 'users/B/friends/V', withToken), 'أقرأ مدخل غيري في قائمة أحد');
+  r.ok(R(NEW, 'A', 'users/B/sentRequests/A', withToken), 'لا أقرأ دليل الطلب الموجَّه إليّ');
+  r.ok(!R(NEW, 'A', 'users/B/sentRequests/C', withToken), 'أقرأ دليلاً ليس إليّ');
+  r.ok(!R(NEW, 'A', 'users/B/friends', withToken) && !R(NEW, 'A', 'users/B/sentRequests', withToken) && !R(NEW, 'A', 'users/B/friendRequests', withToken),
+    'أقرأ قائمة أصدقاء غيري أو صندوق أدلته/طلباته كاملاً');
+  // باقي الأقسام لم تُقفل بعد (دفعات 3.3ب/ج): الغرف والمحادثات والدعوات كما كانت — قراءةً وكتابةً لكل مسجّل
+  r.ok(canRead(NEW, 'rooms', { uid: 'A' }) && canRead(NEW, 'chats', { uid: 'A' }) && canRead(NEW, 'invites', { uid: 'A' }) && canRead(NEW, 'inviteRejections', { uid: 'A' }),
+    'الغرف/المحادثات/الدعوات لم تعد مقروءة (دفعة لاحقة لا هذه)');
+  r.ok(W(NEW, 'A', [['rooms/1', { s: 1 }]]) && W(NEW, 'A', [['chats/A_B/m', { t: 'x' }]]) && W(NEW, 'A', [['invites/B', { a: 1 }]]),
+    'الغرف/المحادثات/الدعوات لم تعد قابلة للكتابة (دفعة لاحقة لا هذه)');
+  r.ok(canRead(NEW, 'dailyChallenges/d1/results', { uid: 'A' }) && W(NEW, 'A', [['dailyChallenges/d1/results/A', { s: 1 }]]) && !W(NEW, 'A', [['dailyChallenges/d1/results/B', { s: 1 }]]),
+    'تحدي اليوم تغيّر');
   // ولماذا كان لا بدّ منها: القواعد السابقة ترفض الطلب والحذف والقبول
   r.ok(!W(OLD, 'A', [['users/B/friendRequests/A', { name: 'أ' }]]) && !W(OLD, 'A', [['users/B/friends/A', null]])
     && !W(OLD, 'A', [['users/B/friends/A', { name: 'أ' }]], withToken), 'القواعد السابقة كانت تسمح بالأصدقاء (التشخيص خاطئ؟)');

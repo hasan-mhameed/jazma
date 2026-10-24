@@ -765,7 +765,7 @@ async function registrationProfile() {
     const A = await import(pathToFileURL(genAuth('R' + (++i), P.port, uid)).href);   // هوية الجهاز عند الخادم = الحساب الذي سيُنشأ (القواعد)
     A.onUserChange(() => {}); A.onUserChange(() => {});          // كالتطبيق: main.js وpresence.js
     await wait(20);
-    if (p.warm) await A.getUserProfile('warmup');               // شيء فتح الاتصال قبل التسجيل
+    if (p.warm) await A.getUserProfile(uid);                     // شيء فتح الاتصال قبل التسجيل (ملفي أنا — 3.3أ: لا أقرأ ملف غيري)
     globalThis.__UPDATE_PROFILE_MS = p.upd;
     await A.registerWithEmail('سارة', email, 'Aa1!aaaa');
     await wait(Math.max(600, 4 * (2 * p.oneWayMs) + p.setupMs + 200));
@@ -782,6 +782,9 @@ async function registrationProfile() {
 // القواعد القديمة (الإنتاج حتى 2026-10-19) كانت ترفض كل كتابة في ملف الآخر: لا طلب يصل، والقبول والحذف من طرف واحد.
 // الآن: طلب = صندوقه + دليلي في ملفي، والقبول والحذف من الطرفين بكتابة واحدة — والخادم يطبّق القواعد على كل جهاز بهويته.
 const OLD_RULES = JSON.parse(fsx.readFileSync(new URL('../shared/rules_prod_2026-10-19.json', import.meta.url), 'utf8'));
+// 3.3أ: قواعد مرحلة النشر الأولى (profiles مُضافة، وusers ما زال مقروءاً) — نافذة التعايش التي تبقى فيها صفحات
+// قديمة مفتوحة قبل قفل users في المرحلة الثانية (الصفحات القديمة تقرأ users فتعمل حتى القفل بعد تحديثها كلها)
+const STAGE1_RULES = JSON.parse(fsx.readFileSync(new URL('../../database.rules.stage1.json', import.meta.url), 'utf8'));
 const denies = async (p) => { try { await p; return false; } catch (e) { return /permission_denied/i.test(String(e && (e.code || e.message))); } };
 async function friendsRealRules() {
   const r = suite('الأصدقاء (friends.js الحقيقي) فوق القواعد المنشورة: طلب ← قبول ← حذف من الطرفين، ولا دخول بلا طلب، والقواعد القديمة ترفض كاملاً');
@@ -856,6 +859,9 @@ async function presenceHealsReal() {
   const mods = [];
   try {
     const load = async (dev, uid) => { const m = await import(pathToFileURL(genPresence(dev, port, uid)).href); mods.push(m); return m; };
+    // 3.3أ: الحضور يقرؤه أصدقاء صاحبه فقط — نجعل المتابِع F صديقاً لأحمد وباسل (في قائمتيهما) ليقرأ حالتيهما
+    S.setAt('users/uA/friends/uF', { uid: 'uF', name: 'صديق' });
+    S.setAt('users/uB/friends/uF', { uid: 'uF', name: 'صديق' });
     const F = await load('F', 'uF');                              // صديق يتابع الحالتين كما تعرضهما قائمته
     F.__setUser({ uid: 'uF' }); F.initPresence();
     const seen = { uA: [], uB: [] };
@@ -917,8 +923,10 @@ async function presenceHealsReal() {
 // تحميلها) — الملفات القديمة نفسها من tests/fixtures/v36.0 ──
 const FIX36 = new URL('../fixtures/v36.0/', import.meta.url);
 async function mixedVersions() {
-  const r = suite('تعايش النسخ (صفحات v36.0 مفتوحة مع v36.1 والقواعد الجديدة): لا طلب بلا دليل، قبول وحذف قديمان يكتملان من الطرفين، و"في مباراة" من صفحة قديمة لا تمحوها صفحة جديدة');
-  const S = new FakeRTDB(); const port = await S.listen();
+  const r = suite('تعايش النسخ (صفحات v36.0 مفتوحة في نافذة النشر الأولى — profiles مُضافة وusers مقروء): لا طلب بلا دليل، قبول وحذف قديمان يكتملان من الطرفين، و"في مباراة" من صفحة قديمة لا تمحوها صفحة جديدة');
+  // 3.3أ: الصفحات القديمة تقرأ users (البحث، وقبولها يقرأ ملف المرسل) — تعمل في المرحلة الأولى؛ وقفل المرحلة
+  // الثانية يأتي بعد تحديث كل الصفحات (ومصفوفة rules.mjs تثبت أن القفل يمنع قراءة ملف الغير)
+  const S = new FakeRTDB({ rules: STAGE1_RULES }); const port = await S.listen();
   const info = console.info; console.info = () => {};
   const mods = [];
   const load = async (file) => { const m = await import(pathToFileURL(file).href); mods.push(m); return m; };

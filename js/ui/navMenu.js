@@ -1,5 +1,5 @@
 // 📄 ui/navMenu.js — زر القائمة يفتح modal بطاقات
-import { esc } from "./safeText.js?v=1792711190";
+import { esc } from "./safeText.js?v=1792834692";
 export function initNavMenu() {
   const userInfo = document.getElementById('user-info');
   if (!userInfo) return;

@@ -9,7 +9,7 @@
 // وسجل تشخيص لآخر الأحداث يُطلب من الـconsole: JAZAM_PRESENCE()
 import { getDatabase, ref, onValue, onDisconnect, update, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser, onUserChange } from "./auth.js?v=1792711190";
+import { getCurrentUser, onUserChange } from "./auth.js?v=1792834692";
 
 const db = getDatabase();
 
@@ -221,6 +221,10 @@ export function watchPresence(uid, cb) {
   let stopped = false;
   const unsub = onValue(ref(db, `users/${uid}/presence`), (snap) => {
     if (!stopped) cb(snap.val() || { state: "offline", lastSeen: null });
+  }, () => {
+    // 3.3أ: قراءة الحضور مسموحة لأصدقاء صاحبه فقط — صداقة قديمة من طرف واحد (أنا عنده وهو ليس عندي)
+    // قد تُرفض بعد قفل users، فنعرضه "غير متصل" بهدوء بلا خطأ في الـconsole
+    if (!stopped) cb({ state: "offline", lastSeen: null });
   });
   const stop = () => {
     if (stopped) return;

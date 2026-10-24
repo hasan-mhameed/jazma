@@ -1,13 +1,13 @@
 // 📄 ui/friendsUI.js
 // قائمة الأصدقاء + البحث + الإجراءات
-import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1792711190";
+import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1792834692";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend,
-         listenFriendRequests, listenFriends, listenSentRequests, isMutualFriend } from "../friends.js?v=1792711190";
-import { outgoingInvite, onInviteStateChange } from "./inviteUI.js?v=1792711190";
-import { asText, firstInitial, safeImageSrc } from "./safeText.js?v=1792711190";
-import { getCurrentUser } from "../auth.js?v=1792711190";
-import { showNotificationCard } from "./chatUI.js?v=1792711190";
+         listenFriendRequests, listenFriends, listenSentRequests, isMutualFriend, isRequestPending } from "../friends.js?v=1792834692";
+import { outgoingInvite, onInviteStateChange } from "./inviteUI.js?v=1792834692";
+import { asText, firstInitial, safeImageSrc } from "./safeText.js?v=1792834692";
+import { getCurrentUser } from "../auth.js?v=1792834692";
+import { showNotificationCard } from "./chatUI.js?v=1792834692";
 
 // زر "دعوة" يعكس حالة الدعوة الصادرة (v35.9): ⏳ للصديق المدعوّ ما دامت دعوته قائمة، ويرجع مع أي نهاية لها
 // (قبول ثم مباراة، رفض، "في مباراة"، انتهاء المهلة، إلغاء، فشل) — كان لا يرجع إلا عند الرفض
@@ -38,24 +38,26 @@ const _pendingSent = new Set();   // طلباتي القائمة (users/<أنا>
 const _knownMutual = new Set();   // صاروا أصدقاء من الطرفين ونتيجة البحث أقدم منه (قبولٌ يكتب الطرفين معاً)
 const _sending     = new Set();   // إرسال جارٍ
 const _sendFailed  = new Set();   // فشل للتو (يُعرض 3 ثوانٍ)
-const _sentHere    = new Set();   // أرسلتُ له من هذه الصفحة (نتيجة البحث أقدم من طلبي)
+const _sentHere    = new Set();   // أرسلتُ له من هذه الصفحة للتوّ (قبل أن يصل حدث القائمة — طلبي في صندوقه أكيد)
+const _staleProof  = new Set();   // دليلي باقٍ لكن طلبي ليس في صندوقه (رفضته نسخة أقدم) — "➕ إضافة" لا "✅ أُرسل"
 const _settling    = new Set();   // تغيّر يُحسم الآن (طلب انتهى، أو دخل قائمتي) — "⏳" لا "➕ إضافة" عابرة قابلة للنقر
 const _searchCards = new Map();   // uid ← إعادة رسم زر بطاقته في نتائج البحث الظاهرة
 const repaintSearch = () => { for (const paint of _searchCards.values()) { try { paint(); } catch {} } };
-const isObj = v => !!v && typeof v === "object";
 function searchState(user) {
   if (_sending.has(user.uid) || _settling.has(user.uid)) return "sending";
   if (_sendFailed.has(user.uid)) return "failed";
-  const me = getCurrentUser()?.uid;
-  const back  = me && isObj(user.friends) ? user.friends[me] : null;
-  const myReq = me && isObj(user.friendRequests) ? user.friendRequests[me] : null;
-  // "✓ صديقك" للصداقة من الطرفين فقط. في قائمتي وحدي (صداقة من طرف واحد بقيت من v36.0): "➕ إضافة" — طلب جديد
-  // يقبله فتكتمل (كان "✓ صديقك" يخفي الزر فلا يصلحها من جهتي شيء — مراجعة v36.1). مدخل صداقة = كائن
-  if (_friendKeys.has(user.uid) && (isObj(back) || _knownMutual.has(user.uid))) return "friend";
-  // "✅ أُرسل": طلبي قائم في القاعدة وفي صندوقه فعلاً — دليل بقي بلا طلب (رفضته نسخة أقدم) لا يمنع إرساله من جديد
-  if (_pendingSent.has(user.uid) && (isObj(myReq) || _sentHere.has(user.uid))) return "sent";
+  // 3.3أ: نتيجة البحث من الملف العام profiles (بلا friends/friendRequests) — نحكم من بياناتي أنا:
+  // "✓ صديقك" للصداقة من الطرفين فقط (في قائمتي، وأكّدتها قراءة واحدة عبر _knownMutual — نسخة أقدم قد تكتب طرفاً
+  // واحداً، وصداقة من طرف واحد يصلحها طلب جديد فلا نخفي زرّه)؛ "✅ أُرسل" ما دام طلبي قائماً في القاعدة
+  // (users/<أنا>/sentRequests) أو أرسلته للتوّ من هذه الصفحة (قبل أن يصل حدث القائمة)
+  if (_friendKeys.has(user.uid) && _knownMutual.has(user.uid)) return "friend";
+  if ((_pendingSent.has(user.uid) || _sentHere.has(user.uid)) && !_staleProof.has(user.uid)) return "sent";
   return "add";
 }
+// تأكيد أن طلبي الصادر ما زال في صندوقه (قراءة واحدة) — دليلٌ بلا طلب (رفضته نسخة أقدم) يصير "➕ إضافة"
+const confirmSent = (k) => isRequestPending(k)
+  .then(there => { if (there) _staleProof.delete(k); else _staleProof.add(k); repaintSearch(); })
+  .catch(() => {});
 // انتظار حسم تغيّر (بحدّ أقصى — لا "⏳" عالقة)، وتأكيد الصداقة من الطرفين بقراءة واحدة (لا افتراض)
 function settle(k, ms = 800) {
   _settling.add(k); repaintSearch();
@@ -135,7 +137,7 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
     finally { friendsSearchBtn.textContent = "🔍"; }   // v36.0: الزر يرجع ولو فشل البحث
     searchResults.innerHTML = "";
     _searchCards.clear();
-    _sentHere.clear();      // نتيجة البحث الجديدة أحدث من أي إرسال قبلها (طلبي في صندوقه يظهر فيها)
+    _sentHere.clear(); _staleProof.clear();   // بحث جديد: نؤكّد كل حالة من القاعدة من جديد
     if (!Array.isArray(results)) {
       searchResults.innerHTML = `<p class="friends-empty">تعذّر البحث — حاول مجدداً</p>`;
       return;
@@ -211,7 +213,7 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
             _sending.add(user.uid); repaintSearch();
             try {
               await sendFriendRequest(user.uid);
-              _sentHere.add(user.uid);
+              _sentHere.add(user.uid); _staleProof.delete(user.uid);   // أرسلته للتوّ: طلبي في صندوقه أكيد
             } catch {
               _sendFailed.add(user.uid);
               flash(`⚠️ تعذّر إرسال الطلب إلى ${userName} — حاول مجدداً`);
@@ -227,6 +229,11 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
         actions.replaceChildren(btn);
       };
       _searchCards.set(user.uid, paint);
+      // 3.3أ: نتيجة البحث من الملف العام (بلا friends/friendRequests) — نؤكّد من القاعدة بقراءة واحدة:
+      // لمن في قائمتي: هل الصداقة من الطرفين؟ ("⏳" ثم "✓ صديقك" أو زر الإصلاح)؛ ولمن له دليل طلب عندي ولم أرسله
+      // من هذه الصفحة للتوّ: هل طلبي ما زال في صندوقه؟ (دليل بلا طلب ← "➕ إضافة" لا "✅ أُرسل")
+      if (_friendKeys.has(user.uid) && !_knownMutual.has(user.uid)) { const done = settle(user.uid); confirmMutual(user.uid).finally(done); }
+      else if (_pendingSent.has(user.uid) && !_sentHere.has(user.uid)) confirmSent(user.uid);
       paint();
     }
     if (type === "request") { addAction("btn-accept", "✓ قبول"); addAction("btn-reject", "✕ رفض"); }
@@ -316,6 +323,7 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
   listenSentRequests(keys => {
     const gone = _sentReady ? [..._pendingSent].filter(k => !keys.includes(k)) : [];
     _pendingSent.clear(); keys.forEach(k => _pendingSent.add(k));
+    _sentHere.clear();   // القاعدة هي المرجع الآن (طلباتي القائمة فعلاً) — الجسر المؤقت أدّى دوره
     _sentReady = true;
     for (const k of gone) {
       if (_knownMutual.has(k)) continue;

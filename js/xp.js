@@ -3,7 +3,7 @@
 
 import { getDatabase, ref, get, update }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1792711190";
+import { currentUser } from "./auth.js?v=1792834692";
 
 const db = getDatabase();
 
@@ -82,20 +82,27 @@ export function calcXP(matchData) {
 }
 
 // ── جلب XP الحالي ────────────────────────────────────────────────
+// 3.3أ: من الملف العام profiles (يقرؤه الجميع) — يصلح لشريطي ولخبرة الخصم في scoreboard
 export async function getXP(uid) {
-  const snap = await get(ref(db, `users/${uid}/xp`));
-  return snap.exists() ? snap.val() : 0;
+  // 3.3أ: لا يُسقط الواجهة إن تعذّرت القراءة (نشر متدرّج: الكود قبل نشر قاعدة profiles) — الخبرة 0 مؤقتاً
+  try {
+    const snap = await get(ref(db, `profiles/${uid}/xp`));
+    return snap.exists() ? snap.val() : 0;
+  } catch { return 0; }
 }
 
 // ── إضافة XP وإرجاع النتيجة ──────────────────────────────────────
 export async function addXP(amount) {
   if (!currentUser || amount <= 0) return null;
   const uid      = currentUser.uid;
-  const current  = await getXP(uid);
+  // القيمة المرجعية من الملف الخاص (المصدر الموثوق، يقرؤها صاحبها) — لا من العام
+  const curSnap  = await get(ref(db, `users/${uid}/xp`));
+  const current  = curSnap.exists() ? curSnap.val() : 0;
   const newXP    = current + amount;
   const before   = getLevelFromXP(current);
   const after    = getLevelFromXP(newXP);
-  await update(ref(db, `users/${uid}`), { xp: newXP });
+  // 3.3أ: الخبرة في الملف الخاص (الموثوق) والعام (للعرض) معاً — كتابة واحدة ذرّية
+  await update(ref(db), { [`users/${uid}/xp`]: newXP, [`profiles/${uid}/xp`]: newXP });
   return {
     gained:      amount,
     totalXP:     newXP,

@@ -1,0 +1,61 @@
+{
+  "rules": {
+    "profiles": {
+      ".read": "auth !== null",
+      "$uid": {
+        ".write": "$uid === auth.uid"
+      }
+    },
+    "users": {
+      ".read": "auth !== null",
+      "$uid": {
+        ".write": "$uid === auth.uid",
+        "friendRequests": {
+          "$fromUid": {
+            ".write": "auth !== null && $fromUid === auth.uid && (!newData.exists() || (root.child('users').child($uid).exists() && newData.parent().parent().parent().child($fromUid).child('sentRequests').child($uid).exists()))"
+          }
+        },
+        "friends": {
+          "$friendUid": {
+            ".write": "auth !== null && $friendUid === auth.uid && (!newData.exists() || root.child('users').child($uid).child('sentRequests').child(auth.uid).exists())"
+          }
+        },
+        "sentRequests": {
+          "$toUid": {
+            ".write": "auth !== null && $toUid === auth.uid && !newData.exists()"
+          }
+        }
+      }
+    },
+    "rooms": {
+      ".read": "auth !== null",
+      ".write": "auth !== null"
+    },
+    "invites": {
+      ".read": "auth !== null",
+      ".write": "auth !== null"
+    },
+    "inviteRejections": {
+      ".read": "auth !== null",
+      ".write": "auth !== null"
+    },
+    "chats": {
+      ".read": "auth !== null",
+      ".write": "auth !== null"
+    },
+    "chatStatus": {
+      ".read": "auth !== null",
+      ".write": "auth !== null"
+    },
+    "dailyChallenges": {
+      "$date": {
+        "results": {
+          ".read": "auth !== null",
+          "$uid": {
+            ".write": "$uid === auth.uid"
+          }
+        }
+      }
+    }
+  }
+}

@@ -8,7 +8,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getDatabase, ref, get, update, remove }
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { localStatsKey, isSafeKey }   from "./core/statsKey.js?v=1792711190";
+import { localStatsKey, isSafeKey }   from "./core/statsKey.js?v=1792834692";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -121,12 +121,13 @@ async function saveUserProfile(user) {
   const userRef = ref(db, `users/${user.uid}`);
   const snap    = await get(userRef);
   const cur     = snap.exists() ? snap.val() : null;
+  const accName = String(user.displayName || "").trim();
   if (!cur || typeof cur !== "object") {
     // ملف جديد — دمج لا استبدال (v36.0): لا يمحو ما كُتب تحته للتوّ (كحالة الحضور لحظة الاتصال)
+    // 3.3أ (الخصوصية): لا نكتب الإيميل في القاعدة — اللعبة لا تستعمله، ويبقى في حساب Firebase
     await update(userRef, {
       uid:      user.uid,
       name:     user.displayName || "لاعب",
-      email:    user.email,
       photo:    user.photoURL || "",
       joinedAt: Date.now(),
       stats:    NEW_STATS(),
@@ -139,11 +140,21 @@ async function saveUserProfile(user) {
     // stats ناقصة: أوراقها فقط (لا استبدال العقدة كلها — نتيجة مباراة كُتبت للتوّ من جهاز آخر لا تضيع)
     if (!cur.stats) Object.assign(patch, { "stats/ai/wins": 0, "stats/ai/losses": 0, "stats/local/wins": 0, "stats/local/losses": 0 });
     // واسم "لاعب" المؤقت (ضيف ترقّى، أو تسجيل سبق حفظُ ملفه وصولَ الاسم) أو صورة ناقصة تُصحَّح من الحساب
-    const accName = String(user.displayName || "").trim();
     if (accName && (!cur.name || cur.name === "لاعب")) patch.name = accName;
     if (user.photoURL && !cur.photo) patch.photo = user.photoURL;
+    // 3.3أ: نمسح الإيميل القديم المخزَّن من النسخ السابقة — خارج القاعدة من الآن
+    if (cur.email != null) patch.email = null;
     await update(userRef, patch);
   }
+  // 3.3أ: الملف العام profiles/<uid> (الاسم/الصورة/الخبرة) يقرؤه كل مسجّل — منه البحث والمتصدرون وخبرة الخصم.
+  // يُكتب عند كل دخول فيبقى مطابقاً للملف الخاص (الخبرة يحدّثها addXP في المكانين معاً).
+  let pubName;
+  if (accName && (!cur || !cur.name || cur.name === "لاعب")) pubName = accName;
+  else if (cur && cur.name) pubName = cur.name;
+  else pubName = user.displayName || "لاعب";
+  const pubPhoto = (cur && cur.photo) || user.photoURL || "";
+  const pubXP    = (cur && typeof cur.xp === "number") ? cur.xp : 0;
+  try { await update(ref(db, `profiles/${user.uid}`), { name: pubName, photo: pubPhoto, xp: pubXP }); } catch {}
 }
 
 // ─── جلب ملف مستخدم ──────────────────────────────────────────

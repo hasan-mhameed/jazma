@@ -17,21 +17,22 @@ const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
 export async function getLeaderboard(limit = 10) {
-  const snap = await get(ref(db, "users"));
+  // 3.3أ (الخصوصية): من الملفات العامة profiles (الاسم/الصورة/الخبرة) — users صار لصاحبه وحده
+  const snap = await get(ref(db, "profiles"));
   if (!snap.exists()) return [];
 
   const users = [];
   snap.forEach(child => {
-    const u   = child.val();
+    const u   = child.val() || {};
     const xp  = u.xp || 0;
-    const name = u.displayName || u.name || "لاعب";
+    const name = u.name || "لاعب";
     if (xp > 0 || name !== "لاعب") {
       users.push({
         uid:   child.key,
         name,
-        photo: u.photoURL || u.photo || "",
+        photo: u.photo || "",
         xp,
-        wins:  u.stats?.ai?.wins || 0,
+        wins:  0,
         totalGames: 0,
         winRate: 0,
       });
