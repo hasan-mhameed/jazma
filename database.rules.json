@@ -3,7 +3,10 @@
     "profiles": {
       ".read": "auth !== null",
       "$uid": {
-        ".write": "$uid === auth.uid"
+        ".write": "$uid === auth.uid",
+        "name":  { ".validate": "newData.isString() && newData.val().length <= 128" },
+        "photo": { ".validate": "newData.isString() && newData.val().length <= 1024" },
+        "xp":    { ".validate": "newData.isNumber()" }
       }
     },
     "users": {
@@ -16,13 +19,17 @@
         "friendRequests": {
           "$fromUid": {
             ".read": "$fromUid === auth.uid",
-            ".write": "auth !== null && $fromUid === auth.uid && (!newData.exists() || (root.child('users').child($uid).exists() && newData.parent().parent().parent().child($fromUid).child('sentRequests').child($uid).exists()))"
+            ".write": "auth !== null && $fromUid === auth.uid && (!newData.exists() || (root.child('users').child($uid).exists() && newData.parent().parent().parent().child($fromUid).child('sentRequests').child($uid).exists()))",
+            "name":  { ".validate": "newData.isString() && newData.val().length <= 128" },
+            "photo": { ".validate": "newData.isString() && newData.val().length <= 1024" }
           }
         },
         "friends": {
           "$friendUid": {
             ".read": "$friendUid === auth.uid",
-            ".write": "auth !== null && $friendUid === auth.uid && (!newData.exists() || root.child('users').child($uid).child('sentRequests').child(auth.uid).exists())"
+            ".write": "auth !== null && $friendUid === auth.uid && (!newData.exists() || root.child('users').child($uid).child('sentRequests').child(auth.uid).exists())",
+            "name":  { ".validate": "newData.isString() && newData.val().length <= 128" },
+            "photo": { ".validate": "newData.isString() && newData.val().length <= 1024" }
           }
         },
         "sentRequests": {
@@ -39,19 +46,34 @@
     },
     "invites": {
       ".read": "auth !== null",
-      ".write": "auth !== null"
+      "$toUid": {
+        ".write": "auth !== null && ( ($toUid === auth.uid && !newData.exists()) || (newData.exists() && newData.child('fromUid').val() === auth.uid && root.child('users').child($toUid).child('friends').child(auth.uid).exists()) || (!newData.exists() && data.child('fromUid').val() === auth.uid) )",
+        "fromName": { ".validate": "newData.isString() && newData.val().length <= 128" },
+        "roomCode": { ".validate": "newData.isString() && newData.val().length <= 16" }
+      }
     },
     "inviteRejections": {
       ".read": "auth !== null",
-      ".write": "auth !== null"
+      "$fromUid": {
+        ".write": "auth !== null && ( ($fromUid === auth.uid && !newData.exists()) || (newData.exists() && newData.child('rejectedBy').val() === auth.uid && root.child('users').child($fromUid).child('friends').child(auth.uid).exists()) )",
+        "name":     { ".validate": "newData.isString() && newData.val().length <= 128" },
+        "roomCode": { ".validate": "newData.isString() && newData.val().length <= 16" }
+      }
     },
     "chats": {
       ".read": "auth !== null",
-      ".write": "auth !== null"
+      ".write": "auth !== null",
+      "$key": {
+        "$msgid": {
+          "fromUid":  { ".validate": "newData.isString() && newData.val().length <= 64" },
+          "fromName": { ".validate": "newData.isString() && newData.val().length <= 128" },
+          "text":     { ".validate": "newData.isString() && newData.val().length <= 2000" }
+        }
+      }
     },
     "chatStatus": {
-      ".read": "auth !== null",
-      ".write": "auth !== null"
+      ".read": false,
+      ".write": false
     },
     "dailyChallenges": {
       "$date": {

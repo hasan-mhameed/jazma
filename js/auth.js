@@ -8,7 +8,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getDatabase, ref, get, update, remove }
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { localStatsKey, isSafeKey }   from "./core/statsKey.js?v=1792834692";
+import { localStatsKey, isSafeKey }   from "./core/statsKey.js?v=1793139376";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -158,6 +158,8 @@ async function saveUserProfile(user) {
 }
 
 // ─── جلب ملف مستخدم ──────────────────────────────────────────
+// 3.3أ: بعد قفل users صار هذا للذات فقط (uid === صاحب الجلسة) — قراءة ملف لاعب آخر تُرفَض.
+// حالياً بلا مستدعٍ (الملف العام للغير في profiles، والإحصائيات تُقرأ بالـuid الخاص). لا تستعمله لمعرّف غيرك.
 export async function getUserProfile(uid) {
   const snap = await get(ref(db, `users/${uid}`));
   return snap.exists() ? snap.val() : null;

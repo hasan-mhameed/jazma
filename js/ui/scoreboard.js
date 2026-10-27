@@ -1,13 +1,25 @@
 // 📄 scoreboard.js — v35.5 (Nature cards + level badge — "من أنا" من مصدر واحد)
-import { state }  from "../core/state.js?v=1792834692";
-import { config } from "../config/config.js?v=1792834692";
-import { getXP, getLevelFromXP } from "../xp.js?v=1792834692";
-import { getCurrentUser } from "../auth.js?v=1792834692";
-import { getParticipants, getMyNum, getPlayerUid } from "../core/matchResult.js?v=1792834692";
-import { esc } from "./safeText.js?v=1792834692";
+import { state }  from "../core/state.js?v=1793139376";
+import { config } from "../config/config.js?v=1793139376";
+import { getXP, getLevelFromXP } from "../xp.js?v=1793139376";
+import { getCurrentUser } from "../auth.js?v=1793139376";
+import { getParticipants, getMyNum, getPlayerUid } from "../core/matchResult.js?v=1793139376";
+import { esc } from "./safeText.js?v=1793139376";
 
 const AVATARS = ['🦊', '🤖', '🦅', '🐺'];
 const COLORS  = ['p1', 'p2', 'p3', 'p4'];
+
+// إصلاح بطء بطاقة اللاعب (كشفه فحص 3.3أ-1، خلل قديم): خبرة كل لاعب تُقرأ مرة للمباراة وتُخزَّن،
+// فلا قراءة شبكة مع كل ضغطة. وبطاقة المعلومات تُفتح فوراً وتُملأ الخبرة لاحقاً، وحارس تسلسل (_pinfoSeq)
+// يتجاهل أي قراءة متأخرة بعد إغلاق البطاقة أو فتح غيرها — فلا تعلّق البطاقة ولا تعيد الظهور بعد الإغلاق.
+const _xpCache = new Map();   // uid → xp (تُفرَّغ مع كل مباراة جديدة في renderScoreboard)
+let _pinfoSeq = 0;
+async function cachedXP(uid) {
+  if (_xpCache.has(uid)) return _xpCache.get(uid);
+  const xp = await getXP(uid);
+  _xpCache.set(uid, xp);
+  return xp;
+}
 
 function playerName(cfg, i) {
   if (cfg.aiMode === 'ai' && i === 2) return 'الكمبيوتر';
@@ -19,6 +31,7 @@ function playerName(cfg, i) {
 export function renderScoreboard(cfg) {
   const scoreboard = document.getElementById("scores");
   if (!scoreboard) return;
+  _xpCache.clear();            // مباراة جديدة: خبرة محدّثة (لاعب قد يكون ربح XP منذ آخر مباراة)
   scoreboard.innerHTML = "";
   // في الأونلاين الجماعي قد لا يبدأ ترقيم اللاعبين من 1 (بعد مغادرات قبل البدء)
   // فالبطاقات لمن لعب فعلاً فقط — نفس المصدر الذي تبني منه نافذة النهاية ترتيبها
@@ -67,7 +80,7 @@ async function loadLevels(cfg) {
       const uid = getPlayerUid(cfg, num, myUid);
       if (!uid) return;
       try {
-        const xp = await getXP(uid);
+        const xp = await cachedXP(uid);
         setLevelBadge(num, getLevelFromXP(xp).current);
       } catch {}
     }));
@@ -76,7 +89,7 @@ async function loadLevels(cfg) {
   // ضد الكمبيوتر والمحلي: أنا المقعد 1 (نفس الجهاز)
   const me = getMyNum(cfg);
   if (myUid && me != null) {
-    const xp  = await getXP(myUid);
+    const xp  = await cachedXP(myUid);
     const lvl = getLevelFromXP(xp);
     setLevelBadge(me, lvl.current);
   }
@@ -100,26 +113,30 @@ function setLevelBadge(i, level) {
 // ── modal معلومات اللاعب ──
 async function showPlayerInfo(cfg, i) {
   document.getElementById('player-info-modal')?.remove();
+  const mySeq = ++_pinfoSeq;      // هذا الفتح — قراءة متأخرة لفتحٍ أقدم تُتجاهل
   const name = playerName(cfg, i);
   const avatar = AVATARS[i-1] || '🎮';
-
-  let levelInfo = '', xpInfo = '';
   const myUid = getCurrentUser()?.uid;
   // صاحب البطاقة الحقيقي: أونلاين من مقعده (لا "1 = أنا")، وغير ذلك أنا المقعد 1
   let uid = null;
   if (cfg.aiMode === 'online') uid = getPlayerUid(cfg, i, myUid);
   else if (i === getMyNum(cfg)) uid = myUid;
 
-  if (uid) {
-    const xp  = await getXP(uid);
-    const lvl = getLevelFromXP(xp);
+  // النصوص الثابتة تُعرض فوراً بلا انتظار الشبكة؛ خبرة لاعب حقيقي غير مخزَّنة تُملأ لاحقاً
+  let levelInfo = '', xpInfo = '';
+  if (!uid) {
+    if (cfg.aiMode === 'ai' && i === 2) {
+      levelInfo = '🤖 ذكاء اصطناعي';
+      xpInfo = cfg.aiDifficulty === 'easy' ? 'سهل' : cfg.aiDifficulty === 'nightmare' ? 'صعب' : 'متوسط';
+    } else {
+      levelInfo = cfg.aiMode === 'online' ? '🌐 لاعب أونلاين' : '👤 لاعب محلي';
+    }
+  } else if (_xpCache.has(uid)) {
+    const lvl = getLevelFromXP(_xpCache.get(uid));
     levelInfo = `${lvl.current.icon} ${lvl.current.title} (مستوى ${lvl.current.level})`;
-    xpInfo = `${xp} XP`;
-  } else if (cfg.aiMode === 'ai' && i === 2) {
-    levelInfo = '🤖 ذكاء اصطناعي';
-    xpInfo = cfg.aiDifficulty === 'easy' ? 'سهل' : cfg.aiDifficulty === 'nightmare' ? 'صعب' : 'متوسط';
+    xpInfo = `${_xpCache.get(uid)} XP`;
   } else {
-    levelInfo = cfg.aiMode === 'online' ? '🌐 لاعب أونلاين' : '👤 لاعب محلي';
+    levelInfo = '⏳ …';
   }
 
   const modal = document.createElement('div');
@@ -130,13 +147,28 @@ async function showPlayerInfo(cfg, i) {
       <div class="pinfo-avatar ${esc(COLORS[i-1])}">${esc(avatar)}</div>
       <h3>${esc(name)}</h3>
       <div class="pinfo-level">${esc(levelInfo)}</div>
-      ${xpInfo ? `<div class="pinfo-xp">${esc(xpInfo)}</div>` : ''}
+      <div class="pinfo-xp">${xpInfo ? esc(xpInfo) : ''}</div>
       <div class="pinfo-score">النقاط الحالية: ${esc(state.scores[i] || 0)}</div>
       <button id="pinfo-close" type="button">حسناً</button>
     </div>`;
   document.body.appendChild(modal);
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
   document.getElementById('pinfo-close').addEventListener('click', () => modal.remove());
+
+  // خبرة لاعب حقيقي غير مخزَّنة: قراءة واحدة ثم ملؤها إن بقيت هذه البطاقة نفسها مفتوحة
+  if (uid && !_xpCache.has(uid)) {
+    try {
+      const xp = await cachedXP(uid);
+      if (mySeq !== _pinfoSeq) return;                       // فُتحت بطاقة أحدث
+      const box = document.getElementById('player-info-modal');
+      if (!box) return;                                       // أُغلقت البطاقة
+      const lvl = getLevelFromXP(xp);
+      const lvlEl = box.querySelector('.pinfo-level');
+      const xpEl  = box.querySelector('.pinfo-xp');
+      if (lvlEl) lvlEl.textContent = `${lvl.current.icon} ${lvl.current.title} (مستوى ${lvl.current.level})`;
+      if (xpEl)  xpEl.textContent  = `${xp} XP`;
+    } catch {}
+  }
 }
 
 export function updateScoreboard(cfg = null) {

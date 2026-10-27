@@ -680,6 +680,11 @@ async function duoCancelStrayFinished() {
 async function inviteConditionalRemovals() {
   const r = suite('الدعوات: سحب الدعوة ومسحها ومسح الرد — بذاكرة باردة، ولا تمسّ غير المقصود');
   const S = new FakeRTDB(); const port = await S.listen();
+  // 3.3أ-2: الدعوة وردّها بين صديقين فقط — نزرع صداقات متبادلة بين الثلاثة (الواقع: لا تُدعى إلا صديقاً)
+  for (const [x, y] of [['uA', 'uB'], ['uA', 'uC'], ['uB', 'uC']]) {
+    S.setAt(`users/${x}/friends/${y}`, { uid: y, name: y });
+    S.setAt(`users/${y}/friends/${x}`, { uid: x, name: x });
+  }
   const I = {};
   for (const d of ['A', 'B', 'C']) I[d] = await import(pathToFileURL(genInvite(d, port)).href);
   const cfg = { rows: 4, cols: 4 };

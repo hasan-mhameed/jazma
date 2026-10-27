@@ -94,11 +94,35 @@ export function rulesMatrix() {
   r.ok(!R(NEW, 'A', 'users/B/sentRequests/C', withToken), 'أقرأ دليلاً ليس إليّ');
   r.ok(!R(NEW, 'A', 'users/B/friends', withToken) && !R(NEW, 'A', 'users/B/sentRequests', withToken) && !R(NEW, 'A', 'users/B/friendRequests', withToken),
     'أقرأ قائمة أصدقاء غيري أو صندوق أدلته/طلباته كاملاً');
-  // باقي الأقسام لم تُقفل بعد (دفعات 3.3ب/ج): الغرف والمحادثات والدعوات كما كانت — قراءةً وكتابةً لكل مسجّل
-  r.ok(canRead(NEW, 'rooms', { uid: 'A' }) && canRead(NEW, 'chats', { uid: 'A' }) && canRead(NEW, 'invites', { uid: 'A' }) && canRead(NEW, 'inviteRejections', { uid: 'A' }),
-    'الغرف/المحادثات/الدعوات لم تعد مقروءة (دفعة لاحقة لا هذه)');
-  r.ok(W(NEW, 'A', [['rooms/1', { s: 1 }]]) && W(NEW, 'A', [['chats/A_B/m', { t: 'x' }]]) && W(NEW, 'A', [['invites/B', { a: 1 }]]),
-    'الغرف/المحادثات/الدعوات لم تعد قابلة للكتابة (دفعة لاحقة لا هذه)');
+  // ── 3.3أ-2: الدعوة للأصدقاء + الحدود + إغلاق chatStatus ───────────────
+  // الغرف لم تُقفل بعد (3.3ب): مقروءة وقابلة للكتابة لكل مسجّل
+  r.ok(canRead(NEW, 'rooms', { uid: 'A' }) && W(NEW, 'A', [['rooms/1', { s: 1 }]]), 'الغرف تغيّرت قبل دفعتها (3.3ب)');
+  // المحادثة: القراءة والكتابة لم تُقفل بعد (دفعة 3.3أ-3)، لكن حدود نصّ الرسالة سارية الآن
+  r.ok(canRead(NEW, 'chats', { uid: 'A' }) && W(NEW, 'A', [['chats/A_B/m1', { fromUid: 'A', fromName: 'أ', text: 'مرحبا' }]]),
+    'المحادثة لم تعد مقروءة/مكتوبة (قفلها دفعة 3.3أ-3 لا هذه)');
+  r.ok(!W(NEW, 'A', [['chats/A_B/m2', { fromUid: 'A', text: 'x'.repeat(2001) }]]), 'رسالة أطول من الحدّ (2000) قُبلت');
+  r.ok(!W(NEW, 'A', [['chats/A_B/m3', { fromUid: 'A', fromName: 'ن'.repeat(129) }]]), 'اسم مرسل أطول من الحدّ (128) قُبل');
+  // الدعوة: أدعو صديقاً باسمي فقط — لا غيرَ صديق ولا بانتحال مرسل؛ والمستلم يمسح خانته والمرسل يسحب دعوته
+  r.ok(W(NEW, 'A', [['invites/B', { fromUid: 'A', fromName: 'أ', roomCode: '123456', sentAt: 1 }]]), 'دعوة صديق (باسمي) مرفوضة');
+  r.ok(!W(NEW, 'A', [['invites/V', { fromUid: 'A', fromName: 'أ', roomCode: '1', sentAt: 1 }]]), 'دعوتُ مَن ليس صديقي (ليست في قائمته)');
+  r.ok(!W(NEW, 'A', [['invites/B', { fromUid: 'C', fromName: 'ج', roomCode: '1', sentAt: 1 }]]), 'دعوة بانتحال مرسل آخر قُبلت');
+  r.ok(W(NEW, 'B', [['invites/B', null]]), 'المستلم لا يمسح دعوته من خانته');
+  const withInvite = JSON.parse(JSON.stringify(base)); withInvite.invites = { B: { fromUid: 'A', roomCode: '1' } };
+  r.ok(W(NEW, 'A', [['invites/B', null]], withInvite), 'المرسل لا يسحب دعوته هو');
+  r.ok(!W(NEW, 'C', [['invites/B', null]], withInvite), 'غريب يسحب دعوة غيره');
+  // ردّ الدعوة بين صديقين فقط (كالدعوة)، باسم الرافض الحقيقي؛ وصاحب الدعوة يمسح ردّاً وصله
+  r.ok(W(NEW, 'A', [['inviteRejections/B', { rejectedBy: 'A', name: 'أ', ts: 1, roomCode: '1' }]]), 'الرافض يردّ على دعوة صديقه مرفوض');
+  r.ok(!W(NEW, 'A', [['inviteRejections/V', { rejectedBy: 'A', name: 'أ', ts: 1 }]]), 'ردٌّ على مَن ليس صديقي قُبل');
+  r.ok(!W(NEW, 'A', [['inviteRejections/B', { rejectedBy: 'C', name: 'ج', ts: 1 }]]), 'ردّ بانتحال رافض آخر قُبل');
+  r.ok(W(NEW, 'A', [['inviteRejections/A', null]]), 'صاحب الدعوة لا يمسح ردّاً في خانته');
+  // chatStatus (غير مستعملة) مغلقة تماماً
+  r.ok(!canRead(NEW, 'chatStatus', { uid: 'A' }) && !W(NEW, 'A', [['chatStatus/x', { t: 1 }]]), 'chatStatus لم تُغلق');
+  // حدود الملف العام والطلب
+  r.ok(!W(NEW, 'A', [['profiles/A', { name: 'ن'.repeat(129) }]]), 'اسم عام أطول من الحدّ (128) قُبل');
+  r.ok(!W(NEW, 'A', [['profiles/A', { xp: 'كثير' }]]), 'خبرة ليست رقماً قُبلت');
+  r.ok(W(NEW, 'A', [['users/B/friendRequests/A', { name: 'أ' }], ['users/A/sentRequests/B', 1]]) && !W(NEW, 'A', [['users/B/friendRequests/A', { name: 'ن'.repeat(129) }], ['users/A/sentRequests/B', 1]]),
+    'حدّ اسم الطلب (128) لم يُطبَّق');
+  // تحدي اليوم كما كان
   r.ok(canRead(NEW, 'dailyChallenges/d1/results', { uid: 'A' }) && W(NEW, 'A', [['dailyChallenges/d1/results/A', { s: 1 }]]) && !W(NEW, 'A', [['dailyChallenges/d1/results/B', { s: 1 }]]),
     'تحدي اليوم تغيّر');
   // ولماذا كان لا بدّ منها: القواعد السابقة ترفض الطلب والحذف والقبول

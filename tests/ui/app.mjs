@@ -95,7 +95,8 @@ export async function logoutFreshPage() {
   const r = checker('تسجيل الخروج: الدعوة القائمة تُلغى ثم صفحة جديدة نظيفة (1.11-ب)');
   const H = await bootApp({ data: {
     'users/me': { uid: 'me', name: 'أنا', friends: { b: { uid: 'b', name: 'باسل' } } },
-    'users/b': { uid: 'b', name: 'باسل', presence: { state: 'online', lastSeen: 1 } },
+    // 3.3أ-2: الدعوة لصديق فقط (القاعدة تتطلّب أن يحمل المدعوّ المرسلَ في قائمته) — والصداقة متبادلة دائماً
+    'users/b': { uid: 'b', name: 'باسل', presence: { state: 'online', lastSeen: 1 }, friends: { me: { uid: 'me', name: 'أنا' } } },
   } });
   try {
     $(H, 'friends-btn').click();

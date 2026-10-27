@@ -3,7 +3,7 @@
 
 import { getDatabase, ref, get, set }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1792834692";
+import { currentUser } from "./auth.js?v=1793139376";
 
 const db = getDatabase();
 
@@ -111,6 +111,7 @@ export async function updateStreak(result) {
 }
 
 // ── جلب السلسلة الحالية ────────────────────────────────────────
+// 3.3أ: للذات فقط بعد قفل users (قراءة إحصائيات غيرك تُرفَض). حالياً بلا مستدعٍ. لا تستعمله لمعرّف غيرك.
 export async function getCurrentStreak(uid) {
   const snap = await get(ref(db, `users/${uid}/stats/currentStreak`));
   return snap.exists() ? snap.val() : 0;

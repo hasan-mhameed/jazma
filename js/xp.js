@@ -3,7 +3,7 @@
 
 import { getDatabase, ref, get, update }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1792834692";
+import { currentUser } from "./auth.js?v=1793139376";
 
 const db = getDatabase();
 
@@ -88,7 +88,7 @@ export async function getXP(uid) {
   try {
     const snap = await get(ref(db, `profiles/${uid}/xp`));
     return snap.exists() ? snap.val() : 0;
-  } catch { return 0; }
+  } catch (e) { console.debug('getXP', uid, e?.code || e); return 0; }   // 3.3أ-2: لا نُسقط الواجهة، لكن لا نُخفي خطأ قواعد حقيقياً تماماً
 }
 
 // ── إضافة XP وإرجاع النتيجة ──────────────────────────────────────
