@@ -3,7 +3,7 @@ import { getDatabase, ref, push, onValue, update, get, query, limitToLast }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getCurrentUser } from "./auth.js?v=1793139376";
+import { getCurrentUser } from "./auth.js?v=1793226494";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -20,6 +20,9 @@ const db  = getDatabase(app);
 function chatKey(uid1, uid2) { return [uid1, uid2].sort().join("_"); }
 
 // ─── إرسال رسالة ─────────────────────────────────────────────
+// 3.3أ-3: القواعد تعرف طرفي المحادثة من مفتاحها (chatKey) — لا يقرؤها ولا يكتب فيها غيرهما؛ والرسالة الجديدة
+// لصديق فقط (يحملني في قائمته) وباسمي الحقيقي (fromUid)، ولا تُعدَّل بعد إرسالها، والمستلم يغيّر status فقط.
+// الحقول المقبولة: fromUid وfromName وtext وts وstatus — أي حقل جديد يحتاج سطراً في القواعد أولاً.
 export async function sendMessage(toUid, text) {
   const from = getCurrentUser();
   if (!from || !text.trim()) return;
@@ -48,8 +51,8 @@ export function markDelivered(toUid) {
         updates[`chats/${key}/${child.key}/status`] = "delivered";
       }
     });
-    if (Object.keys(updates).length > 0) update(ref(db), updates);
-  });
+    if (Object.keys(updates).length > 0) return update(ref(db), updates);
+  }).catch(e => console.debug("markDelivered", e?.code || e));   // 3.3أ-3: لا رفض صامت غير مُعالَج
 }
 
 // ─── تعليم الرسائل كـ read ────────────────────────────────────
@@ -68,8 +71,8 @@ export function markRead(toUid) {
         updates[`chats/${key}/${child.key}/status`] = "read";
       }
     });
-    if (Object.keys(updates).length > 0) update(ref(db), updates);
-  });
+    if (Object.keys(updates).length > 0) return update(ref(db), updates);
+  }).catch(e => console.debug("markRead", e?.code || e));   // 3.3أ-3: لا رفض صامت غير مُعالَج
 }
 
 // ─── الاستماع للرسائل ────────────────────────────────────────

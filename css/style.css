@@ -1248,6 +1248,17 @@ h1 {
   text-align: right;
 }
 
+/* 3.3أ-3: تنبيه "تعذّر إرسال الرسالة" فوق خانة الكتابة */
+#chat-send-error {
+  font-size: 0.8rem;
+  color: #e57373;
+  text-align: center;
+  padding: 4px 8px;
+  background: #16162a;
+  flex-shrink: 0;
+}
+#chat-send-error[hidden] { display: none; }
+
 .chat-input-row {
   display: flex;
   gap: 8px;

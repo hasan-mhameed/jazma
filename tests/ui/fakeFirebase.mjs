@@ -281,7 +281,9 @@ export function createFirebase({ win, users = {}, cold = false, rules = null } =
     push(r, value) {
       const key = '-Nfake' + String(++fb.keySeq).padStart(8, '0');
       const child = mkRef(r._path + '/' + key);
-      const p = value === undefined ? Promise.resolve() : database.set(child, value);
+      // كالحقيقي (ThenableReference): الوعد يُحلّ بمرجع الرسالة نفسها (غير قابل للانتظار) — await push(...) يعطي .key
+      const plain = mkRef(r._path + '/' + key);
+      const p = (value === undefined ? Promise.resolve() : database.set(child, value)).then(() => plain);
       return Object.assign(child, { then: p.then.bind(p), catch: p.catch.bind(p) });
     },
     runTransaction(r, fn) {

@@ -8,7 +8,7 @@
 import { pathToFileURL } from 'node:url';
 import { FakeRTDB } from './fakertdb.mjs';
 import { gen, genInvite, genAuth, genFriends, genPresence } from './gen.mjs';
-import { ref as dbRef, update as dbUpdate, get as dbGet } from 'firebase/database';
+import { ref as dbRef, update as dbUpdate, get as dbGet, onValue as dbOnValue, query as dbQuery, limitToLast as dbLimitToLast } from 'firebase/database';
 import fsx from 'node:fs';
 import net from 'node:net';
 
@@ -789,7 +789,7 @@ async function registrationProfile() {
 const OLD_RULES = JSON.parse(fsx.readFileSync(new URL('../shared/rules_prod_2026-10-19.json', import.meta.url), 'utf8'));
 // 3.3أ: قواعد مرحلة النشر الأولى (profiles مُضافة، وusers ما زال مقروءاً) — نافذة التعايش التي تبقى فيها صفحات
 // قديمة مفتوحة قبل قفل users في المرحلة الثانية (الصفحات القديمة تقرأ users فتعمل حتى القفل بعد تحديثها كلها)
-const STAGE1_RULES = JSON.parse(fsx.readFileSync(new URL('../../database.rules.stage1.json', import.meta.url), 'utf8'));
+const STAGE1_RULES = JSON.parse(fsx.readFileSync(new URL('../shared/rules_stage1_3.3a1.json', import.meta.url), 'utf8'));
 const denies = async (p) => { try { await p; return false; } catch (e) { return /permission_denied/i.test(String(e && (e.code || e.message))); } };
 async function friendsRealRules() {
   const r = suite('الأصدقاء (friends.js الحقيقي) فوق القواعد المنشورة: طلب ← قبول ← حذف من الطرفين، ولا دخول بلا طلب، والقواعد القديمة ترفض كاملاً');
@@ -853,6 +853,56 @@ async function friendsRealRules() {
   S.close();
 }
 
+
+// ── 3.3أ-3: المحادثة (chat.js الحقيقي) بالحزمة الحقيقية فوق القواعد المنشورة — الطرفان من مفتاح المحادثة: الاستماع
+// (استعلام limitToLast) والإرسال (push يُحلّ بمرجع الرسالة) وتعليم الوصول/القراءة (كتابة متعددة المسارات)، ومن ليس
+// طرفاً لا يقرأ ولا يستمع ولا يكتب، ومن ليس صديقاً لا يرسل، والرسالة لا تُعدَّل، وبعد حذف الصداقة يبقى التاريخ ──
+async function chatRealRules() {
+  const r = suite('المحادثة (chat.js الحقيقي) فوق القواعد المنشورة (3.3أ-3): لطرفيها فقط، الرسالة لصديق، والمستلم يعلّمها مقروءة');
+  const S = new FakeRTDB(); const port = await S.listen();
+  S.setAt('users/uA', { uid: 'uA', name: 'أحمد', friends: { uB: { name: 'باسل' } } });
+  S.setAt('users/uB', { uid: 'uB', name: 'باسل', friends: { uA: { name: 'أحمد' } } });
+  S.setAt('users/uC', { uid: 'uC', name: 'كريم' });
+  const src = new URL('../../js/chat.js', import.meta.url).pathname;
+  const A = await import(pathToFileURL(genFriends('A', port, { src })).href);
+  const B = await import(pathToFileURL(genFriends('B', port, { src })).href);
+  const C = await import(pathToFileURL(genFriends('C', port, { src })).href);
+  let aMsgs = [], bMsgs = [];
+  const unA = A.listenMessages('uB', m => { aMsgs = m; });
+  const unB = B.listenMessages('uA', m => { bMsgs = m; });
+  await wait(300);
+  const key = await A.sendMessage('uB', 'مرحبا'); await wait(400);
+  r.ok(typeof key === 'string' && S.getAt(`chats/uA_uB/${key}/fromUid`) === 'uA' && S.getAt(`chats/uA_uB/${key}/status`) === 'sent',
+    `الرسالة لم تصل الخادم كما يجب (المفتاح ${JSON.stringify(key)}، ${JSON.stringify(S.getAt('chats/uA_uB'))})`);
+  r.ok(bMsgs.some(m => m.text === 'مرحبا'), 'باسل لا يرى رسالة أحمد (استماعه رُفض؟)');
+  B.markDelivered('uA'); await wait(300);
+  r.ok(S.getAt(`chats/uA_uB/${key}/status`) === 'delivered', `تعليم "وصلت" لم يُكتب (${S.getAt(`chats/uA_uB/${key}/status`)})`);
+  B.markRead('uA'); await wait(400);
+  r.ok(S.getAt(`chats/uA_uB/${key}/status`) === 'read' && S.getAt('users/uB/lastRead/uA_uB') > 0,
+    `تعليم "قُرئت" لم يُكتب (${S.getAt(`chats/uA_uB/${key}/status`)}، آخر قراءة ${S.getAt('users/uB/lastRead/uA_uB')})`);
+  r.ok(aMsgs.find(m => m.id === key)?.status === 'read', 'أحمد لا يرى "قُرئت" على رسالته');
+  // المرسل لا يعلّم رسالته بنفسه، ولا يعدّل نصها بعد إرسالها
+  r.ok(await denies(dbUpdate(dbRef(A.__db), { [`chats/uA_uB/${key}/text`]: 'معدّلة' })) && S.getAt(`chats/uA_uB/${key}/text`) === 'مرحبا',
+    'تعديل نص الرسالة بعد إرسالها قُبل');
+  // كريم ليس طرفاً: لا يقرأ ولا يستمع ولا يقرأ كل المحادثات، ولا يرسل لأحمد (ليس صديقه)
+  // get() المرفوضة في الحزمة: رسالة الخطأ "Permission denied" بلا code (الكتابة: permission_denied)
+  const deniesGet = p => p.then(() => false, e => /permission[_ ]denied/i.test(String(e && (e.code || e.message))));
+  r.ok(await deniesGet(dbGet(dbRef(C.__db, 'chats/uA_uB'))) && await deniesGet(dbGet(dbRef(C.__db, 'chats'))), 'كريم قرأ محادثة ليست له أو كل المحادثات');
+  let leaked = null, cancelled = false;
+  const unC = dbOnValue(dbQuery(dbRef(C.__db, 'chats/uA_uB'), dbLimitToLast(10)), s => { leaked = s.val(); }, () => { cancelled = true; });
+  await wait(400);
+  r.ok(leaked == null && cancelled, `كريم استمع لمحادثة ليست له (بيانات: ${JSON.stringify(leaked)}، أُلغي: ${cancelled})`);
+  r.ok(await denies(C.sendMessage('uA', 'هاي')), 'كريم (ليس صديقاً) أرسل لأحمد');
+  await wait(200);
+  r.ok(!S.getAt('chats/uA_uC'), 'رسالة كريم المرفوضة بقيت على الخادم');
+  r.ok(await denies(dbUpdate(dbRef(C.__db), { [`chats/uA_uB/${key}/status`]: 'sent' })), 'كريم غيّر حالة رسالة في محادثة ليست له');
+  // بعد حذف الصداقة: التاريخ يبقى لطرفيه، والإرسال يُرفض
+  S.setAt('users/uA/friends', null); S.setAt('users/uB/friends', null); await wait(100);
+  r.ok(await denies(A.sendMessage('uB', 'بعد الحذف')), 'بعد حذف الصداقة: الإرسال لم يُرفض');
+  r.ok((await dbGet(dbRef(B.__db, 'chats/uA_uB'))).exists(), 'بعد حذف الصداقة: التاريخ لم يعد مقروءاً');
+  unA(); unB(); unC();
+  S.close();
+}
 
 // ── 31) (v36.1 — الخطوة 1.14) الحضور يصحّح نفسه بالحزمة الحقيقية: الحزمة تُظهر الكتابة محلياً فوراً وتطبّق أوامر
 // الانقطاع محلياً لحظة الانقطاع — ما لا يحاكيه المحاكي. (أ) الخادم ينفّذ أمر الاتصال القديم بعد عودة الاتصال
@@ -1007,7 +1057,8 @@ const all = [offlineExitThenReconnect, blipDuringWithdraw, onlineExit, creatorSt
   duoCodeTwoJoiners, duoHostGoneAtJoin,
   duoCancelThenClose, duoJoinAckLost, duoCodeJoinAckLost, duoCreateBlip, duoAbortRetried, duoCancelDuringReopen,
   duoHostBlipRestores, duoRestoreKeepsGuestOut, duoEvictedGuestOp, duoOrphanNodeRestores, duoCancelStrayFinished,
-  inviteConditionalRemovals, registrationProfile, friendsRealRules, presenceHealsReal, mixedVersions, twoTabAccept];
+  inviteConditionalRemovals, registrationProfile, friendsRealRules, presenceHealsReal, mixedVersions, twoTabAccept,
+  chatRealRules];
 // ONLY=اسم1,اسم2 npm test — تشغيل فحوص بعينها (للتطوير وفحص الطفرات)
 const pick = process.env.ONLY ? all.filter(f => process.env.ONLY.split(',').includes(f.name)) : all;
 console.log('\n🔬 firebase.js بحزمة Firebase الحقيقية');

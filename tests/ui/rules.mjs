@@ -97,11 +97,78 @@ export function rulesMatrix() {
   // ── 3.3أ-2: الدعوة للأصدقاء + الحدود + إغلاق chatStatus ───────────────
   // الغرف لم تُقفل بعد (3.3ب): مقروءة وقابلة للكتابة لكل مسجّل
   r.ok(canRead(NEW, 'rooms', { uid: 'A' }) && W(NEW, 'A', [['rooms/1', { s: 1 }]]), 'الغرف تغيّرت قبل دفعتها (3.3ب)');
-  // المحادثة: القراءة والكتابة لم تُقفل بعد (دفعة 3.3أ-3)، لكن حدود نصّ الرسالة سارية الآن
-  r.ok(canRead(NEW, 'chats', { uid: 'A' }) && W(NEW, 'A', [['chats/A_B/m1', { fromUid: 'A', fromName: 'أ', text: 'مرحبا' }]]),
-    'المحادثة لم تعد مقروءة/مكتوبة (قفلها دفعة 3.3أ-3 لا هذه)');
-  r.ok(!W(NEW, 'A', [['chats/A_B/m2', { fromUid: 'A', text: 'x'.repeat(2001) }]]), 'رسالة أطول من الحدّ (2000) قُبلت');
-  r.ok(!W(NEW, 'A', [['chats/A_B/m3', { fromUid: 'A', fromName: 'ن'.repeat(129) }]]), 'اسم مرسل أطول من الحدّ (128) قُبل');
+  // ── 3.3أ-3: المحادثة لطرفيها فقط — الطرفان من مفتاحها نفسه (معرّفا اللاعبين مرتّبين: A_B) ──
+  // رسالة كما يكتبها الكود (chat.js → sendMessage)
+  const MSG = (from, extra = {}) => ({ fromUid: from, fromName: 'اسم', text: 'مرحبا', ts: 1, status: 'sent', ...extra });
+  const withChat = JSON.parse(JSON.stringify(base));
+  withChat.chats = { A_B: { m0: { fromUid: 'B', fromName: 'ب', text: 'أهلاً', ts: 1, status: 'sent' } },
+                     B_V: { v0: { fromUid: 'V', text: 'سرّ', ts: 1, status: 'sent' } } };
+  // القراءة: طرفاها (أياً كان ترتيبهما في المفتاح) — لا غيرهما ولا كل المحادثات دفعة واحدة ولا زائر
+  r.ok(R(NEW, 'A', 'chats/A_B', withChat) && R(NEW, 'B', 'chats/A_B', withChat) && R(NEW, 'A', 'chats/A_B/m0', withChat),
+    'طرفا المحادثة لا يقرآنها');
+  r.ok(!R(NEW, 'A', 'chats/B_V', withChat) && !R(NEW, 'A', 'chats/B_V/v0', withChat) && !R(NEW, 'V', 'chats/A_B', withChat),
+    'أقرأ محادثة لست طرفاً فيها');
+  r.ok(!R(NEW, 'A', 'chats', withChat), 'أقرأ كل المحادثات دفعة واحدة (chats)');
+  r.ok(!R(NEW, null, 'chats/A_B', withChat), 'زائر بلا دخول يقرأ محادثة');
+  // مفاتيح تشبه المعرّف ولا تطابقه: AA_B وB_AA ليستا لـA (المعرّف كاملاً قبل _ أو بعده)
+  r.ok(!R(NEW, 'A', 'chats/AA_B') && !R(NEW, 'A', 'chats/B_AA') && !R(NEW, 'A', 'chats/XA') && !R(NEW, 'A', 'chats/A'),
+    'مفتاح يحتوي معرّفي جزئياً اعتُبرت طرفاً فيه');
+  // الإرسال: رسالة جديدة لصديق (يحملني في قائمته)، باسمي الحقيقي — من الطرفين
+  r.ok(W(NEW, 'A', [['chats/A_B/m1', MSG('A')]], withChat) && W(NEW, 'B', [['chats/A_B/m2', MSG('B')]], withChat),
+    'رسالة بين صديقين مرفوضة');
+  r.ok(!W(NEW, 'A', [['chats/A_B/m1', MSG('B')]], withChat), 'رسالة بانتحال الطرف الآخر قُبلت');
+  r.ok(!W(NEW, 'A', [['chats/A_V/m1', MSG('A')]], withChat), 'رسالة لمن ليس صديقي قُبلت');
+  r.ok(!W(NEW, 'V', [['chats/A_B/m1', MSG('V')]], withChat) && !W(NEW, 'A', [['chats/B_V/m1', MSG('A')]], withChat),
+    'كتبتُ في محادثة لست طرفاً فيها');
+  // مفتاح بلا _ أو لنفسي: لا شهادة صداقة من "طرف آخر" (A_A تُرفض ما دام لا أحد يحمل نفسه في قائمته — ولو فعل
+  // فلا يقرؤها غيره، فلا ضرر)؛ وشرط "طرفٌ فيها" مستقل عن الشهادة: ب يحمل الضحية، ومع ذلك لا تكتب في مفتاح "B"
+  r.ok(!W(NEW, 'A', [['chats/A_A/m1', MSG('A')]], withChat), 'رسالة لنفسي (A_A) قُبلت بلا مدخل لنفسي في قائمتي');
+  const bListsV = JSON.parse(JSON.stringify(withChat)); bListsV.users.B.friends.V = { name: 'ضحية' };
+  r.ok(!W(NEW, 'V', [['chats/B/x', MSG('V')]], bListsV) && !W(NEW, 'V', [['chats/A_B/x', MSG('V')]], bListsV),
+    'كتبتُ في مفتاح لست طرفاً فيه لأن صاحبه يحملني في قائمته');
+  r.ok(!W(NEW, null, [['chats/A_B/m1', MSG('A')]], withChat), 'زائر بلا دخول يرسل');
+  // صداقة من طرف واحد (قديمة): أحمله في قائمتي وهو لا يحملني — لا تكفي (الشهادة من قائمة المستلم)
+  const oneSided = JSON.parse(JSON.stringify(withChat)); oneSided.users.A.friends.V = { name: 'ضحية' };
+  r.ok(!W(NEW, 'A', [['chats/A_V/m1', MSG('A')]], oneSided), 'صداقة من طرفي وحدي سمحت بالإرسال');
+  // بعد حذف الصداقة: التاريخ يبقى لطرفيه، ولا رسائل جديدة
+  const unfriended = JSON.parse(JSON.stringify(withChat)); delete unfriended.users.A.friends; delete unfriended.users.B.friends;
+  r.ok(R(NEW, 'A', 'chats/A_B', unfriended) && !W(NEW, 'A', [['chats/A_B/m1', MSG('A')]], unfriended),
+    'بعد حذف الصداقة: التاريخ لم يعد مقروءاً أو ما زال الإرسال ممكناً');
+  r.ok(W(NEW, 'A', [['chats/A_B/m0/status', 'read']], unfriended), 'بعد حذف الصداقة: المستلم لا يعلّم رسالة قديمة مقروءة');
+  // الرسالة بعد إرسالها: لا تُعدَّل ولا تُحذف ولا تُستبدل المحادثة كاملة
+  r.ok(!W(NEW, 'B', [['chats/A_B/m0/text', 'معدّلة']], withChat) && !W(NEW, 'A', [['chats/A_B/m0/text', 'معدّلة']], withChat),
+    'تعديل نص رسالة بعد إرسالها قُبل');
+  r.ok(!W(NEW, 'B', [['chats/A_B/m0', MSG('B', { text: 'بديلة' })]], withChat), 'استبدال رسالة موجودة قُبل');
+  r.ok(!W(NEW, 'B', [['chats/A_B/m0', null]], withChat) && !W(NEW, 'A', [['chats/A_B/m0', null]], withChat), 'حذف رسالة قُبل');
+  r.ok(!W(NEW, 'A', [['chats/A_B', null]], withChat) && !W(NEW, 'A', [['chats/A_B', { m9: MSG('A') }]], withChat),
+    'حذف المحادثة كاملة أو استبدالها قُبل');
+  // الحالة (وصلت/قُرئت): يغيّرها مستلم الرسالة فقط، وبقيم معروفة، وعلى رسالة موجودة
+  r.ok(W(NEW, 'A', [['chats/A_B/m0/status', 'delivered']], withChat) && W(NEW, 'A', [['chats/A_B/m0/status', 'read']], withChat),
+    'المستلم لا يعلّم الرسالة وصلت/قُرئت');
+  r.ok(!W(NEW, 'B', [['chats/A_B/m0/status', 'read']], withChat), 'المرسل يعلّم رسالته قُرئت');
+  r.ok(!W(NEW, 'V', [['chats/A_B/m0/status', 'read']], withChat), 'غريب يغيّر حالة رسالة');
+  r.ok(!W(NEW, 'A', [['chats/A_B/m0/status', 'مخترقة']], withChat), 'حالة بقيمة غير معروفة قُبلت');
+  r.ok(!W(NEW, 'A', [['chats/A_B/m0/status', null]], withChat), 'حذف حالة رسالة قُبل');
+  r.ok(!W(NEW, 'A', [['chats/A_B/ghost/status', 'read']], withChat), 'حالة على رسالة غير موجودة أنشأت عقدة');
+  // كما يكتبها markRead: عدّة حالات بكتابة واحدة متعددة المسارات
+  r.ok(W(NEW, 'A', [['chats/A_B/m0/status', 'read'], ['users/A/lastRead/A_B', 5]], withChat), 'تعليم القراءة (كما يكتبه الكود) مرفوض');
+  // الحدود والحقول
+  r.ok(!W(NEW, 'A', [['chats/A_B/m2', MSG('A', { text: 'x'.repeat(2001) })]], withChat), 'رسالة أطول من الحدّ (2000) قُبلت');
+  r.ok(!W(NEW, 'A', [['chats/A_B/m3', MSG('A', { fromName: 'ن'.repeat(129) })]], withChat), 'اسم مرسل أطول من الحدّ (128) قُبل');
+  r.ok(!W(NEW, 'A', [['chats/A_B/m4', MSG('A', { ts: 'أمس' })]], withChat), 'وقت رسالة ليس رقماً قُبل');
+  r.ok(!W(NEW, 'A', [['chats/A_B/m6', MSG('A', { status: 'x' })]], withChat), 'رسالة جديدة بحالة غير معروفة قُبلت');
+  r.ok(!W(NEW, 'A', [['chats/A_B/m7', MSG('A', { extra: 'حقل غريب' })]], withChat), 'رسالة بحقل غير معروف قُبلت');
+  // الحقول الأساسية إلزامية عند الإنشاء (fromUid وtext وts)، والحالة عند الإنشاء "sent" أو غائبة — لا "قُرئت" مسبقاً
+  // (الشرط في .write لا في .validate على الرسالة: Firebase يقيّم .validate الآباء في تحديث status وحده، فتنكسر رسالة قديمة ناقصة)
+  const noText = MSG('A'); delete noText.text; const noTs = MSG('A'); delete noTs.ts; const noStatus = MSG('A'); delete noStatus.status;
+  r.ok(!W(NEW, 'A', [['chats/A_B/m8', noText]], withChat) && !W(NEW, 'A', [['chats/A_B/m9', noTs]], withChat)
+    && !W(NEW, 'A', [['chats/A_B/m10', { fromUid: 'A' }]], withChat), 'رسالة بلا نص أو بلا وقت قُبلت');
+  r.ok(W(NEW, 'A', [['chats/A_B/m11', noStatus]], withChat), 'رسالة بلا حالة (تُعدّ "sent") رُفضت');
+  r.ok(!W(NEW, 'A', [['chats/A_B/m12', MSG('A', { status: 'read' })]], withChat) && !W(NEW, 'A', [['chats/A_B/m13', MSG('A', { status: 'delivered' })]], withChat),
+    'المرسل أنشأ رسالته "مقروءة/وصلت" مسبقاً');
+  // رسالة قديمة ناقصة الحقول (من قبل الحدود): المستلم ما زال يعلّمها مقروءة
+  const legacy = JSON.parse(JSON.stringify(withChat)); legacy.chats.A_B.old = { fromUid: 'B', text: 'قديمة' };
+  r.ok(W(NEW, 'A', [['chats/A_B/old/status', 'read']], legacy), 'رسالة قديمة بلا وقت/حالة: تعليمها مقروءة رُفض');
   // الدعوة: أدعو صديقاً باسمي فقط — لا غيرَ صديق ولا بانتحال مرسل؛ والمستلم يمسح خانته والمرسل يسحب دعوته
   r.ok(W(NEW, 'A', [['invites/B', { fromUid: 'A', fromName: 'أ', roomCode: '123456', sentAt: 1 }]]), 'دعوة صديق (باسمي) مرفوضة');
   r.ok(!W(NEW, 'A', [['invites/V', { fromUid: 'A', fromName: 'أ', roomCode: '1', sentAt: 1 }]]), 'دعوتُ مَن ليس صديقي (ليست في قائمته)');

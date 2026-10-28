@@ -1,11 +1,11 @@
 // 📄 ui/chatUI.js
 // المحادثة بين الأصدقاء + الإشعارات
-import { sendMessage, listenMessages, listenUnread, markAsRead, markDelivered, markRead } from "../chat.js?v=1793139376";
-import { getCurrentUser } from "../auth.js?v=1793139376";
-import { audioManager } from "../audio/audioManager.js?v=1793139376";
-import { playNotifSound } from "../audio/notif.js?v=1793139376";
-import { asText, firstInitial } from "./safeText.js?v=1793139376";
-import { entriesWithKey } from "../friends.js?v=1793139376";
+import { sendMessage, listenMessages, listenUnread, markAsRead, markDelivered, markRead } from "../chat.js?v=1793226494";
+import { getCurrentUser } from "../auth.js?v=1793226494";
+import { audioManager } from "../audio/audioManager.js?v=1793226494";
+import { playNotifSound } from "../audio/notif.js?v=1793226494";
+import { asText, firstInitial } from "./safeText.js?v=1793226494";
+import { entriesWithKey } from "../friends.js?v=1793226494";
 import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const EMOJIS = ["😊","😂","❤️","👍","🔥","🎮","😍","🤣","😭","💯",
@@ -44,9 +44,20 @@ export function initChatUI({ onInviteFromChat }) {
     const input = document.getElementById("chat-input");
     const text  = input.value.trim();
     if (!text || !currentChatFriend) return;
+    const toUid = currentChatFriend.uid;
     input.value = "";
     emojiPicker?.classList.add("hidden");
-    await sendMessage(currentChatFriend.uid, text);
+    try {
+      await sendMessage(toUid, text);
+    } catch (e) {
+      // 3.3أ-3: الرسالة بين صديقين فقط — إن رُفضت (لم تعودا صديقين، أو انقطاع) لا تضيع بصمت:
+      // ترجع لخانة الكتابة (إن بقيت المحادثة نفسها مفتوحة وفارغة الخانة) مع تنبيه قصير
+      console.debug("sendMessage", e?.code || e);
+      if (currentChatFriend?.uid === toUid) {
+        if (!input.value) input.value = text;
+        showSendError();
+      }
+    }
     input.focus();
   }
   document.getElementById("chat-send-btn").onclick = doSend;
@@ -62,8 +73,32 @@ export function initChatUI({ onInviteFromChat }) {
   };
 }
 
+// تنبيه "تعذّر الإرسال" فوق خانة الكتابة — يختفي وحده بعد ثوانٍ أو عند فتح محادثة أخرى
+let _sendErrTimer = null;
+function showSendError() {
+  const row = document.querySelector("#chat-panel .chat-input-row");
+  if (!row) return;
+  let el = document.getElementById("chat-send-error");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "chat-send-error";
+    el.setAttribute("role", "alert");
+    row.parentNode.insertBefore(el, row);
+  }
+  el.textContent = "⚠️ تعذّر إرسال الرسالة — تأكّد أنكما ما زلتما صديقين وأن الاتصال يعمل";
+  el.hidden = false;
+  clearTimeout(_sendErrTimer);
+  _sendErrTimer = setTimeout(() => { el.hidden = true; }, 5000);
+}
+function hideSendError() {
+  clearTimeout(_sendErrTimer);
+  const el = document.getElementById("chat-send-error");
+  if (el) el.hidden = true;
+}
+
 export function openChat(friend) {
   currentChatFriend = friend;
+  hideSendError();
   const myUid = getCurrentUser()?.uid;
   // مسح الـ unread badge — نستخدم custom event بدل dynamic import
   document.dispatchEvent(new CustomEvent('chat:opened', { detail: friend.uid }));

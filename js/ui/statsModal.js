@@ -1,7 +1,7 @@
 // 📄 ui/statsModal.js
 // عرض modal الإحصائيات مع فلتر زمني
-import { getAllStats } from "../auth.js?v=1793139376";
-import { esc } from "./safeText.js?v=1793139376";
+import { getAllStats } from "../auth.js?v=1793226494";
+import { esc } from "./safeText.js?v=1793226494";
 
 let _statsFilter = 'all';
 // v36.2 (1.15): تحميل واحد عند فتح النافذة (أو تحديثها بعد مباراة)، والتبديل بين التبويبات من الذاكرة فوراً — كانت كل

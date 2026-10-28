@@ -925,4 +925,78 @@ export async function privacyProfileSplit() {
 }
 
 export const APP_ALL = [friendPresenceAcrossRerender, logoutFreshPage, accountChangesSamePage, guestUpgrade, registrationName,
-  repeatedSameAccountEvent, namesAndPhotosInDomUIs, friendsUnderRules, localStatsKeys, presenceSelfHeal, uiNotes115, privacyProfileSplit];
+  repeatedSameAccountEvent, namesAndPhotosInDomUIs, friendsUnderRules, localStatsKeys, presenceSelfHeal, uiNotes115, privacyProfileSplit,
+  chatUnderRules];
+
+// ─── 13. المحادثة فوق القواعد (3.3أ-3): الطرفان من مفتاحها، الرسالة لصديق فقط، والحالة يغيّرها المستلم ───
+export async function chatUnderRules() {
+  const r = checker('المحادثة فوق القواعد (3.3أ-3): رسالة الصديق تصل وتُعلَّم مقروءة، ولغير الصديق لا تضيع بصمت، والغريب لا يكتب');
+  const H = await bootApp({ data: {
+    'users/me': { uid: 'me', name: 'أنا', friends: { b: { uid: 'b', name: 'باسل' }, c: { uid: 'c', name: 'كريم' } } },
+    'users/b': { uid: 'b', name: 'باسل', friends: { me: { uid: 'me', name: 'أنا' } } },
+    'users/c': { uid: 'c', name: 'كريم' },                 // صداقة قديمة من طرف واحد: كريم لا يحملني في قائمته
+    'chats/b_me/-Nold1': { fromUid: 'b', fromName: 'باسل', text: 'مرحبا', ts: 1, status: 'sent' },
+  } });
+  const errBox = () => $(H, 'chat-send-error');
+  const errShown = () => !!errBox() && !errBox().hidden && /تعذّر إرسال الرسالة/.test(errBox().textContent);
+  const openChatWith = async name => {
+    if (!$(H, 'chat-panel').classList.contains('hidden')) { $(H, 'chat-back-btn').click(); await H.settle(); }
+    cardOf(H, name)?.querySelector('.btn-chat')?.click(); await H.settle(0, 20);
+  };
+  const send = async text => { $(H, 'chat-input').value = text; $(H, 'chat-send-btn').click(); await H.settle(0, 20); };
+  try {
+    $(H, 'friends-btn').click(); await H.settle();
+    // (أ) صديق متبادل: الرسالة القديمة تظهر وتُعلَّم مقروءة (المستلم يغيّر الحالة فقط)
+    await openChatWith('باسل');
+    r.ok(!$(H, 'chat-panel').classList.contains('hidden') && $(H, 'chat-messages').textContent.includes('مرحبا'),
+      `(أ) المحادثة لم تُفتح أو الرسالة القديمة لا تظهر${errText(H)}`);
+    r.ok(H.fb.get('chats/b_me/-Nold1/status') === 'read', `(أ) رسالة باسل لم تُعلَّم مقروءة (${H.fb.get('chats/b_me/-Nold1/status')})`);
+    // الإرسال: تصل باسمي الحقيقي، والخانة تفرغ، ولا تنبيه
+    await send('كيفك؟');
+    const chat = () => H.fb.get('chats/b_me') || {};
+    const [sentId, sent] = Object.entries(chat()).find(([, m]) => m.text === 'كيفك؟') || [];
+    r.ok(!!sent && sent.fromUid === 'me' && sent.status === 'sent' && typeof sent.ts === 'number',
+      `(أ) الرسالة لم تصل كما يجب (${JSON.stringify(sent)})${errText(H)}`);
+    r.ok($(H, 'chat-messages').textContent.includes('كيفك؟') && $(H, 'chat-input').value === '' && !errShown(),
+      `(أ) بعد الإرسال: ظهورها "${$(H, 'chat-messages').textContent.includes('كيفك؟')}"، الخانة "${$(H, 'chat-input').value}"، تنبيه ${errShown()}`);
+    // باسل من جهازه: يعلّم رسالتي مقروءة ويردّ — وكلاهما يظهر عندي
+    const rd = H.fb.writeAs('b', [[`chats/b_me/${sentId}/status`, 'read']]);
+    const rp = H.fb.writeAs('b', [['chats/b_me/-Nb2', { fromUid: 'b', fromName: 'باسل', text: 'تمام', ts: Date.now() + 5, status: 'sent' }]]);
+    await H.settle(0, 20);
+    r.ok(rd.ok && rp.ok, `(أ) باسل من جهازه رُفض (قراءة: ${rd.ok} ${rd.path || ''}، ردّ: ${rp.ok} ${rp.path || ''})`);
+    r.ok($(H, 'chat-messages').textContent.includes('تمام') && !!$(H, 'chat-messages').querySelector('.chat-msg.mine .status-read'),
+      '(أ) ردّ باسل أو علامة "قُرئت" على رسالتي لا تظهر');
+    // غريب (ليس طرفاً) لا يكتب في محادثتنا ولا يعدّل رسالة فيها
+    const st = H.fb.writeAs('v', [['chats/b_me/-Nv1', { fromUid: 'v', fromName: 'غريب', text: 'x', ts: 9, status: 'sent' }]]);
+    const st2 = H.fb.writeAs('v', [[`chats/b_me/${sentId}/status`, 'delivered']]);
+    r.ok(!st.ok && !st2.ok, `(أ) غريب كتب في محادثتنا (رسالة: ${st.ok}، حالة: ${st2.ok})`);
+    // (ب) صداقة من طرف واحد (كريم لا يحملني): الرسالة تُرفض — والنص يرجع للخانة مع تنبيه، بلا خطأ غير مُعالَج
+    await openChatWith('كريم');
+    await send('هلا');
+    r.ok(H.fb.get('chats/c_me') == null, `(ب) رسالة لمن لا يحملني في قائمته وصلت (${JSON.stringify(H.fb.get('chats/c_me'))})`);
+    r.ok($(H, 'chat-input').value === 'هلا' && errShown(), `(ب) النص "${$(H, 'chat-input').value}" والتنبيه ${errShown()} (المطلوب: النص يرجع + تنبيه)`);
+    // فتح محادثة أخرى يخفي التنبيه، والإرسال لباسل ما زال يعمل
+    await openChatWith('باسل');
+    r.ok(!errShown(), '(ب) التنبيه بقي ظاهراً بعد فتح محادثة أخرى');
+    await send('ثانية');
+    r.ok(Object.values(chat()).some(m => m.text === 'ثانية' && m.fromUid === 'me') && !errShown(), '(ب) الإرسال لباسل تعطّل بعد رسالة مرفوضة');
+    // (ج) سباق: رسالة لكريم في الطريق، وأنتقل لمحادثة باسل قبل أن تُرفض — نصّها لا يظهر في خانة باسل (نقرة واحدة
+    // كانت سترسله للشخص الخطأ) ولا تنبيه في محادثة باسل
+    await openChatWith('كريم');
+    $(H, 'chat-input').value = 'لكريم وحده'; $(H, 'chat-send-btn').click();          // بلا انتظار: الكتابة معلّقة
+    $(H, 'chat-back-btn').click(); cardOf(H, 'باسل')?.querySelector('.btn-chat')?.click();
+    await H.settle(0, 20);
+    r.ok($(H, 'chat-with-name').textContent === 'باسل' && $(H, 'chat-input').value === '' && !errShown(),
+      `(ج) بعد الانتقال: المحادثة "${$(H, 'chat-with-name').textContent}"، الخانة "${$(H, 'chat-input').value}"، تنبيه ${errShown()} (المطلوب: خانة باسل فارغة بلا تنبيه)`);
+    r.ok(H.fb.get('chats/c_me') == null, '(ج) رسالة كريم المرفوضة وصلت');
+    // (د) سباق: أكتب مسودة جديدة والرسالة المرفوضة في الطريق — المسودة لا تُستبدل، والتنبيه يظهر
+    await openChatWith('كريم');
+    $(H, 'chat-input').value = 'أولى'; $(H, 'chat-send-btn').click();
+    $(H, 'chat-input').value = 'مسودة جديدة';
+    await H.settle(0, 20);
+    r.ok($(H, 'chat-input').value === 'مسودة جديدة' && errShown(), `(د) الخانة "${$(H, 'chat-input').value}" والتنبيه ${errShown()} (المطلوب: المسودة باقية + تنبيه)`);
+    r.ok(H.errors.length === 0, 'أخطاء' + errText(H));
+  } catch (e) { r.ok(false, 'خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+  H.close();
+  return r;
+}

@@ -7,9 +7,11 @@
 //    صلاحية على مسار أعلى منها (كتابة users/ب كاملة لا تسمح بها قاعدة users/ب/friendRequests/$x).
 //  • متغيرات $ (مفتاح واحد بديل لكل مستوى، والمفتاح الصريح يسبقه)، و auth و now و root و data و newData.
 //  • الكتابة متعددة المسارات تُقيَّم كل مسار فيها على البيانات الجديدة كلها، وتُرفض كلها إن رُفض واحد (ذرّية).
-//  • .validate: على المسار المكتوب وما تحته حيث توجد بيانات جديدة (لا على الحذف).
+//  • .validate: على المسار المكتوب وما تحته وعلى آبائه، حيث توجد بيانات جديدة (لا على الحذف) — 3.3أ-3: الآباء أُضيفوا.
 //  • خطأ أثناء التقييم (مثل auth.uid وauth فارغ) = رفض، والنتيجة يجب أن تكون true بالضبط.
-// غير مغطّى (لا تستعمله قواعدنا): الاستعلامات المشروطة (query.*)، الأولويات، دوال النصوص الخاصة (matches/beginsWith...).
+//  • دوال النصوص التي تستعملها قواعدنا (3.3أ-3 — مفتاح المحادثة): beginsWith وendsWith وcontains وreplace (كل التكرارات،
+//    كما في توثيق Firebase) وtoLowerCase/toUpperCase وlength والجمع بـ+ — تُترجم لما يقابلها في JS.
+// غير مغطّى (لا تستعمله قواعدنا): الاستعلامات المشروطة (query.*)، الأولويات، matches (التعابير النمطية).
 
 const parts = p => String(p ?? '').split('/').filter(Boolean);
 const clone = v => (v == null ? null : JSON.parse(JSON.stringify(v)));
@@ -70,6 +72,16 @@ class RuleSnap {
   getPriority() { return null; }
 }
 
+// دوال النصوص في لغة القواعد ← ما يقابلها في JS (replace في Firebase يبدّل كل التكرارات = replaceAll)
+const STRING_FNS = { beginsWith: 'startsWith', endsWith: 'endsWith', contains: 'includes', replace: 'replaceAll' };
+// أسماء JS ليست في لغة قواعد Firebase: لو كُتبت في القواعد لنجحت الفحوص هنا ورفض Firebase النشر — نرفضها هنا أولاً
+const JS_ONLY = /\.(startsWith|includes|replaceAll|slice|substring|substr|indexOf|lastIndexOf|split|trim|padStart|padEnd|charAt|at|map|filter|some|every|keys)\(/;
+function toJS(expr) {
+  if (/\.matches\(/.test(expr)) throw new Error('rulesEngine: matches() غير مدعوم في المحرّك — أضِفه قبل استعماله في القواعد');
+  if (JS_ONLY.test(expr)) throw new Error('rulesEngine: دالة JS ليست في لغة قواعد Firebase: ' + expr.match(JS_ONLY)[0]);
+  return String(expr).replace(/\.(beginsWith|endsWith|contains|replace)\(/g, (_, f) => '.' + STRING_FNS[f] + '(');
+}
+
 const compiled = new Map();
 function evalRule(expr, ctx, vars) {
   if (expr === true || expr === 'true') return true;
@@ -78,7 +90,7 @@ function evalRule(expr, ctx, vars) {
   const key = names.join(',') + '|' + expr;
   let fn = compiled.get(key);
   if (!fn) {
-    fn = new Function('auth', 'now', 'root', 'data', 'newData', ...names, `"use strict"; return (${expr});`);
+    fn = new Function('auth', 'now', 'root', 'data', 'newData', ...names, `"use strict"; return (${toJS(expr)});`);
     compiled.set(key, fn);
   }
   try { return fn(ctx.auth, ctx.now, ctx.root, ctx.data, ctx.newData, ...names.map(n => vars[n])) === true; }
@@ -163,6 +175,18 @@ export function checkWrite(rules, writes, { uid = null, root = null, now = Date.
     }
     if (!granted) return { ok: false, path: ps.join('/') };
     if (!validateUnder(rules, ps, newRoot, ctxBase, root)) return { ok: false, path: ps.join('/'), validate: true };
+    // .validate الآباء أيضاً (كـFirebase: "كل قواعد validate يجب أن تتحقق على كل مستويات الشجرة") — تُقيَّم على البيانات
+    // الجديدة المدمجة لكل أب ما زالت له بيانات: تحديث status وحده يمرّ بـ.validate الرسالة نفسها
+    const lv = walk(rules, ps);
+    for (let i = 0; i < lv.length - 1; i++) {
+      const node = lv[i].node;
+      if (!node || typeof node !== 'object' || node['.validate'] === undefined) continue;
+      const nd = new RuleSnap(newRoot, lv[i].ps);
+      if (!nd.exists()) continue;
+      if (!evalRule(node['.validate'], { ...ctxBase, data: new RuleSnap(root, lv[i].ps), newData: nd }, lv[i].vars)) {
+        return { ok: false, path: lv[i].ps.join('/'), validate: true };
+      }
+    }
   }
   return { ok: true, newRoot };
 }
