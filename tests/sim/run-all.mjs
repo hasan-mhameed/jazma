@@ -4,6 +4,7 @@ import * as S from './scenarios.mjs';
 import * as RS from './results.mjs';
 import * as IV from './invites.mjs';
 import * as TS from './textsafety.mjs';
+import * as RM from './rooms.mjs';
 
 const N = Number(process.argv.find(a => /^\d+$/.test(a)) || 100);
 const verbose = process.argv.includes('-v');
@@ -39,6 +40,7 @@ const sections = [
     () => IV.inviteReviewFixes(verbose), () => IV.inviteDuringPendingOp(verbose)]],
   ['🟢 الحضور', [() => IV.presenceFollowsMatch(verbose), () => IV.presenceHeals(verbose)]],
   ['🔤 أمان النصوص', [() => TS.namesInSearchAndVote(verbose), () => TS.namesInCodeLobby(verbose), () => TS.roomMaxIsText(verbose)]],
+  ['🔐 تحضير قفل الغرف (3.3ب-1)', [() => RM.lobbyLeaveUnderMemberRules(verbose), () => RM.roomCodeCollision(verbose)]],
 ];
 
 for (const [title, runs] of sections) {
@@ -73,6 +75,15 @@ if (!only || only === 'مستكشف') {
   await explore('مستكشف دعوات الأصدقاء — 3 أصدقاء (دعوة/قبول/رفض/إلغاء/بحث/انقطاع/إغلاق)', Math.ceil(N / 2), s => IV.fuzzInvites(s));
 }
 
+// رفض القواعد خلال التشغيل كله (3.3ب-1): مُجمَّع بنمط المسار — كل سطر هنا كتابة/قراءة رفضتها القواعد ومرّت بصمت
+{
+  const { ALL_DENIED, RULES } = await import('./harness.mjs');
+  const pat = p => String(p).replace(/uid_[^/]+/g, '<uid>').replace(/\b\d{6}\b/g, '<code>').replace(/-K\d+/g, '<key>');
+  const groups = new Map();
+  for (const d of ALL_DENIED) { const k = `${d.op} ${pat(d.path)}`; groups.set(k, (groups.get(k) || 0) + 1); }
+  console.log(`\n🔐 القواعد: ${RULES ? 'مطبَّقة' : 'مطفأة (JAZAM_SIM_RULES=off)'} — ${ALL_DENIED.length} رفض${groups.size ? ':' : ''}`);
+  [...groups.entries()].sort((a, b) => b[1] - a[1]).forEach(([k, n]) => console.log(`     ${n}× ${k}`));
+}
 console.log(bad ? `\n❌ فشل ${bad} فحص` : '\n✅ كل الفحوص نجحت'
   + (knownTotal ? ` (مع ${knownTotal} خلل معروف موثّق للدفعة التالية ⚠️)` : ''));
 process.exit(bad ? 1 : 0);

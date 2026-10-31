@@ -10,6 +10,8 @@ import { FakeRTDB } from './fakertdb.mjs';
 import { gen, genInvite, genAuth, genFriends, genPresence } from './gen.mjs';
 import { ref as dbRef, update as dbUpdate, get as dbGet, onValue as dbOnValue, query as dbQuery, limitToLast as dbLimitToLast } from 'firebase/database';
 import fsx from 'node:fs';
+import { memberOnlyRooms } from '../shared/roomsOverlay.mjs';
+import { RULES as PROJECT_RULES } from './fakertdb.mjs';
 import net from 'node:net';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -236,6 +238,103 @@ async function duoTwoJoiners() {
   r.ok(other && other.status === 'waiting' && other.public === true && !other.p2uid, 'والآخر ينتظر في غرفته العامة');
   r.ok(!Object.values(rooms()).some(x => x && x.p2uid && !x.p1name), 'لا غرفة شبحية');
   W.S.close();
+}
+
+// ── 3.3ب-1: رقم غرفة جديد صادف غرفة قائمة لغيري — بالحزمة الحقيقية تحت قفل تقريبي ("اللاعبون وحدهم يكتبون"):
+// الكتابة فوقها تُرفض (لا تعلق)، فيُجرَّب رقم آخر ويُنضمّ إليه، وغرفة الغريب سليمة، ولا أمر انقطاع يمسحها ──
+async function roomCodeCollisionReal() {
+  const r = suite('3.3ب-1: رقم غرفة مكرّر بالحزمة الحقيقية — رفضٌ ثم رقم آخر (ثنائي وجماعي)، وغرفة الغريب سليمة');
+  const W = await duoWorld(['A', 'B', 'C']);
+  const { S, M, room } = W;
+  S.rules = memberOnlyRooms(PROJECT_RULES);
+  const TAKEN = '111111';
+  S.setAt('rooms/' + TAKEN, { cfg: { rows: 4, cols: 4 }, status: 'playing', p1name: 'غريب', p1uid: 'uX', p2name: 'آخر', p2uid: 'uY',
+    createdAt: Date.now(), move: { key: 'h1', by: 1, seq: 1 } });
+  const before = JSON.stringify(room(TAKEN));
+  const forceOnce = () => { const orig = Math.random; let once = true; Math.random = () => { if (once) { once = false; return 11111.5 / 900000; } return orig(); }; return () => { Math.random = orig; }; };
+  let restore = forceOnce(), code = null;
+  try { code = await M.A.createRoom(CFG, 'أحمد'); } catch (e) { r.ok(false, 'createRoom رمى: ' + e.message); } finally { restore(); }
+  await wait(200);
+  r.ok(code && code !== TAKEN && room(code)?.p1uid === 'uA' && room(code)?.status === 'waiting', `الثنائي: غرفة برقم آخر (${code})`);
+  r.ok(S.denied.some(d => String(d.p).includes(TAKEN)), 'الكتابة فوق غرفة الغريب رُفضت فعلاً (الفحص اختبر شيئاً)');
+  r.ok(JSON.stringify(room(TAKEN)) === before, 'غرفة الغريب لم تُمسّ');
+  let joined = null; try { joined = await M.B.joinRoom(code, 'باسل'); } catch (e) { r.ok(false, 'الانضمام رمى: ' + e.message); }
+  await wait(200);
+  r.ok(joined && room(code)?.status === 'playing' && room(code)?.p2uid === 'uB', `باسل انضم بالرقم الجديد (${room(code)?.status}/${room(code)?.p2uid})`);
+  restore = forceOnce(); let mc = null;
+  try { mc = await M.C.createMultiRoom(CFG, 'كريم', 3); } catch (e) { r.ok(false, 'createMultiRoom رمى: ' + e.message); } finally { restore(); }
+  await wait(200);
+  r.ok(mc && mc.code !== TAKEN && room(mc.code)?.hostUid === 'uC' && room(mc.code)?.status === 'lobby', `الجماعي: لوبي برقم آخر (${mc && mc.code})`);
+  r.ok(JSON.stringify(room(TAKEN)) === before, 'غرفة الغريب لم تُمسّ بعد الجماعي');
+  // الانضمام بمعاملة من ليس لاعباً بعد، بذاكرة باردة: أول محاولة "تمسح" الغرفة على تخمين فارغ — والخادم هنا يقيّم القواعد
+  // قبل مقارنة القيمة فيرفضها؛ فتُدفّأ الذاكرة وتُعاد (txnAsJoiner). باسل انضم أعلاه، وداني ينضم للوبي كريم الآن
+  const deniedBefore = S.denied.length;
+  const D = await import(pathToFileURL(gen('D', W.port)).href);
+  let dj = null; try { dj = await D.onlineManager.joinMultiRoom(mc.code, 'داني'); } catch (e) { r.ok(false, 'joinMultiRoom رمى: ' + e.message); }
+  await wait(200);
+  r.ok(dj && dj.myNum === 2 && room(mc.code)?.players?.uD?.num === 2, `داني انضم للوبي كريم بمقعد 2 (${JSON.stringify(dj && dj.myNum)})`);
+  r.ok(S.denied.slice(deniedBefore).some(d => String(d.p).includes(mc.code)), 'المحاولة الباردة رُفضت فعلاً ثم نجحت الإعادة (المسار مُختبَر)');
+
+  // لا أمر انقطاع مسجّل على رقم الغريب عند الخادم (رُفض لحظة تسجيله، وأُلغي احتياطاً) — إغلاق صفحة المنشئ لا يمسحها
+  const odOnTaken = [...S.conns].flatMap(c => c.ondisc || []).filter(o => String(o.p).includes(TAKEN));
+  r.ok(odOnTaken.length === 0, `أوامر انقطاع على غرفة الغريب: ${JSON.stringify(odOnTaken)}`);
+  W.S.close();
+}
+
+// ── 3.3ب-1 (مراجعة): سباقات اللوبي الجماعي بالحزمة الحقيقية ──
+// (أ) اللوبي بدأ بين قراءة المنضمّ ومعاملته — تحت القفل التقريبي: رسالة "ممتلئة أو بدأت" لا رفض خام
+// (ب) منضمّان على آخر مقعد: الخاسر لا "ينضم" بمقعد الفائز (رقم من تشغيل سابق للمعاملة — خلل قديم)
+// (ج) "مغادرة اللوبي" ثم إغلاق الصفحة قبل وصول كتابة المغادرة: لا مقعد شبح (أمر إزالة المقعد عند الانقطاع يبقى مسلّحاً)
+async function lobbyRacesReal() {
+  const r = suite('3.3ب-1: سباقات اللوبي الجماعي بالحزمة الحقيقية — بدأ أثناء الانضمام، آخر مقعد، ومغادرة ثم إغلاق');
+  const devs = async (S, list) => { const M = {}, mods = {}; for (const d of list) { mods[d] = await import(pathToFileURL(gen(d + S.port, S.port)).href); M[d] = mods[d].onlineManager; } return { M, mods }; };
+  // (أ)
+  {
+    const S = new FakeRTDB({ rules: memberOnlyRooms(PROJECT_RULES) }); S.port = await S.listen();
+    const { M } = await devs(S, ['A', 'B', 'E']);
+    const { code } = await M.A.createMultiRoom(CFG, 'أحمد', 3);
+    await M.B.joinMultiRoom(code, 'باسل'); await wait(100);
+    const orig = S.onMsg.bind(S);
+    S.onMsg = (conn, m) => { orig(conn, m); if (m.d && m.d.a === 'g' && String(m.d.b && m.d.b.p).includes(code) && conn.uid === 'uE' + S.port) S.setAt(`rooms/${code}/status`, 'playing'); };
+    let msg = 'joined'; try { await M.E.joinMultiRoom(code, 'إياد'); } catch (e) { msg = e.message; }
+    r.ok(/ممتلئة أو بدأت/.test(msg) && !/permission/i.test(msg), `(أ) اللوبي بدأ بين القراءة والمعاملة: "${msg}"`);
+    S.close();
+  }
+  // (ب)
+  for (const [label, rules] of [['مفتوحة', PROJECT_RULES], ['مقفلة تقريبياً', memberOnlyRooms(PROJECT_RULES)]]) {
+    let ghosts = 0, both = 0;
+    for (let i = 0; i < 4; i++) {
+      const S = new FakeRTDB({ rules }); S.port = await S.listen();
+      const { M } = await devs(S, ['A', 'B', 'C']);
+      const { code } = await M.A.createMultiRoom(CFG, 'أحمد', 2);
+      await wait(50);
+      const res = await Promise.allSettled([M.B.joinMultiRoom(code, 'باسل'), M.C.joinMultiRoom(code, 'كريم')]);
+      await wait(150);
+      const players = S.getAt(`rooms/${code}/players`) || {};
+      const joined = res.map((x, j) => [['B', 'C'][j], x.status === 'fulfilled']);
+      if (joined.some(([d, ok]) => ok && !players['u' + d + S.port])) ghosts++;
+      if (joined.every(([, ok]) => ok)) both++;
+      S.close();
+    }
+    r.ok(ghosts === 0 && both === 0, `(ب) [${label}] آخر مقعد: واحد فقط ينضم، والخاسر لا يظن أنه انضم (منضمّون وهميون في ${ghosts}/4، اثنان "انضمّا" في ${both}/4)`);
+  }
+  // (ج) — ومعها حالة "لم تصل قائمة اللوبي بعد" (مغادرة بعد الانضمام مباشرة): المغادرة تقرأ القائمة أولاً (رحلة)،
+  // وأمر المقعد يجب أن يبقى مسلّحاً طوالها — لا يلغيه إلغاءٌ على مستوى الغرفة (مراجعة ثانية لـ3.3ب-1)
+  for (const [delay, cold] of [[0, false], [3, false], [3, true]]) {
+    const S = new FakeRTDB(); S.port = await S.listen();
+    const { M, mods } = await devs(S, ['A', 'B', 'C']);
+    const { code } = await M.A.createMultiRoom(CFG, 'أحمد', 4);
+    await M.B.joinMultiRoom(code, 'باسل'); await M.C.joinMultiRoom(code, 'كريم'); await wait(300);
+    S.delay = 1; S.replyDelayFor = () => 80; S.detectDelay = 50;   // الإطارات تُعالَج بترتيب وصولها، والردود تأخذ رحلة
+    if (cold) M.B._lastPlayers = null;                              // لم تصل قائمة اللوبي بعد
+    M.B.leaveRoom();
+    await wait(delay);
+    mods.B.__off();                                                 // أُغلقت الصفحة: الخادم ينفّذ أوامر انقطاع باسل
+    await wait(600);
+    const pl = S.getAt(`rooms/${code}/players`) || {};
+    r.ok(!pl['uB' + S.port], `(ج) إغلاق بعد ${delay}ms من "مغادرة"${cold ? ' (قبل وصول قائمة اللوبي)' : ''}: مقعد باسل ${pl['uB' + S.port] ? 'بقي شبحاً' : 'أُزيل'}`);
+    S.close();
+  }
 }
 
 // ── 11) المنتظر يلغي وحده: المعاملة (بذاكرة باردة بعد فصل المستمعين) تحذف الغرفة ──
@@ -1058,7 +1157,7 @@ const all = [offlineExitThenReconnect, blipDuringWithdraw, onlineExit, creatorSt
   duoCancelThenClose, duoJoinAckLost, duoCodeJoinAckLost, duoCreateBlip, duoAbortRetried, duoCancelDuringReopen,
   duoHostBlipRestores, duoRestoreKeepsGuestOut, duoEvictedGuestOp, duoOrphanNodeRestores, duoCancelStrayFinished,
   inviteConditionalRemovals, registrationProfile, friendsRealRules, presenceHealsReal, mixedVersions, twoTabAccept,
-  chatRealRules];
+  chatRealRules, roomCodeCollisionReal, lobbyRacesReal];
 // ONLY=اسم1,اسم2 npm test — تشغيل فحوص بعينها (للتطوير وفحص الطفرات)
 const pick = process.env.ONLY ? all.filter(f => process.env.ONLY.split(',').includes(f.name)) : all;
 console.log('\n🔬 firebase.js بحزمة Firebase الحقيقية');

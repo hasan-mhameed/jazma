@@ -5,10 +5,18 @@ import vm from 'node:vm';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import FakeTimers from '@sinonjs/fake-timers';
+import { checkWrite, canRead } from '../shared/rulesEngine.mjs';
 
 // جذر المشروع: مجلّدان فوق هذا الملف (tests/sim → الجذر)، أو JAZAM_DIR لفحص نسخة أخرى
 export const PROJECT = process.env.JAZAM_DIR || fileURLToPath(new URL('../../', import.meta.url)).replace(/\/$/, '');
 export const clock = FakeTimers.createClock(Date.UTC(2026, 8, 19, 12, 0, 0), 1e7);
+// قواعد الأمان (3.3ب-1): الخادم الوهمي يطبّق database.rules.json نفسه الذي يُنشر — كل كتابة وقراءة ومستمع وأمر
+// انقطاع بهوية لاعبها (uid). JAZAM_SIM_RULES=off للتشغيل بلا قواعد (للمقارنة)، أو ملف قواعد آخر بمساره
+export const RULES = process.env.JAZAM_SIM_RULES === 'off' ? null
+  : JSON.parse(fs.readFileSync(process.env.JAZAM_SIM_RULES || (PROJECT + '/database.rules.json'), 'utf8'));
+const DENIED = () => Object.assign(new Error('PERMISSION_DENIED: Permission denied'), { code: 'PERMISSION_DENIED' });
+// كل رفض في كل العوالم (للملخّص في نهاية run-all: رفضٌ صامت قد يخفي سلوكاً متدهوراً)
+export const ALL_DENIED = [];
 const T0 = clock.now;
 const rel = () => ((clock.now - T0) / 1000).toFixed(2).padStart(7);
 
@@ -73,7 +81,26 @@ function makeSnap(key, val) {
 
 // ═════════ خادم Firebase وهمي ═════════
 class Server {
-  constructor(world) { this.world = world; this.root = null; this.valueL = new Set(); this.childL = new Set(); this.keySeq = 0; this.writes = 0; }
+  constructor(world) { this.world = world; this.root = null; this.valueL = new Set(); this.childL = new Set(); this.keySeq = 0; this.writes = 0;
+    this.rules = RULES; this.denied = []; }
+  // قواعد الأمان: هل يكتب/يقرأ هذا اللاعب؟ (writes بقيمها بعد ختم الخادم). الرفض يُسجَّل للتشخيص
+  // denyIf(client, writes, op) → true: رفض إضافي يحقنه سيناريو (مثل غرفة قائمة لغيري برقم مكرّر — 3.3ب-1)
+  allowWrite(client, writes, op) {
+    if (this.denyIf && this.denyIf(client, writes, op)) {
+      const d = { who: client.name, uid: client.uid, op, path: writes[0]?.[0], at: clock.now, injected: true };
+      this.denied.push(d); client.event('DENIED', `${op} ${d.path} (محقون)`); return false;
+    }
+    if (!this.rules) return true;
+    const res = checkWrite(this.rules, writes, { uid: client.uid, root: this.root, now: clock.now });
+    if (!res.ok) { const d = { who: client.name, uid: client.uid, op, path: res.path, at: clock.now }; this.denied.push(d); ALL_DENIED.push(d); client.event('DENIED', `${op} ${res.path}`); }
+    return res.ok;
+  }
+  allowRead(client, path, op) {
+    if (!this.rules || String(path).startsWith('.info')) return true;
+    const ok = canRead(this.rules, path, { uid: client.uid, root: this.root, now: clock.now });
+    if (!ok) { const d = { who: client.name, uid: client.uid, op, path, at: clock.now }; this.denied.push(d); ALL_DENIED.push(d); client.event('DENIED', `${op} ${path}`); }
+    return ok;
+  }
   parts(p) { return String(p || '').split('/').filter(Boolean); }
   getAt(p) {
     let cur = this.root;
@@ -127,10 +154,17 @@ class Server {
   }
   // صفحة أُغلقت (dead) لا تكتب شيئاً بعد إغلاقها ولا تكمل: طلب لم يصل الخادم قبل الإغلاق يضيع
   // (v35.8 — كان بحث جارٍ في صفحة مغلقة يكمل وينشئ غرفة منتظرة بلا صاحب: غير واقعي)
-  write(client, apply) {
+  // writes: [[path, value]] — تُطبَّق كلها أو لا شيء (كتابة متعددة المسارات ذرّية)، بعد فحص القواعد لحظة وصولها
+  write(client, writes, op = 'write') {
     client.writes = (client.writes || 0) + 1;
-    return new Promise(res => {
-      clock.setTimeout(() => { if (client.dead) return; apply(); this.notify(); clock.setTimeout(res, client.down); }, client.up);
+    return new Promise((res, rej) => {
+      clock.setTimeout(() => {
+        if (client.dead) return;
+        const resolved = writes.map(([p, v]) => [p, resolveSV(clone(v), clock.now)]);
+        if (!this.allowWrite(client, resolved, op)) { clock.setTimeout(() => rej(DENIED()), client.down); return; }
+        for (const [p, v] of resolved) this.setAt(p, v);
+        this.notify(); clock.setTimeout(res, client.down);
+      }, client.up);
     });
   }
   transaction(client, path, fn) {
@@ -142,13 +176,20 @@ class Server {
         let out;
         try { out = fn(cur); } catch (e) { rej(e); return; }
         if (out === undefined) { clock.setTimeout(() => res({ committed: false, snapshot: makeSnap(path, cur) }), client.down); return; }
-        this.setAt(path, resolveSV(clone(out), clock.now)); this.notify();
+        const val = resolveSV(clone(out), clock.now);
+        if (!this.allowWrite(client, [[path, val]], 'transaction')) { clock.setTimeout(() => rej(DENIED()), client.down); return; }
+        this.setAt(path, val); this.notify();
         const now = toRead(clone(this.getAt(path)));
         clock.setTimeout(() => res({ committed: true, snapshot: makeSnap(path, now) }), client.down);
       }, client.up);
     });
   }
-  addValue(client, path, cb) {
+  addValue(client, path, cb, errCb) {
+    // قراءة مرفوضة: المستمع يُلغى (كـFirebase: لا بيانات، ومعالج الخطأ إن وُجد)
+    if (!this.allowRead(client, path, 'listen')) {
+      if (errCb) clock.setTimeout(() => client.safe(() => errCb(DENIED())), client.up + client.down);
+      return () => {};
+    }
     const L = { client, path, cb, key: this.parts(path).pop() || null, dead: false, lastSer: undefined };
     if (path === '.info/connected') {
       client.connL.push(L);
@@ -166,7 +207,11 @@ class Server {
     clock.setTimeout(() => { if (!L.dead) client.safe(() => cb(makeSnap(L.key, v))); }, client.up + client.down);
     return () => { L.dead = true; this.valueL.delete(L); };
   }
-  addChild(client, path, cb) {
+  addChild(client, path, cb, errCb) {
+    if (!this.allowRead(client, path, 'listen')) {
+      if (errCb) clock.setTimeout(() => client.safe(() => errCb(DENIED())), client.up + client.down);
+      return () => {};
+    }
     const C = { client, path, cb, seen: new Set(), dead: false, readyAt: clock.now + client.up + client.down };
     const cur = this.getAt(path);
     const initial = cur && typeof cur === 'object' ? Object.keys(cur).sort() : [];
@@ -194,31 +239,41 @@ function makeFdb(server, client) {
     ref: (db, p = '') => { const path = cleanPath(p); return { path, key: path.split('/').pop() || null }; },
     serverTimestamp: () => ({ '.sv': 'timestamp' }),
     // get() أثناء الانقطاع ينتظر العودة ثم يقرأ من الخادم (كـ Firebase: لا جواب من شبكة غائبة)
-    get: (r) => new Promise(res => {
-      const go = () => clock.setTimeout(() => { const v = toRead(clone(server.getAt(r.path))); clock.setTimeout(() => res(makeSnap(r.key, v)), client.down); }, client.up);
+    get: (r) => new Promise((res, rej) => {
+      const go = () => clock.setTimeout(() => {
+        if (!server.allowRead(client, r.path, 'get')) { clock.setTimeout(() => rej(DENIED()), client.down); return; }
+        const v = toRead(clone(server.getAt(r.path))); clock.setTimeout(() => res(makeSnap(r.key, v)), client.down);
+      }, client.up);
       if (client.connected || client.dead) go(); else (client.waiters ||= []).push(go);
     }),
-    set: (r, v) => server.write(client, () => server.setAt(r.path, resolveSV(clone(v), clock.now))),
+    set: (r, v) => server.write(client, [[r.path, v]], 'set'),
     update: (r, obj) => {
       if (/^users\/[^/]+\/presence$/.test(r.path) && obj && obj.state && !client.dead) {
         client.presence.push({ at: clock.now, s: obj.state }); client.event('PRES', obj.state);
       }
-      return server.write(client, () => {
-        for (const [k, v] of Object.entries(obj)) server.setAt(r.path + '/' + k, resolveSV(clone(v), clock.now));
-      });
+      return server.write(client, Object.entries(obj).map(([k, v]) => [r.path + '/' + k, v]), 'update');
     },
-    remove: (r) => server.write(client, () => server.setAt(r.path, null)),
+    remove: (r) => server.write(client, [[r.path, null]], 'remove'),
     push: (r) => { const key = server.genKey(); return { path: r.path + '/' + key, key }; },
     runTransaction: (r, fn) => server.transaction(client, r.path, fn),
-    onValue: (r, cb) => server.addValue(client, r.path, cb),
-    onChildAdded: (r, cb) => server.addChild(client, r.path, cb),
+    onValue: (r, cb, errCb) => server.addValue(client, r.path, cb, typeof errCb === 'function' ? errCb : null),
+    onChildAdded: (r, cb, errCb) => server.addChild(client, r.path, cb, typeof errCb === 'function' ? errCb : null),
     off: () => {},
-    onDisconnect: (r) => ({
-      remove: () => { client.onDisc.push({ path: r.path, op: 'remove' }); return Promise.resolve(); },
-      set: (v) => { client.onDisc.push({ path: r.path, op: 'set', v }); return Promise.resolve(); },
-      update: (v) => { client.onDisc.push({ path: r.path, op: 'update', v }); return Promise.resolve(); },
+    // أوامر الانقطاع: القواعد تُفحص لحظة التسجيل (كـFirebase: "The server checks security to make sure the user
+    // can perform the write event requested") — وتُنفَّذ لاحقاً كما سُجّلت بلا فحص جديد
+    onDisconnect: (r) => {
+      const reg = (op, writes) => {
+        const resolved = writes.map(([p, v]) => [p, resolveSV(clone(v), clock.now)]);
+        if (!server.allowWrite(client, resolved, 'onDisconnect.' + op.op)) return Promise.reject(DENIED());
+        client.onDisc.push(op); return Promise.resolve();
+      };
+      return {
+      remove: () => reg({ path: r.path, op: 'remove' }, [[r.path, null]]),
+      set: (v) => reg({ path: r.path, op: 'set', v }, [[r.path, v]]),
+      update: (v) => reg({ path: r.path, op: 'update', v }, Object.entries(v || {}).map(([k, x]) => [r.path + '/' + k, x])),
       cancel: () => { client.onDisc = client.onDisc.filter(o => !(o.path === r.path || o.path.startsWith(r.path + '/'))); return Promise.resolve(); },
-    }),
+      };
+    },
   };
 }
 
@@ -342,7 +397,15 @@ export class World {
   constructor() { this.server = new Server(this); this.clients = []; this.timeline = []; this.errors = []; this.quiet = false; }
   log(who, kind, msg) { const line = `${rel()}s  ${who.padEnd(6)} ${kind.padEnd(7)} ${msg}`; this.timeline.push(line); if (!this.quiet) console.log(line); }
   async client(name, opts = {}) {
-    const c = new Client(this, name, opts); await c.boot(); this.clients.push(c); return c;
+    const c = new Client(this, name, opts);
+    // 3.3ب-1: لاعبو المحاكي أصدقاء متبادلون (كما في الواقع: الدعوة وردّها بين صديقين فقط — قواعد 3.3أ-2)
+    // تُزرع كبيانات خادم (لا تمرّ بالقواعد). friends:false = لاعب غريب عن الكل
+    if (opts.friends !== false) for (const o of this.clients) if (o.uid !== c.uid && o.friendsAll !== false) {
+      this.server.setAt(`users/${c.uid}/friends/${o.uid}`, { name: o.name });
+      this.server.setAt(`users/${o.uid}/friends/${c.uid}`, { name: c.name });
+    }
+    if (opts.friends === false) c.friendsAll = false;
+    await c.boot(); this.clients.push(c); return c;
   }
   startSampler(ms = 100) {
     this._sampler = clock.setInterval(() => this.clients.forEach(c => c.sample()), ms);
