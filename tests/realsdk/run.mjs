@@ -273,7 +273,10 @@ async function roomCodeCollisionReal() {
   let dj = null; try { dj = await D.onlineManager.joinMultiRoom(mc.code, 'داني'); } catch (e) { r.ok(false, 'joinMultiRoom رمى: ' + e.message); }
   await wait(200);
   r.ok(dj && dj.myNum === 2 && room(mc.code)?.players?.uD?.num === 2, `داني انضم للوبي كريم بمقعد 2 (${JSON.stringify(dj && dj.myNum)})`);
-  r.ok(S.denied.slice(deniedBefore).some(d => String(d.p).includes(mc.code)), 'المحاولة الباردة رُفضت فعلاً ثم نجحت الإعادة (المسار مُختبَر)');
+  // الخادم الذي يقيّم القواعد أولاً يرفض المحاولة الباردة (فتُختبَر الإعادة الدافئة)؛ والذي يقارن القيمة أولاً يعيدها
+  // كقديمة (datastale) بلا رفض — والانضمام ينجح في الحالتين
+  if (S.order === 'rules-first') r.ok(S.denied.slice(deniedBefore).some(d => String(d.p).includes(mc.code)), 'المحاولة الباردة رُفضت فعلاً ثم نجحت الإعادة (المسار مُختبَر)');
+  else r.ok(!S.denied.slice(deniedBefore).some(d => String(d.p).includes(mc.code)), 'بترتيب "القيمة أولاً": انضمام بلا أي رفض');
 
   // لا أمر انقطاع مسجّل على رقم الغريب عند الخادم (رُفض لحظة تسجيله، وأُلغي احتياطاً) — إغلاق صفحة المنشئ لا يمسحها
   const odOnTaken = [...S.conns].flatMap(c => c.ondisc || []).filter(o => String(o.p).includes(TAKEN));

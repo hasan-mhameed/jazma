@@ -29,7 +29,10 @@ function resolveSV(v, now) {
 export class FakeRTDB {
   // detectDelay: الخادم يلاحظ سقوط اتصال بعد مهلة (كالخادم الحقيقي مع الجوال) — أوامر onDisconnect تُنفَّذ متأخرة
   // rules: قواعد الأمان (الافتراضي: database.rules.json للمشروع؛ null = بلا قواعد). denied: ما رُفض { conn, a, p }
-  constructor({ rules = RULES } = {}) { this.root = null; this.conns = new Set(); this.log = []; this.delay = 5; this.delayFor = null; this.replyDelayFor = null; this.detectDelay = 0; this.rules = rules; this.denied = []; }
+  // order (3.3ب-2): ترتيب الخادم بين مقارنة قيمة المعاملة (hash) وقواعد الأمان — غير موثّق في Firebase، فنفحص الاثنين:
+  // 'rules-first' (الافتراضي، الأشدّ: معاملة بتخمين قديم قد تُرفض بدل أن تُعاد) أو 'hash-first' (القديم يُعاد أولاً).
+  // JAZAM_RTDB_ORDER=hash-first npm test — الحزمة كلها بالترتيب الآخر
+  constructor({ rules = RULES, order = process.env.JAZAM_RTDB_ORDER || 'rules-first' } = {}) { this.order = order; this.root = null; this.conns = new Set(); this.log = []; this.delay = 5; this.delayFor = null; this.replyDelayFor = null; this.detectDelay = 0; this.rules = rules; this.denied = []; }
   close() { for (const c of this.conns) { try { c.ws.close(); } catch {} } try { this.srv.close(); } catch {} }
   getAt(p) { let c = this.root; for (const k of parts(p)) { if (c == null || typeof c !== 'object') return null; c = c[k]; if (c === undefined) return null; } return c ?? null; }
   setAt(p, v) {
@@ -101,6 +104,9 @@ export class FakeRTDB {
     if (a === 'auth' || a === 'gauth') { conn.uid = jwtSub(b && b.cred); return this.reply(conn, r, 'ok', { auth: { uid: conn.uid } }, rd); }
     if (a === 'unauth') { conn.uid = null; return this.reply(conn, r, 'ok', {}, rd); }
     // قواعد الأمان: قراءة (استماع/قراءة) وكتابة (put/merge، وأوامر الانقطاع لحظة تسجيلها) — رفض = permission_denied
+    if (this.order === 'hash-first' && a === 'p' && b && b.h !== undefined && b.h !== this.hash(parts(b.p).join('/'))) {
+      this.log.push(`put ${parts(b.p).join('/')} datastale (hash-first)`); return this.reply(conn, r, 'datastale', 'hash mismatch', rd);
+    }
     if (this.rules) {
       const deny = () => { this.denied.push({ conn: conn.id, uid: conn.uid, a, p: b && b.p }); this.log.push(`DENIED ${a} ${b && b.p} (${conn.uid})`); return this.reply(conn, r, 'permission_denied', 'Permission denied', rd); };
       if ((a === 'q' || a === 'g') && !canRead(this.rules, b.p, { uid: conn.uid, root: this.root, now })) return deny();

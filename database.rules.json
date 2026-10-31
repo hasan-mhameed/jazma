@@ -56,12 +56,71 @@
     },
     "rooms": {
       ".read": "auth !== null",
-      ".write": "auth !== null"
+      "$code": {
+        ".write": "auth !== null && ((!data.exists() && !newData.exists()) || ((!data.exists() || (!data.child('cfg').exists() && !data.child('p1uid').exists() && !data.child('multi').exists())) && newData.exists() && ((newData.child('p1uid').val() === auth.uid && newData.child('status').val() === 'waiting' && newData.child('p2uid').val() === '' && !newData.child('multi').exists()) || (newData.child('multi').val() === true && newData.child('hostUid').val() === auth.uid && newData.child('status').val() === 'lobby' && newData.child('players').child(auth.uid).exists()))) || (data.child('p1uid').val() === auth.uid || data.child('p2uid').val() === auth.uid || data.child('players').child(auth.uid).exists()) || (data.child('status').val() === 'waiting' && data.child('p2uid').val() === '' && !data.child('multi').exists() && newData.child('p2uid').val() === auth.uid && newData.child('status').val() === 'playing' && !newData.child('multi').exists() && newData.child('p1uid').val() === data.child('p1uid').val() && newData.child('createdAt').val() === data.child('createdAt').val() && newData.child('cfg').child('rows').val() === data.child('cfg').child('rows').val() && newData.child('cfg').child('cols').val() === data.child('cfg').child('cols').val()) || (data.child('multi').val() === true && data.child('status').val() === 'lobby' && !data.child('players').child(auth.uid).exists() && newData.child('players').child(auth.uid).exists() && newData.child('multi').val() === true && newData.child('status').val() === 'lobby' && newData.child('hostUid').val() === data.child('hostUid').val() && newData.child('maxPlayers').val() === data.child('maxPlayers').val() && newData.child('createdAt').val() === data.child('createdAt').val() && newData.child('cfg').child('rows').val() === data.child('cfg').child('rows').val() && newData.child('cfg').child('cols').val() === data.child('cfg').child('cols').val() && newData.child('players').child(auth.uid).child('num').val() <= data.child('maxPlayers').val()) || (!newData.exists() && (data.child('status').val() === 'finished' || !data.child('createdAt').exists() || data.child('createdAt').val() < now - 3600000 || (data.child('multi').val() === true && data.child('status').val() === 'lobby' && !data.child('players').exists()) || (!data.child('cfg').exists() && !data.child('p1uid').exists() && !data.child('multi').exists()))))",
+        "spectators": {
+          "$uid": {
+            ".write": "auth !== null && $uid === auth.uid && (!newData.exists() || root.child('rooms').child($code).child('cfg').exists())",
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 128"
+            },
+            ".validate": "newData.hasChildren(['name'])",
+            "at": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "status": {
+          ".validate": "newData.val() === 'waiting' || newData.val() === 'playing' || newData.val() === 'finished' || newData.val() === 'lobby'"
+        },
+        "p1name": {
+          ".validate": "newData.isString() && newData.val().length <= 128"
+        },
+        "p2name": {
+          ".validate": "newData.isString() && newData.val().length <= 128"
+        },
+        "p1uid": {
+          ".validate": "newData.isString() && newData.val().length <= 128"
+        },
+        "p2uid": {
+          ".validate": "newData.isString() && newData.val().length <= 128"
+        },
+        "hostUid": {
+          ".validate": "newData.isString() && newData.val().length <= 128"
+        },
+        "maxPlayers": {
+          ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 4"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber() && newData.val() <= now + 600000"
+        },
+        "cfg": {
+          "rows": {
+            ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 12"
+          },
+          "cols": {
+            ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 12"
+          }
+        },
+        "players": {
+          "$uid": {
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 128"
+            },
+            "num": {
+              ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 4"
+            }
+          }
+        }
+      }
     },
     "invites": {
       ".read": "auth !== null",
       "$toUid": {
-        ".write": "auth !== null && ( ($toUid === auth.uid && !newData.exists()) || (newData.exists() && newData.child('fromUid').val() === auth.uid && root.child('users').child($toUid).child('friends').child(auth.uid).exists()) || (!newData.exists() && data.child('fromUid').val() === auth.uid) )",
+        ".write": "auth !== null && ( ($toUid === auth.uid && !newData.exists()) || (newData.exists() && newData.child('fromUid').val() === auth.uid && root.child('users').child($toUid).child('friends').child(auth.uid).exists()) || (!newData.exists() && data.child('fromUid').val() === auth.uid) || (!data.exists() && !newData.exists()) )",
         "fromName": {
           ".validate": "newData.isString() && newData.val().length <= 128"
         },
@@ -73,7 +132,7 @@
     "inviteRejections": {
       ".read": "auth !== null",
       "$fromUid": {
-        ".write": "auth !== null && ( ($fromUid === auth.uid && !newData.exists()) || (newData.exists() && newData.child('rejectedBy').val() === auth.uid && root.child('users').child($fromUid).child('friends').child(auth.uid).exists()) )",
+        ".write": "auth !== null && ( ($fromUid === auth.uid && !newData.exists()) || (newData.exists() && newData.child('rejectedBy').val() === auth.uid && root.child('users').child($fromUid).child('friends').child(auth.uid).exists()) || (!data.exists() && !newData.exists()) )",
         "name": {
           ".validate": "newData.isString() && newData.val().length <= 128"
         },

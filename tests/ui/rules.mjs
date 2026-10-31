@@ -95,8 +95,81 @@ export function rulesMatrix() {
   r.ok(!R(NEW, 'A', 'users/B/friends', withToken) && !R(NEW, 'A', 'users/B/sentRequests', withToken) && !R(NEW, 'A', 'users/B/friendRequests', withToken),
     'أقرأ قائمة أصدقاء غيري أو صندوق أدلته/طلباته كاملاً');
   // ── 3.3أ-2: الدعوة للأصدقاء + الحدود + إغلاق chatStatus ───────────────
-  // الغرف لم تُقفل بعد (3.3ب): مقروءة وقابلة للكتابة لكل مسجّل
-  r.ok(canRead(NEW, 'rooms', { uid: 'A' }) && W(NEW, 'A', [['rooms/1', { s: 1 }]]), 'الغرف تغيّرت قبل دفعتها (3.3ب)');
+  // ── 3.3ب-2: الغرف — لا يكتب فيها إلا لاعبوها؛ والمشاهد في خانته؛ والغريب: ينشئ، أو ينضم مضيفاً نفسه، أو ينظّف ──
+  const T0 = 1_800_000_000_000;
+  const duoWaiting = { cfg: { rows: 4, cols: 4 }, status: 'waiting', p1name: 'أ', p1uid: 'A', p2name: '', p2uid: '', createdAt: T0, move: { key: '', by: 0, seq: 0 } };
+  const duoPlaying = { ...duoWaiting, status: 'playing', p2name: 'ب', p2uid: 'B', public: false };
+  const lobby = { cfg: { rows: 4, cols: 4 }, status: 'lobby', multi: true, maxPlayers: 3, hostUid: 'A', players: { A: { name: 'أ', num: 1, active: true } },
+    playerCount: 1, turn: 1, move: { key: '', by: 0, seq: 0 }, createdAt: T0 };
+  const withRooms = (rooms) => { const b = JSON.parse(JSON.stringify(base)); b.rooms = JSON.parse(JSON.stringify(rooms)); return b; };
+  const RW = (uid, writes, root, now = T0 + 60_000) => checkWrite(NEW, writes, { uid, root, now }).ok;
+  const rooms0 = withRooms({ '111111': duoWaiting, '222222': duoPlaying, '333333': lobby });
+  // القراءة: مفتوحة لكل مسجّل (البحث العشوائي يقرأ الغرف كلها، والمشاهدة بالكود والدعوات) — لا للزائر
+  r.ok(canRead(NEW, 'rooms', { uid: 'V', root: rooms0 }) && canRead(NEW, 'rooms/222222', { uid: 'V', root: rooms0 }), 'الغرف لم تعد مقروءة لكل مسجّل (البحث العشوائي يحتاجها)');
+  r.ok(!canRead(NEW, 'rooms', { uid: null, root: rooms0 }) && !RW(null, [['rooms/999999', duoWaiting]], rooms0), 'زائر بلا دخول يقرأ أو ينشئ غرفة');
+  // الإنشاء: غرفتي أنا فقط (منشئها = أنا، تنتظر، بلا خصم) — لا فوق غرفة قائمة لغيري، ولا باسم غيري
+  r.ok(RW('A', [['rooms/444444', duoWaiting]], rooms0) && RW('A', [['rooms/444444', { ...duoWaiting, public: true }]], rooms0), 'إنشاء غرفة ثنائية (بالكود/عامة) مرفوض');
+  r.ok(RW('A', [['rooms/444444', lobby]], rooms0), 'إنشاء لوبي جماعي مرفوض');
+  r.ok(!RW('V', [['rooms/222222', { ...duoWaiting, p1uid: 'V', p1name: 'ضحية' }]], rooms0) && !RW('V', [['rooms/333333', { ...lobby, hostUid: 'V', players: { V: { name: 'x', num: 1 } } }]], rooms0),
+    'إنشاء فوق غرفة قائمة لغيري قُبل (رقم مكرّر يخرب مباراته)');
+  r.ok(!RW('V', [['rooms/444444', duoWaiting]], rooms0) && !RW('V', [['rooms/444444', { ...duoWaiting, p1uid: 'V', p2uid: 'B', status: 'playing' }]], rooms0)
+    && !RW('V', [['rooms/444444', { ...duoWaiting, p1uid: 'V', p2uid: 'B' }]], rooms0), 'إنشاء غرفة باسم غيري أو بخصم جاهز (ولو "تنتظر") قُبل');
+  r.ok(RW('A', [['rooms/444444', null]], rooms0), 'أمر "امسح غرفتي عند الانقطاع" قبل إنشائها (حذف لا شيء) مرفوض — حماية v35.8 تضيع');
+  // بقايا بلا صاحب (أمر انقطاع شارد بعد المسح): يُعاد إنشاء الغرفة فوقها، ويحذفها أي أحد
+  const withOrphan = withRooms({ '555555': { status: 'finished', dropped2: true } });
+  r.ok(RW('A', [['rooms/555555', duoWaiting]], withOrphan) && RW('V', [['rooms/555555', null]], withOrphan), 'عقدة بقايا: لا تُعاد الغرفة فوقها أو لا تُنظَّف');
+  // الانضمام الثنائي: أضيف نفسي خصماً لغرفة تنتظر (كما تكتبه المعاملة: الغرفة كاملة)، لا غير
+  const join = (uid) => ({ ...duoWaiting, p2name: 'ب', p2uid: uid, status: 'playing', public: false });
+  r.ok(RW('B', [['rooms/111111', join('B')]], rooms0), 'انضمام ثنائي لغرفة تنتظر مرفوض');
+  r.ok(!RW('V', [['rooms/222222', join('V')]], rooms0), 'انضمام لمباراة جارية (لها خصم) قُبل');
+  r.ok(!RW('B', [['rooms/111111', join('C')]], rooms0), 'أضفتُ غيري خصماً قُبل');
+  r.ok(!RW('B', [['rooms/111111', { ...join('B'), p1uid: 'B' }]], rooms0) && !RW('B', [['rooms/111111', { ...join('B'), cfg: { rows: 7, cols: 7 } }]], rooms0),
+    'انضمام يغيّر المنشئ أو حجم اللوحة قُبل');
+  r.ok(!RW('V', [['rooms/111111', null]], rooms0) && !RW('V', [['rooms/111111/status', 'finished']], rooms0) && !RW('V', [['rooms/222222/move', { key: 'x', by: 1, seq: 9 }]], rooms0),
+    'غريب يحذف غرفة تنتظر أو ينهيها أو يحرّك في مباراة جارية');
+  // الانضمام الجماعي: أضيف نفسي للوبي بمقعد ضمن الحد (كما تكتبه المعاملة)، دون تغيير مضيفه أو حدّه
+  const ljoin = (uid, num = 2, extra = {}) => ({ ...lobby, players: { ...lobby.players, [uid]: { name: 'ب', num, active: true } }, playerCount: 2, ...extra });
+  r.ok(RW('B', [['rooms/333333', ljoin('B')]], rooms0), 'انضمام للوبي جماعي مرفوض');
+  r.ok(!RW('B', [['rooms/333333', ljoin('C')]], rooms0), 'أضفتُ غيري للوبي قُبل');
+  r.ok(!RW('B', [['rooms/333333', ljoin('B', 2, { hostUid: 'B' })]], rooms0) && !RW('B', [['rooms/333333', ljoin('B', 2, { maxPlayers: 4 })]], rooms0)
+    && !RW('B', [['rooms/333333', ljoin('B', 4)]], rooms0), 'انضمام يسرق المضيف أو يرفع الحد أو بمقعد خارجه قُبل');
+  r.ok(!RW('B', [['rooms/333333', ljoin('B', 2, { status: 'playing' })]], rooms0), 'انضمام يبدأ المباراة قُبل');
+  const lobbyStarted = withRooms({ '333333': { ...lobby, status: 'playing' } });
+  r.ok(!RW('B', [['rooms/333333', ljoin('B', 2, { status: 'playing' })]], lobbyStarted) && !RW('B', [['rooms/333333', ljoin('B')]], lobbyStarted),
+    'انضمام لمباراة جماعية بدأت (أو بإرجاعها "لوبي") قُبل');
+  // اللاعبون: يكتبون كل شيء في غرفتهم (حركات، ساعة، خروج غيرهم بعد مهلته، إنهاء، حذف) — حدّ مقبول (3.8)
+  const lobby3 = withRooms({ '333333': { ...lobby, players: { A: { name: 'أ', num: 1 }, B: { name: 'ب', num: 2 }, C: { name: 'ج', num: 3 } }, status: 'playing' } });
+  r.ok(RW('B', [['rooms/222222/move', { key: 'h1', by: 2, seq: 3 }], ['rooms/222222/clock/currentPlayer', 1]], rooms0) && RW('A', [['rooms/222222', { ...duoPlaying, status: 'finished', leftBy: 1 }]], rooms0),
+    'لاعب الثنائي لا يحرّك أو لا ينهي مباراته');
+  r.ok(RW('B', [['rooms/333333/players/C', { name: 'ج', num: 3, active: false, outReason: 'dropped' }]], lobby3) && RW('C', [['rooms/333333/players/C', null], ['rooms/333333/playerCount', 2], ['rooms/333333/hostNum', 1]], lobby3),
+    'لاعب جماعي لا يُخرج غيره بعد مهلته أو لا يغادر بكتابة واحدة');
+  r.ok(RW('A', [['rooms/111111', null]], rooms0) && RW('B', [['rooms/222222', null]], rooms0), 'اللاعب لا يحذف غرفته (إلغاء الانتظار / معاملة بذاكرة باردة)');
+  // المشاهد: خانته فقط، وفي غرفة موجودة — لا يحرّك ولا يغيّر الساعة
+  r.ok(RW('V', [['rooms/222222/spectators/V', { name: 'مشاهد', at: T0 }]], rooms0) && RW('V', [['rooms/222222/spectators/V', null]], rooms0), 'المشاهد لا يكتب/يحذف خانته');
+  r.ok(!RW('V', [['rooms/222222/spectators/B', { name: 'x' }]], rooms0), 'المشاهد يكتب خانة غيره');
+  r.ok(!RW('V', [['rooms/222222/moves/k1', { key: '__skip__', by: 1, nextTurn: 2 }]], rooms0) && !RW('V', [['rooms/222222/clock/currentPlayer', 2]], rooms0),
+    'المشاهد يحرّك أو يغيّر الساعة');
+  r.ok(!RW('V', [['rooms/999999/spectators/V', { name: 'مشاهد' }]], rooms0), 'خانة مشاهد في غرفة غير موجودة (تُنشئ بقايا) قُبلت');
+  // خانة المشاهد بشكلها فقط (مراجعة ب-2): الاسم إلزامي، والوقت رقم، ولا حقول أخرى — وإلا يعلّق أي مسجّل حمولة كبيرة
+  // في أي مباراة جارية يعيد تنزيلها كل لاعب مع كل كتابة
+  r.ok(RW('V', [['rooms/222222/spectators/V/name', 'مشاهد'], ['rooms/222222/spectators/V/at', T0]], rooms0), 'كتابة خانة المشاهد كما يكتبها الكود (update) مرفوضة');
+  r.ok(!RW('V', [['rooms/222222/spectators/V', { name: 'م', junk: 'x'.repeat(1000) }]], rooms0) && !RW('V', [['rooms/222222/spectators/V', { at: T0 }]], rooms0)
+    && !RW('V', [['rooms/222222/spectators/V', { name: 'م', at: 'أمس' }]], rooms0), 'خانة مشاهد بحقل غريب أو بلا اسم أو بوقت ليس رقماً قُبلت');
+  // وقت الإنشاء لا يُبعَد للمستقبل (غرفة لا يحذفها التنظيف أبداً) — بسماحٍ لفرق ساعة الجهاز (10 دقائق)
+  r.ok(RW('A', [['rooms/444444', { ...duoWaiting, createdAt: T0 + 60_000 + 300_000 }]], rooms0) && !RW('A', [['rooms/444444', { ...duoWaiting, createdAt: T0 + 86_400_000 }]], rooms0),
+    'وقت إنشاء بعيد في المستقبل قُبل (أو فرق ساعة معقول رُفض)');
+  // التنظيف (أي مسجّل): المنتهية، والأقدم من ساعة (بوقت الخادم)، واللوبي الفارغ، والبقايا — لا غيرها
+  const fin = withRooms({ '666666': { ...duoPlaying, status: 'finished' }, '777777': { ...lobby, players: null } });
+  r.ok(RW('V', [['rooms/666666', null]], fin) && RW('V', [['rooms/777777', null]], fin), 'تنظيف غرفة منتهية أو لوبي فارغ مرفوض');
+  r.ok(RW('V', [['rooms/222222', null]], rooms0, T0 + 3_700_000) && !RW('V', [['rooms/222222', null]], rooms0, T0 + 3_500_000),
+    'حدّ الساعة في التنظيف خاطئ (أقدم من ساعة يُحذف، والأحدث لا)');
+  // حدود الشكل
+  r.ok(!RW('A', [['rooms/444444', { ...duoWaiting, p1name: 'ن'.repeat(129) }]], rooms0) && !RW('A', [['rooms/444444', { ...duoWaiting, cfg: { rows: 99, cols: 4 } }]], rooms0)
+    && !RW('A', [['rooms/444444', { ...lobby, maxPlayers: 9 }]], rooms0) && !RW('A', [['rooms/222222/status', 'مخترقة']], rooms0)
+    && !RW('A', [['rooms/333333/players/A/name', 'ن'.repeat(129)]], rooms0) && !RW('V', [['rooms/222222/spectators/V', { name: 'ن'.repeat(129) }]], rooms0),
+    'حدود الشكل (الاسم 128، اللوحة 2..12، الحد 2..4، الحالة، اسم المشاهد) لم تُطبَّق');
+  // حذف دعوة/ردّ غير موجود: لا شيء (removeIf على خانة فرغت) — بلا رفض صامت
+  r.ok(W(NEW, 'A', [['invites/B', null]]) && W(NEW, 'A', [['inviteRejections/B', null]]), 'حذف دعوة/ردّ غير موجود رُفض');
   // ── 3.3أ-3: المحادثة لطرفيها فقط — الطرفان من مفتاحها نفسه (معرّفا اللاعبين مرتّبين: A_B) ──
   // رسالة كما يكتبها الكود (chat.js → sendMessage)
   const MSG = (from, extra = {}) => ({ fromUid: from, fromName: 'اسم', text: 'مرحبا', ts: 1, status: 'sent', ...extra });

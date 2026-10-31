@@ -2,7 +2,7 @@
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1793317572";
+import { getCurrentUser }   from "./auth.js?v=1793468890";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -37,7 +37,14 @@ async function txnAsJoiner(path, update) {
     let unsub = null;
     try {
       await new Promise(res => { unsub = onValue(ref(db, path), () => res(), () => res()); });
-      return await runTransaction(ref(db, path), update, { applyLocally: false });
+      try {
+        return await runTransaction(ref(db, path), update, { applyLocally: false });
+      } catch (e2) {
+        // 3.3ب-2: رُفضت الإعادة الدافئة أيضاً = الغرفة لم تعد تقبل انضمامي (سبقني غيري، أو بدأت) — لم يُكتب شيء يقيناً،
+        // فهي "لم ننضم" لا "انقطاع" (منضمّان بنفس اللحظة: الخاسر يرى "ممتلئة" لا "تعذّر بسبب انقطاع الاتصال")
+        if (isDenied(e2)) return { committed: false, snapshot: null };
+        throw e2;
+      }
     } finally { try { unsub && unsub(); } catch {} }
   }
 }
@@ -133,7 +140,7 @@ export class OnlineManager {
           p1uid:     getCurrentUser()?.uid || "",
           p2name:    "",
           p2uid:     "",
-          createdAt: Date.now(),
+          createdAt: serverTimestamp(),
           move:      { key: "", by: 0, seq: 0 },
         });
         break;
@@ -267,7 +274,7 @@ export class OnlineManager {
           p1name:    name,
           p1uid:     myUid,
           p2name:    "", p2uid: "",
-          createdAt: Date.now(),
+          createdAt: serverTimestamp(),
           move:      { key: "", by: 0, seq: 0 },
         });
         break;
@@ -441,7 +448,7 @@ export class OnlineManager {
         // موجودة (ذاكرتنا متأخرة): لا نلمسها — إلا عقدة بلا صاحب: بقايا أمر انقطاع شارد كتبه منضمّ سابق بعد مسحها
         // (سقط بصمت فلم يُلغِ أمره)، فنعيد غرفتنا فوقها. كانت "موجودة" فلا نعيدها وننتظر للأبد (مراجعة v35.8 الرابعة)
         if (room !== null && !isOrphanRoomNode(room)) return;
-        return { ...data, status: "waiting", p2name: "", p2uid: "", createdAt: Date.now(),
+        return { ...data, status: "waiting", p2name: "", p2uid: "", createdAt: serverTimestamp(),
                  move: { key: "", by: 0, seq: 0 } };
       });
     } catch {} finally { if (this._restoringCode === code) this._restoringCode = null; }
@@ -681,7 +688,7 @@ export class OnlineManager {
           playerCount: 1,
           turn:       1,
           move:       { key: "", by: 0, seq: 0 },
-          createdAt:  Date.now(),
+          createdAt:  serverTimestamp(),
         });
         break;
       } catch (e) {
