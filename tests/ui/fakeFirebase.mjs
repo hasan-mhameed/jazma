@@ -171,9 +171,20 @@ export function createFirebase({ win, users = {}, cold = false, rules = null } =
     const ps = parts(path);
     return { _path: ps.join('/'), key: ps.length ? ps[ps.length - 1] : null, _q: constraints, toString: () => 'fake:' + ps.join('/') };
   };
+  // ترتيب Firebase بقيمة ابن (orderByChild — 3.3ج-1): الغائب/null أولاً، ثم false ثم true، ثم الأرقام تصاعدياً، ثم النصوص،
+  // ثم الكائنات؛ والتعادل بالمفتاح
+  const childRank = v => v == null ? [0] : v === false ? [1] : v === true ? [2] : typeof v === 'number' ? [3, v] : typeof v === 'string' ? [4, v] : [5];
+  const cmpChild = (child) => (value) => (a, b) => {
+    const ra = childRank(value[a] && typeof value[a] === 'object' ? value[a][child] : null);
+    const rb = childRank(value[b] && typeof value[b] === 'object' ? value[b][child] : null);
+    if (ra[0] !== rb[0]) return ra[0] - rb[0];
+    if (ra.length > 1 && ra[1] !== rb[1]) return ra[1] < rb[1] ? -1 : 1;
+    return keyCmp(a, b);
+  };
   const applyQuery = (value, q) => {
     if (!q || !q.length || !value || typeof value !== 'object') return value;
-    let keys = Object.keys(value).sort(keyCmp);
+    const ob = q.find(c => c.type === 'orderByChild');
+    let keys = Object.keys(value).sort(ob ? cmpChild(ob.child)(value) : keyCmp);
     for (const c of q) {
       if (c.type === 'limitToLast') keys = keys.slice(-c.n);
       if (c.type === 'limitToFirst') keys = keys.slice(0, c.n);
@@ -218,6 +229,7 @@ export function createFirebase({ win, users = {}, cold = false, rules = null } =
     ref: (_db, path = '') => { assertPath(path, 'child'); return mkRef(path); },
     query: (r, ...constraints) => mkRef(r._path, [...(r._q || []), ...constraints]),
     orderByKey: () => ({ type: 'orderByKey' }),
+    orderByChild: (child) => ({ type: 'orderByChild', child }),
     limitToLast: (n) => ({ type: 'limitToLast', n }),
     serverTimestamp: () => ({ '.sv': 'timestamp' }),
     onValue(r, cb, errCb) {

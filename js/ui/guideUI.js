@@ -1,9 +1,9 @@
 // 📄 ui/guideUI.js
 // دليل الأدوات — نافذة تعرض كل العناصر والقدرات ووظائفها
 
-import { GUIDE_ITEMS } from "./guideData.js?v=1793468890";
-import { getPowerIcon } from "./powerIcons.js?v=1793468890";
-import { esc } from "./safeText.js?v=1793468890";
+import { GUIDE_ITEMS } from "./guideData.js?v=1793490698";
+import { getPowerIcon } from "./powerIcons.js?v=1793490698";
+import { esc } from "./safeText.js?v=1793490698";
 
 let _built = false;
 

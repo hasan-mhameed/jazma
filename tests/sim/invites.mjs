@@ -743,3 +743,25 @@ export async function fuzzInvites(seed) {
   w.dispose();
   return { findings };
 }
+
+// ── 3.3ج-1 (مراجعة): ردٌّ على دعوتي يكتبه صديقٌ آخر (غير المدعوّ) برمز غرفتها — القواعد تسمح لصديقي بالكتابة في خانة
+// ردودي، فالحماية في الواجهة: لا تنتهي دعوتي "رفض فلان" إلا بردّ المدعوّ نفسه ──
+export async function inviteSpoofedReply(verbose = false) {
+  const r = suite('3.3ج-1: ردّ برمز غرفة دعوتي من صديق آخر (غير المدعوّ) لا يُنهيها'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const A = await w.client('أحمد'), B = await w.client('باسل'), C = await w.client('كريم');
+  await w.run(500);
+  r.ok(await inviteShown(w, A, B), 'الدعوة ظهرت عند باسل');
+  const code = A.om.roomCode;
+  const fdbC = C.ctx.__fdb;
+  let wrote = null;
+  fdbC.set(fdbC.ref({}, 'inviteRejections/' + A.uid), { rejectedBy: C.uid, name: 'كريم', ts: clock.now, roomCode: code, reason: 'rejected' })
+    .then(() => { wrote = true; }, () => { wrote = false; });
+  await w.run(1500);
+  r.ok(wrote === true, 'الردّ المزوّر كُتب (صديق يكتب في خانة ردودي — الحماية في الواجهة)');
+  r.ok(A.outgoing()?.phase === 'waiting' && A.inviteEnds.length === 0, `دعوة أحمد ما زالت قائمة (المرحلة: ${A.outgoing()?.phase}، نهايات: ${A.inviteEnds.join(',') || '—'})`);
+  r.ok(replySlot(w, A) == null, 'الردّ الذي لا يخصّ الدعوة مُسح من خانة أحمد');
+  B.acceptInvite();
+  r.ok(await waitFor(w, () => A.matches.length && B.matches.length, 8000), 'باسل قبل وبدأت المباراة');
+  noErr(r, w); w.dispose(); return r;
+}

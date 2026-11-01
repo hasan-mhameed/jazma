@@ -9,9 +9,9 @@
 //    شاشة نتيجة يُنهي ما هو فيه بهدوء ثم ينضم؛ وقبول دعوة لم تعد متاحة يعرض رسالة واضحة.
 // الواجهة الخارجية (الشاشات وبدء المباراة) يمرّرها main.js عبر initInvites(hooks).
 import { sendGameInvite, listenForInvites, watchInviteRoom, replyToInvite, listenForInviteReplies,
-         removeInviteReply, clearMyInviteReplies, clearInviteIf, withdrawInvite } from "../invite.js?v=1793468890";
-import { onlineManager } from "../firebase.js?v=1793468890";
-import { getCurrentUser } from "../auth.js?v=1793468890";
+         removeInviteReply, clearMyInviteReplies, clearInviteIf, withdrawInvite } from "../invite.js?v=1793490698";
+import { onlineManager } from "../firebase.js?v=1793490698";
+import { getCurrentUser } from "../auth.js?v=1793490698";
 
 export const INVITE_TTL_SEC = 60;        // مهلة الرد على الدعوة (عند صاحبها: عدّ تنازلي في شاشة الانتظار)
 const ROOM_GONE_GRACE_MS   = 10000;      // غرفة دعوة اختفت: انقطاع لحظي عند صاحبها؟ تعود كما كانت — ننتظرها قليلاً
@@ -151,8 +151,9 @@ function tickOut(s) {
 // ردّ وصل على inviteRejections/<أنا>: يُعمل به فقط إن كان لدعوتنا القائمة (رمز غرفتها)
 function onReply(s, r) {
   if (_out !== s || !r || typeof r !== "object") return;
+  // من صديقنا المدعوّ نفسه (3.3ج-1، مراجعة): كان أي صديق آخر لنا يكتب ردّاً برمز غرفتنا فتنتهي دعوتنا "رفض فلان"
   const forThis = r.roomCode
-    ? r.roomCode === s.code
+    ? r.roomCode === s.code && r.rejectedBy === s.friendUid
     // نسخة قديمة عند الصديق (ردّ بلا رمز غرفة): نقبله من صديقنا المدعوّ إن لم يكن أقدم من دعوتنا بوضوح
     : (r.rejectedBy === s.friendUid && !(typeof r.ts === "number" && r.ts < s.startedAt - LEGACY_REPLY_SKEW_MS));
   if (!forThis) { quiet(removeInviteReply(r)); return; }      // ردّ على دعوة سابقة: يُمسح بلا أثر

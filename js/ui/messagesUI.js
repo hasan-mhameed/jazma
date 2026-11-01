@@ -1,10 +1,10 @@
 // 📄 ui/messagesUI.js
 // زر الرسائل في navbar + panel المحادثات
 
-import { listenMessages, markAsRead, getLastReadMap, listenLastRead, chatKey } from "../chat.js?v=1793468890";
-import { listenFriends }              from "../friends.js?v=1793468890";
-import { getCurrentUser }             from "../auth.js?v=1793468890";
-import { esc, asText, firstInitial }  from "./safeText.js?v=1793468890";
+import { listenMessages, markAsRead, getLastReadMap, listenLastRead, chatKey } from "../chat.js?v=1793490698";
+import { listenFriends }              from "../friends.js?v=1793490698";
+import { getCurrentUser }             from "../auth.js?v=1793490698";
+import { esc, asText, firstInitial }  from "./safeText.js?v=1793490698";
 
 let _friends     = [];
 let _unsubscribes = [];
@@ -146,8 +146,8 @@ function renderMessagesList() {
       ${unread > 0 ? `<div class="msg-unread-badge">${esc(unread)}</div>` : ''}`;
 
     row.addEventListener('click', () => {
-      // مسح الـ unread — markAsRead يكتب في Firebase
-      markAsRead(friend.uid);
+      // مسح الـ unread — markAsRead يكتب في Firebase: "قرأتُ حتى" أحدث رسالة ظاهرة في القائمة (3.3ج-1)
+      markAsRead(friend.uid, _lastMsgMap[friend.uid]?.ts);
       _unreadMap[friend.uid] = 0;
       updateBadge();
 

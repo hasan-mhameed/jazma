@@ -172,6 +172,8 @@ class Server {
     return new Promise((res, rej) => {
       clock.setTimeout(() => {
         if (client.dead) return;
+        // المعاملة تقرأ مسارها (Firebase يستمع إليه): بلا صلاحية قراءة تُرفض كلها (3.3ج-1 — قراءة الدعوات صارت لصاحبها ومرسلها)
+        if (!this.allowRead(client, path, 'transaction-read')) { clock.setTimeout(() => rej(DENIED()), client.down); return; }
         const cur = toRead(clone(this.getAt(path)));
         let out;
         try { out = fn(cur); } catch (e) { rej(e); return; }

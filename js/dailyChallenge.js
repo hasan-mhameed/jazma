@@ -1,7 +1,7 @@
 // 📄 dailyChallenge.js
-import { getDatabase, ref, get, set }
+import { getDatabase, ref, get, set, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1793468890";
+import { currentUser } from "./auth.js?v=1793490698";
 
 const db = getDatabase();
 
@@ -49,7 +49,7 @@ export async function saveDailyResult(result, myScore, oppScore, duration, displ
   await set(ref(db, `dailyChallenges/${todayStr()}/results/${currentUser.uid}`), {
     result, myScore, oppScore, duration,
     name: displayName || 'لاعب',
-    ts:   Date.now(),
+    ts:   serverTimestamp(),   // 3.3ج-1: وقت الخادم
   });
 }
 

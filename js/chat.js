@@ -1,9 +1,9 @@
 // 📄 chat.js — v12.5
-import { getDatabase, ref, push, onValue, update, get, query, limitToLast }
+import { getDatabase, ref, push, onValue, update, get, query, limitToLast, orderByChild, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getCurrentUser } from "./auth.js?v=1793468890";
+import { getCurrentUser } from "./auth.js?v=1793490698";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -18,6 +18,10 @@ const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
 function chatKey(uid1, uid2) { return [uid1, uid2].sort().join("_"); }
+// 3.3ج-1: آخر الرسائل بوقتها (ts — من الخادم) لا بمفتاحها: مفاتيح push يختارها الكاتب، فكان صديقٌ يكتب رسائل بمفاتيح
+// تُرتَّب بعد كل الحقيقية يُخرج الجديدة من نافذة آخر 100 للأبد. والوقت نفسه من الخادم، والقواعد لا تقبل وقتاً أبعد من
+// دقائق في المستقبل (رسالة "من المستقبل" كانت تبقى "الأخيرة" فتُسكت إشعاراته وتعلّق عدّاد غير المقروء)
+const lastMessages = (key, n) => query(ref(db, `chats/${key}`), orderByChild("ts"), limitToLast(n));
 
 // ─── إرسال رسالة ─────────────────────────────────────────────
 // 3.3أ-3: القواعد تعرف طرفي المحادثة من مفتاحها (chatKey) — لا يقرؤها ولا يكتب فيها غيرهما؛ والرسالة الجديدة
@@ -31,7 +35,7 @@ export async function sendMessage(toUid, text) {
     fromUid:   from.uid,
     fromName:  from.displayName || "لاعب",
     text:      text.trim(),
-    ts:        Date.now(),
+    ts:        serverTimestamp(),   // 3.3ج-1: وقت الخادم (الترتيب والإشعارات)
     status:    "sent", // sent → delivered → read
   });
   return msgRef.key;
@@ -42,7 +46,7 @@ export function markDelivered(toUid) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid) return;
   const key = chatKey(myUid, toUid);
-  const q   = query(ref(db, `chats/${key}`), limitToLast(50));
+  const q   = lastMessages(key, 50);
   get(q).then(snap => {
     const updates = {};
     snap.forEach(child => {
@@ -56,13 +60,27 @@ export function markDelivered(toUid) {
 }
 
 // ─── تعليم الرسائل كـ read ────────────────────────────────────
-export function markRead(toUid) {
+// 3.3ج-1 (مراجعة): "قرأتُ حتى" = وقت أحدث رسالة **رأيتها** (upToTs — وقت خادم كأوقات الرسائل)، لا لحظة الكتابة: كتابة
+// بوقت الخادم وأنا بلا شبكة تنتظر حتى أعود فتأخذ وقت عودتي — فتُعدّ رسائل وصلت في غيابي مقروءة وأنا لم أرها.
+// بلا upToTs (لا رسائل معروفة بعد) لا نكتب شيئاً — أول لقطة للمحادثة تكتبه.
+// ولا يرجع للوراء (مراجعة ج-1، الجولة 3): القواعد ترفض قيمة أقدم من المخزّنة (جهاز بنسخة محلية أقدم كان يُرجع رسائل قرأها
+// جهاز آخر "غير مقروءة")؛ وهنا لا نعيد كتابة ما لا يتقدّم على آخر ما كتبته هذه الصفحة (chatUI يستدعي markAsRead
+// وmarkRead معاً في كل لقطة، فكانت القيمة نفسها تُكتب مرتين كل مرة)
+const _wroteLastRead = new Map();
+const writeLastRead = (myUid, key, upToTs) => {
+  if (typeof upToTs !== "number" || !isFinite(upToTs)) return;
+  const k = `${myUid}/${key}`;
+  if (_wroteLastRead.get(k) >= upToTs) return;
+  _wroteLastRead.set(k, upToTs);
+  update(ref(db), { [`users/${myUid}/lastRead/${key}`]: upToTs }).catch(e => console.debug("lastRead", e?.code || e));
+};
+export function markRead(toUid, upToTs) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid) return;
   const key = chatKey(myUid, toUid);
   // نخزّن آخر قراءة في Firebase (يتبع الحساب على أي جهاز)
-  update(ref(db), { [`users/${myUid}/lastRead/${key}`]: Date.now() });
-  const q = query(ref(db, `chats/${key}`), limitToLast(50));
+  writeLastRead(myUid, key, upToTs);
+  const q = lastMessages(key, 50);
   get(q).then(snap => {
     const updates = {};
     snap.forEach(child => {
@@ -80,7 +98,7 @@ export function listenMessages(toUid, cb) {
   const from = getCurrentUser();
   if (!from) return () => {};
   const key = chatKey(from.uid, toUid);
-  const chatQuery = query(ref(db, `chats/${key}`), limitToLast(100));
+  const chatQuery = lastMessages(key, 100);
   const unsubscribe = onValue(chatQuery, (snap) => {
     const messages = [];
     snap.forEach(child => {
@@ -104,7 +122,7 @@ export function listenUnread(friends, cb) {
   friends.forEach(friend => {
     const key      = chatKey(myUid, friend.uid);
     const lastRead = 0;
-    const q        = query(ref(db, `chats/${key}`), limitToLast(50));
+    const q        = lastMessages(key, 50);
     const unsubscribe = onValue(q, (snap) => {
       let count = 0;
       snap.forEach(child => {
@@ -119,11 +137,10 @@ export function listenUnread(friends, cb) {
   return () => unsubs.forEach(fn => fn());
 }
 
-export function markAsRead(toUid) {
+export function markAsRead(toUid, upToTs) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid) return;
-  const key = chatKey(myUid, toUid);
-  update(ref(db), { [`users/${myUid}/lastRead/${key}`]: Date.now() });
+  writeLastRead(myUid, chatKey(myUid, toUid), upToTs);
 }
 
 // ─── جلب خريطة آخر قراءة من Firebase ─────────────────────────

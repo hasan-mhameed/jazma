@@ -979,8 +979,8 @@ async function chatRealRules() {
   r.ok(bMsgs.some(m => m.text === 'مرحبا'), 'باسل لا يرى رسالة أحمد (استماعه رُفض؟)');
   B.markDelivered('uA'); await wait(300);
   r.ok(S.getAt(`chats/uA_uB/${key}/status`) === 'delivered', `تعليم "وصلت" لم يُكتب (${S.getAt(`chats/uA_uB/${key}/status`)})`);
-  B.markRead('uA'); await wait(400);
-  r.ok(S.getAt(`chats/uA_uB/${key}/status`) === 'read' && S.getAt('users/uB/lastRead/uA_uB') > 0,
+  B.markRead('uA', bMsgs[bMsgs.length - 1]?.ts); await wait(400);   // 3.3ج-1: "قرأتُ حتى" وقت أحدث رسالة ظهرت
+  r.ok(S.getAt(`chats/uA_uB/${key}/status`) === 'read' && S.getAt('users/uB/lastRead/uA_uB') === S.getAt(`chats/uA_uB/${key}/ts`),
     `تعليم "قُرئت" لم يُكتب (${S.getAt(`chats/uA_uB/${key}/status`)}، آخر قراءة ${S.getAt('users/uB/lastRead/uA_uB')})`);
   r.ok(aMsgs.find(m => m.id === key)?.status === 'read', 'أحمد لا يرى "قُرئت" على رسالته');
   // المرسل لا يعلّم رسالته بنفسه، ولا يعدّل نصها بعد إرسالها
@@ -1003,6 +1003,52 @@ async function chatRealRules() {
   r.ok(await denies(A.sendMessage('uB', 'بعد الحذف')), 'بعد حذف الصداقة: الإرسال لم يُرفض');
   r.ok((await dbGet(dbRef(B.__db, 'chats/uA_uB'))).exists(), 'بعد حذف الصداقة: التاريخ لم يعد مقروءاً');
   unA(); unB(); unC();
+  S.close();
+}
+
+// ── 3.3ج-1 (مراجعة، الجولة 3): "قرأتُ حتى" بنسخة الحزمة المحلية (ما لا يحاكيه المستوى الأول): (أ) فتحٌ وإغلاق بلا شبكة
+// من النسخة المحلية ورسالة وصلت في الغياب → تبقى غير مقروءة؛ (ب) حسابٌ بجهازين: الثاني قرأ أبعد، والأول بلا شبكة ونسخته
+// أقدم يفتح ويغلق → لا يرجع "قرأتُ حتى" للوراء على الخادم ولا عند الأول بعد عودته؛ (ج) رسالتي → "قرأتُ حتى" وقتها الحقيقي ──
+async function chatLastReadReal() {
+  const r = suite('3.3ج-1: "قرأتُ حتى" بالحزمة الحقيقية — فتح بلا شبكة لا يقرأ رسائل الغياب، وجهاز بنسخة أقدم لا يُرجعها للوراء');
+  const S = new FakeRTDB(); const port = await S.listen();
+  S.setAt('users/uA', { uid: 'uA', name: 'أحمد', friends: { uB: { name: 'باسل' } } });
+  S.setAt('users/uB', { uid: 'uB', name: 'باسل', friends: { uA: { name: 'أحمد' } } });
+  const src = new URL('../../js/chat.js', import.meta.url).pathname;
+  const A  = await import(pathToFileURL(genFriends('A', port, { src })).href);
+  const B1 = await import(pathToFileURL(genFriends('B1', port, { src, uid: 'uB' })).href);
+  const B2 = await import(pathToFileURL(genFriends('B2', port, { src, uid: 'uB' })).href);
+  // فتح المحادثة كما يفعل chatUI: كل لقطة → "قرأتُ حتى" وقت أحدث رسالة ظاهرة
+  const openChat = M => M.listenMessages('uA', msgs => { const n = msgs.length ? msgs[msgs.length - 1].ts : null; M.markAsRead('uA', n); M.markRead('uA', n); });
+  const LR = () => S.getAt('users/uB/lastRead/uA_uB');
+  const tsOf = k => S.getAt(`chats/uA_uB/${k}/ts`);
+  const unN = B1.listenMessages('uA', () => {});              // مستمع الإشعارات الدائم عند الجهاز الأول (يُبقي النسخة المحلية)
+  let b1View = null; const unL = B1.listenLastRead(m => { b1View = m.uA_uB ?? null; });   // ما تعرضه شارة غير المقروء عنده
+  await wait(300);
+  const k1 = await A.sendMessage('uB', 'م1'); await wait(400);
+  // (أ) بلا شبكة: فتح وإغلاق من النسخة المحلية، ورسالة تصل في الغياب
+  B1.__off(); await wait(100);
+  let un = openChat(B1); await wait(150); un();
+  const k2 = await A.sendMessage('uB', 'م2 في الغياب'); await wait(250);
+  B1.__on(); await wait(700);
+  r.ok(LR() === tsOf(k1) && LR() < tsOf(k2), `(أ) "قرأتُ حتى" ${LR()} — المطلوب وقت م1 ${tsOf(k1)} (م2 في الغياب ${tsOf(k2)} تبقى غير مقروءة)`);
+  // (ب) الجهاز الأول بلا شبكة (نسخته حتى م2)؛ الجهاز الثاني يقرأ م3؛ ثم الأول يفتح ويغلق من نسخته الأقدم ويعود
+  B1.__off(); await wait(100);
+  const k3 = await A.sendMessage('uB', 'م3'); await wait(250);
+  un = openChat(B2); await wait(500); un();
+  r.ok(LR() === tsOf(k3), `(ب) الجهاز الثاني قرأ م3 و"قرأتُ حتى" ${LR()} (المطلوب ${tsOf(k3)})`);
+  un = openChat(B1); await wait(150); un();
+  B1.__on(); await wait(900);
+  r.ok(LR() === tsOf(k3), `(ب) جهاز بنسخة أقدم أرجع "قرأتُ حتى" للوراء على الخادم: ${LR()} (المطلوب ${tsOf(k3)} — وقت م2 ${tsOf(k2)})`);
+  r.ok(b1View === tsOf(k3), `(ب) الجهاز الأول بعد عودته يعرض "قرأتُ حتى" ${b1View} لا قيمة الخادم ${tsOf(k3)} (شارة غير مقروء خاطئة عنده)`);
+  // (ج) رسالتي في محادثة مفتوحة: "قرأتُ حتى" ينتهي على وقتها الحقيقي من الخادم (لا التقدير المحلي قبله)
+  un = openChat(B2); await wait(400);
+  const k4 = await B2.sendMessage('uA', 'رسالتي'); await wait(600); un();
+  r.ok(LR() === tsOf(k4), `(ج) بعد رسالتي "قرأتُ حتى" ${LR()} — المطلوب وقتها على الخادم ${tsOf(k4)}`);
+  const lrWrites = S.log.filter(l => l.startsWith('merge') && l.includes('lastRead')).length;
+  // (د) لا تكرار: "قرأتُ حتى" تُكتب حين تتقدّم فقط (كانت تُكتب مرتين في كل لقطة — 12 كتابة ورفضان هنا بدل 4 ورفض)
+  r.ok(lrWrites + S.denied.length <= 6, `(د) "قرأتُ حتى" كُتبت ${lrWrites} مرة ورُفضت ${S.denied.length} — تكرار لا يتقدّم`);
+  unN(); unL();
   S.close();
 }
 
@@ -1160,7 +1206,7 @@ const all = [offlineExitThenReconnect, blipDuringWithdraw, onlineExit, creatorSt
   duoCancelThenClose, duoJoinAckLost, duoCodeJoinAckLost, duoCreateBlip, duoAbortRetried, duoCancelDuringReopen,
   duoHostBlipRestores, duoRestoreKeepsGuestOut, duoEvictedGuestOp, duoOrphanNodeRestores, duoCancelStrayFinished,
   inviteConditionalRemovals, registrationProfile, friendsRealRules, presenceHealsReal, mixedVersions, twoTabAccept,
-  chatRealRules, roomCodeCollisionReal, lobbyRacesReal];
+  chatRealRules, chatLastReadReal, roomCodeCollisionReal, lobbyRacesReal];
 // ONLY=اسم1,اسم2 npm test — تشغيل فحوص بعينها (للتطوير وفحص الطفرات)
 const pick = process.env.ONLY ? all.filter(f => process.env.ONLY.split(',').includes(f.name)) : all;
 console.log('\n🔬 firebase.js بحزمة Firebase الحقيقية');

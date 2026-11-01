@@ -995,6 +995,47 @@ export async function chatUnderRules() {
     $(H, 'chat-input').value = 'مسودة جديدة';
     await H.settle(0, 20);
     r.ok($(H, 'chat-input').value === 'مسودة جديدة' && errShown(), `(د) الخانة "${$(H, 'chat-input').value}" والتنبيه ${errShown()} (المطلوب: المسودة باقية + تنبيه)`);
+    // (هـ) 3.3ج-1: آخر الرسائل بوقتها لا بمفتاحها — 100 رسالة قديمة بمفاتيح تُرتَّب بعد كل مفتاح push حقيقي (يختارها الكاتب)
+    // كانت تُخرج كل رسالة جديدة من نافذة آخر 100 للأبد: لا تظهر في المحادثة ولا يصل إشعارها
+    const junk = {}; for (let i = 0; i < 100; i++) junk['~' + String(i).padStart(4, '0')] = { fromUid: 'b', fromName: 'باسل', text: 'قديمة' + i, ts: 1000 + i, status: 'read' };
+    H.fb.set('chats/b_me', { ...chat(), ...junk });
+    $(H, 'chat-back-btn').click(); await H.settle();
+    await openChatWith('باسل');
+    const wn = H.fb.writeAs('b', [['chats/b_me/-Nb9', { fromUid: 'b', fromName: 'باسل', text: 'جديدة بعد الحشو', ts: Date.now() + 50, status: 'sent' }]]);
+    await H.settle(0, 20);
+    r.ok(wn.ok && $(H, 'chat-messages').textContent.includes('جديدة بعد الحشو'), `(هـ) رسالة جديدة بعد 100 رسالة بمفاتيح "متأخرة" لا تظهر (كتابة: ${wn.ok})`);
+    $(H, 'chat-back-btn').click(); await H.settle();
+    const wn2 = H.fb.writeAs('b', [['chats/b_me/-Nb99', { fromUid: 'b', fromName: 'باسل', text: 'إشعار بعد الحشو', ts: Date.now() + 80, status: 'sent' }]]);
+    await H.settle(0, 20);
+    const nt = H.doc.getElementById('chat-notification');
+    r.ok(wn2.ok && !!nt && nt.textContent.includes('إشعار بعد الحشو'), `(هـ) إشعار الرسالة الجديدة لم يصل (${nt ? nt.textContent.slice(0, 40) : 'لا إشعار'})`);
+    // (و) 3.3ج-1 (مراجعة): "قرأتُ حتى" = وقت أحدث رسالة ظهرت، لا لحظة الكتابة — فتحتُ المحادثة بلا شبكة وأغلقتها قبل
+    // العودة: لا شيء يُكتب (كانت كتابة بوقت الخادم تنتظر عودتي فتأخذ وقتها، فتُعدّ رسالة وصلت في غيابي "مقروءة" ولم أرها)
+    await openChatWith('باسل');
+    const lr0 = H.fb.get('users/me/lastRead/b_me');
+    $(H, 'chat-back-btn').click(); await H.settle();
+    H.fb.connected = false;
+    await openChatWith('باسل');
+    H.fb.set('chats/b_me/-Nb7', { fromUid: 'b', fromName: 'باسل', text: 'في غيابك', ts: (lr0 || 0) + 1, status: 'sent' });
+    $(H, 'chat-back-btn').click(); await H.settle(50);
+    H.fb.connect(); await H.settle(0, 20);
+    const lr1 = H.fb.get('users/me/lastRead/b_me');
+    r.ok(typeof lr0 === 'number' && lr1 === lr0, `(و) فتح/إغلاق بلا شبكة غيّر "قرأتُ حتى" (${lr0} → ${lr1}) — رسالة الغياب صارت "مقروءة" دون أن تظهر`);
+    // (ز) مراجعة ج-1 (الجولة 3): "قرأتُ حتى" لا يرجع للوراء — جهازي الآخر قرأ أبعد من أحدث ما ستعرضه هذه الشاشة (الحالة
+    // الحقيقية — جهاز بلا شبكة بنسخة محلية أقدم — في الحزمة الحقيقية chatLastReadReal، فهذا المستوى بلا نسخة محلية):
+    // كتابة الشاشة الأدنى تُرفض بهدوء (لا خطأ ظاهر) وتبقى قيمة الخادم.
+    // قيمة "الجهاز الآخر" قبل الآن (قيمة في المستقبل — ساعة نسخة قديمة — يجوز تصحيحها للوراء، فلا تصلح هنا)، ورسالة وقتها
+    // قبلها بقليل لم تكتبها هذه الصفحة بعد (فلا يمنع الكتابةَ أنها كتبت القيمة نفسها من قبل — ليصل الطلب للقواعد)
+    while (H.win.Date.now() <= (lr1 || 0) + 200) await new Promise(res => setTimeout(res, 10));
+    const lrOther = H.win.Date.now() - 1;
+    H.fb.set('users/me/lastRead/b_me', lrOther); await H.settle(0, 20);
+    const wz = H.fb.writeAs('b', [['chats/b_me/-Nb999', { fromUid: 'b', fromName: 'باسل', text: 'قرأها جهازك الآخر', ts: lrOther - 50, status: 'sent' }]]);
+    await H.settle(0, 20);
+    await openChatWith('باسل');
+    r.ok(wz.ok && $(H, 'chat-messages').textContent.includes('قرأها جهازك الآخر'), `(ز) رسالة التجربة لم تُكتب/تظهر (${wz.ok})`);
+    $(H, 'chat-back-btn').click(); await H.settle(0, 20);
+    const lr2 = H.fb.get('users/me/lastRead/b_me');
+    r.ok(lr2 === lrOther, `(ز) شاشة بنسخة أقدم أرجعت "قرأتُ حتى" للوراء (${lrOther} → ${lr2})`);
     r.ok(H.errors.length === 0, 'أخطاء' + errText(H));
   } catch (e) { r.ok(false, 'خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
   H.close();

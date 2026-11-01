@@ -262,9 +262,55 @@ export function rulesMatrix() {
   r.ok(!W(NEW, 'A', [['profiles/A', { xp: 'كثير' }]]), 'خبرة ليست رقماً قُبلت');
   r.ok(W(NEW, 'A', [['users/B/friendRequests/A', { name: 'أ' }], ['users/A/sentRequests/B', 1]]) && !W(NEW, 'A', [['users/B/friendRequests/A', { name: 'ن'.repeat(129) }], ['users/A/sentRequests/B', 1]]),
     'حدّ اسم الطلب (128) لم يُطبَّق');
-  // تحدي اليوم كما كان
-  r.ok(canRead(NEW, 'dailyChallenges/d1/results', { uid: 'A' }) && W(NEW, 'A', [['dailyChallenges/d1/results/A', { s: 1 }]]) && !W(NEW, 'A', [['dailyChallenges/d1/results/B', { s: 1 }]]),
-    'تحدي اليوم تغيّر');
+  // ── 3.3ج-1: تحدي اليوم والدعوات والمحادثة — حدود الحقول، ومن يقرأ الدعوة، ووقت الرسالة ──
+  const T1 = 1_800_000_000_000;
+  const RW1 = (uid, writes, root = base) => checkWrite(NEW, writes, { uid, root, now: T1 }).ok;
+  const RD1 = (uid, p, root) => canRead(NEW, p, { uid, root, now: T1 });
+  // تحدي اليوم: نتيجتي بشكلها كما يكتبها الكود، والمتصدرون يقرؤها كل مسجّل — لا نتيجة غيري ولا حقول/أرقام خارج الحد
+  const daily = { result: 'win', myScore: 9, oppScore: 7, duration: 95, name: 'أ', ts: T1 };
+  r.ok(canRead(NEW, 'dailyChallenges/d1/results', { uid: 'A' }) && RW1('A', [['dailyChallenges/d1/results/A', daily]]) && !RW1('A', [['dailyChallenges/d1/results/B', daily]]),
+    'تحدي اليوم: نتيجتي لا تُكتب أو نتيجة غيري تُكتب أو المتصدرون لا يُقرؤون');
+  r.ok(!RW1('A', [['dailyChallenges/d1/results/A', { ...daily, result: 'بطل' }]]) && !RW1('A', [['dailyChallenges/d1/results/A', { ...daily, myScore: 9999 }]])
+    && !RW1('A', [['dailyChallenges/d1/results/A', { ...daily, duration: -5 }]]) && !RW1('A', [['dailyChallenges/d1/results/A', { ...daily, extra: 'x'.repeat(500) }]])
+    && !RW1('A', [['dailyChallenges/d1/results/A', { ...daily, oppScore: 9999 }]]) && !RW1('A', [['dailyChallenges/d1/results/A', { ...daily, duration: 90_000 }]])
+    && !RW1('A', [['dailyChallenges/d1/results/A', { ...daily, ts: 'أمس' }]]) && !RW1('A', [['dailyChallenges/d1/results/A', { ...daily, name: 'ن'.repeat(129) }]]),
+    'تحدي اليوم: نتيجة بقيمة غير معروفة أو نقاط/مدة خارج الحد أو حقل غريب أو وقت ليس رقماً أو اسم طويل قُبلت');
+  // ساعة جهاز متقدّمة (مراجعة ج-1): الأوقات التي لا ترتّب شيئاً (التحدي، الدعوة، الردّ) بلا سقف — لا يُفشل جهازٌ ساعته متقدّمة
+  // الإرسال (الكود الجديد يكتب وقت الخادم؛ والقديم ساعته)
+  r.ok(RW1('A', [['dailyChallenges/d1/results/A', { ...daily, ts: T1 + 3_600_000 }]]), 'تحدي اليوم من جهاز ساعته متقدّمة ساعة رُفض');
+  // الدعوة: لا يقرؤها إلا صاحب الخانة ومرسلها (فيها رمز غرفة الدعوة) — ولا أحد يقرأ كل الدعوات
+  const inv = { fromUid: 'A', fromName: 'أ', roomCode: '123456', cfg: { rows: 4, cols: 4 }, sentAt: T1 };
+  const withInv = JSON.parse(JSON.stringify(base)); withInv.invites = { B: inv }; withInv.inviteRejections = { A: { rejectedBy: 'B', name: 'ب', ts: T1, roomCode: '123456', reason: 'rejected' } };
+  r.ok(RD1('B', 'invites/B', withInv) && RD1('A', 'invites/B', withInv), 'الدعوة لا يقرؤها صاحب خانتها أو مرسلها');
+  r.ok(!RD1('V', 'invites/B', withInv) && !RD1('V', 'invites', withInv) && !RD1('B', 'invites', withInv), 'غريب يقرأ دعوة غيره، أو أحد يقرأ كل الدعوات');
+  r.ok(RD1('A', 'inviteRejections/A', withInv) && RD1('B', 'inviteRejections/A', withInv) && !RD1('V', 'inviteRejections/A', withInv) && !RD1('V', 'inviteRejections', withInv),
+    'الردّ لا يقرؤه صاحبه أو رافضه، أو يقرؤه غريب');
+  r.ok(RW1('A', [['invites/B', inv]]) && !RW1('A', [['invites/B', { ...inv, extra: 1 }]]) && !RW1('A', [['invites/B', { ...inv, cfg: { rows: 99, cols: 4 } }]])
+    && !RW1('A', [['invites/B', { ...inv, cfg: { rows: 4, cols: 4, junk: 'x' } }]]) && !RW1('A', [['invites/B', { ...inv, cfg: { rows: 1, cols: 4 } }]])
+    && !RW1('A', [['invites/B', { ...inv, cfg: 'x'.repeat(1000) }]]) && !RW1('A', [['invites/B', { ...inv, cfg: { rows: 4 } }]]) && !RW1('A', [['invites/B', { ...inv, sentAt: 'أمس' }]]),
+    'شكل الدعوة: الصحيحة مرفوضة، أو حقل غريب/لوحة خارج الحد أو ناقصة أو نصّاً/وقت ليس رقماً قُبل');
+  r.ok(RW1('A', [['invites/B', { ...inv, sentAt: T1 + 3_600_000 }]]) && RW1('A', [['inviteRejections/B', { rejectedBy: 'A', name: 'أ', ts: T1 + 3_600_000, roomCode: '1', reason: 'rejected' }]]),
+    'دعوة/ردّ من جهاز ساعته متقدّمة ساعة رُفض');
+  const rej = { rejectedBy: 'A', name: 'أ', ts: T1, roomCode: '1', reason: 'playing' };
+  r.ok(RW1('A', [['inviteRejections/B', rej]]) && !RW1('A', [['inviteRejections/B', { ...rej, reason: 'شتيمة' }]]) && !RW1('A', [['inviteRejections/B', { ...rej, extra: 1 }]])
+    && !RW1('A', [['inviteRejections/B', { ...rej, ts: 'أمس' }]]), 'شكل الردّ: الصحيح مرفوض، أو سبب غير معروف/حقل غريب/وقت ليس رقماً قُبل');
+  // الرسالة: وقتها رقم لا يتجاوز وقت الخادم بأكثر من 10 دقائق (رسالة "من المستقبل" كانت تبقى الأخيرة للأبد)
+  const chatRoot = JSON.parse(JSON.stringify(base));
+  const msg1 = (ts) => ({ fromUid: 'A', fromName: 'أ', text: 'مرحبا', ts, status: 'sent' });
+  r.ok(RW1('A', [['chats/A_B/x1', msg1(T1)]], chatRoot) && RW1('A', [['chats/A_B/x2', msg1(T1 + 600_000)]], chatRoot) && !RW1('A', [['chats/A_B/x3', msg1(T1 + 600_001)]], chatRoot)
+    && !RW1('A', [['chats/A_B/x4', msg1(T1 + 86_400_000)]], chatRoot), 'وقت الرسالة: الآن أو حدّ الدقائق العشر مرفوض، أو ما بعده/"من المستقبل" (يوم) قُبل');
+  r.ok(JSON.stringify(NEW.rules.chats.$key['.indexOn']) === '["ts"]', 'فهرس ts على المحادثة غير موجود (الاستعلام بالوقت ينزّل المحادثة كاملة)');
+  // "قرأتُ حتى" لا يرجع للوراء (مراجعة ج-1، الجولة 3): جهاز فتح المحادثة بلا شبكة من نسخة أقدم لا يُرجع رسائل قرأها
+  // جهاز آخر "غير مقروءة" — إلا إن كانت القيمة المخزّنة في المستقبل (ساعة نسخة قديمة متقدّمة كتبت Date.now()) فتُصحَّح
+  const lr = v => { const t = JSON.parse(JSON.stringify(base)); if (v !== undefined) t.users.A.lastRead = { A_B: v }; return t; };
+  r.ok(RW1('A', [['users/A/lastRead/A_B', T1 - 5]], lr()) && RW1('A', [['users/A/lastRead/A_B', T1 - 5]], lr(T1 - 9))
+    && RW1('A', [['users/A/lastRead/A_B', T1 - 5]], lr(T1 - 5)), '"قرأتُ حتى": أول كتابة، أو تقدّم، أو القيمة نفسها مرفوضة');
+  r.ok(!RW1('A', [['users/A/lastRead/A_B', T1 - 9]], lr(T1 - 5)), '"قرأتُ حتى" رجع للوراء (جهاز بلا شبكة من نسخة أقدم)');
+  r.ok(RW1('A', [['users/A/lastRead/A_B', T1 - 9]], lr(T1 + 3_600_000)) && RW1('A', [['users/A/lastRead/A_B', T1 - 9]], lr('x')),
+    '"قرأتُ حتى" مخزّنة في المستقبل (ساعة قديمة) أو ليست رقماً لا تُصحَّح');
+  r.ok(!RW1('A', [['users/A/lastRead/A_B', 'أمس']], lr()) && !RW1('B', [['users/A/lastRead/A_B', T1]], lr()),
+    '"قرأتُ حتى" ليست رقماً، أو يكتبها غير صاحبها، قُبلت');
+  r.ok(RW1('A', [['users/A/lastRead', null]], lr(T1)), 'حذف "قرأتُ حتى" (ملفي) رُفض');
   // ولماذا كان لا بدّ منها: القواعد السابقة ترفض الطلب والحذف والقبول
   r.ok(!W(OLD, 'A', [['users/B/friendRequests/A', { name: 'أ' }]]) && !W(OLD, 'A', [['users/B/friends/A', null]])
     && !W(OLD, 'A', [['users/B/friends/A', { name: 'أ' }]], withToken), 'القواعد السابقة كانت تسمح بالأصدقاء (التشخيص خاطئ؟)');

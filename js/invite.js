@@ -10,11 +10,11 @@
 // ذاكرة محلية باردة تعطي null: نرجع null (لا يُلغي) — الخادم يرفضها إن كانت القيمة موجودة فتُعاد
 // المعاملة بقيمتها الحقيقية (إرجاع undefined على null بارد يُنهيها دون سؤال الخادم).
 
-import { getDatabase, ref, set, onValue, remove, runTransaction }
+import { getDatabase, ref, set, onValue, remove, runTransaction, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getCurrentUser } from "./auth.js?v=1793468890";
+import { getCurrentUser } from "./auth.js?v=1793490698";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -50,7 +50,7 @@ export async function sendGameInvite(toUid, roomCode, cfg) {
     fromName: from.displayName || "لاعب",
     roomCode: roomCode,
     cfg:      { rows: cfg.rows, cols: cfg.cols },
-    sentAt:   Date.now(),
+    sentAt:   serverTimestamp(),   // 3.3ج-1: وقت الخادم (ساعة جهاز متقدّمة لا تُفشل الإرسال؛ والمطابقة بقيمة الخادم)
   });
 }
 
@@ -75,7 +75,7 @@ export function replyToInvite(invite, reason = "rejected") {
   quiet(set(ref(db, `inviteRejections/${invite.fromUid}`), {
     rejectedBy: me.uid,
     name:       me.displayName || "لاعب",
-    ts:         Date.now(),
+    ts:         serverTimestamp(),   // 3.3ج-1: وقت الخادم
     roomCode:   invite.roomCode || "",
     reason,
   }));

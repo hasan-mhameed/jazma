@@ -1,11 +1,11 @@
 // 📄 ui/chatUI.js
 // المحادثة بين الأصدقاء + الإشعارات
-import { sendMessage, listenMessages, listenUnread, markAsRead, markDelivered, markRead } from "../chat.js?v=1793468890";
-import { getCurrentUser } from "../auth.js?v=1793468890";
-import { audioManager } from "../audio/audioManager.js?v=1793468890";
-import { playNotifSound } from "../audio/notif.js?v=1793468890";
-import { asText, firstInitial } from "./safeText.js?v=1793468890";
-import { entriesWithKey } from "../friends.js?v=1793468890";
+import { sendMessage, listenMessages, listenUnread, markAsRead, markDelivered, markRead } from "../chat.js?v=1793490698";
+import { getCurrentUser } from "../auth.js?v=1793490698";
+import { audioManager } from "../audio/audioManager.js?v=1793490698";
+import { playNotifSound } from "../audio/notif.js?v=1793490698";
+import { asText, firstInitial } from "./safeText.js?v=1793490698";
+import { entriesWithKey } from "../friends.js?v=1793490698";
 import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const EMOJIS = ["😊","😂","❤️","👍","🔥","🎮","😍","🤣","😭","💯",
@@ -111,14 +111,15 @@ export function openChat(friend) {
     // نُطلق حدث خارجي بدل استدعاء مباشر
     document.dispatchEvent(new CustomEvent("chat:invite", { detail: friend }));
   };
-  markAsRead(friend.uid); markRead(friend.uid); markDelivered(friend.uid);
+  markDelivered(friend.uid);   // "قرأتُ حتى" تكتبه أول لقطة للرسائل أدناه بوقت أحدث ما ظهر (3.3ج-1)
   document.getElementById("friends-panel").classList.add("hidden");
   document.getElementById("chat-panel").classList.remove("hidden");
   document.getElementById("chat-input").focus();
   if (chatUnsub) chatUnsub();
   chatUnsub = listenMessages(friend.uid, msgs => {
     renderMessages(msgs, myUid);
-    markAsRead(friend.uid); markRead(friend.uid);
+    const newest = msgs.length ? msgs[msgs.length - 1].ts : null;   // أحدث ما ظهر (وقت خادم)
+    markAsRead(friend.uid, newest); markRead(friend.uid, newest);
   });
 }
 

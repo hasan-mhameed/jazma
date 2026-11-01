@@ -51,6 +51,11 @@
             ".read": "$toUid === auth.uid",
             ".write": "auth !== null && $toUid === auth.uid && !newData.exists()"
           }
+        },
+        "lastRead": {
+          "$key": {
+            ".validate": "newData.isNumber() && (!data.exists() || !data.isNumber() || newData.val() >= data.val() || data.val() > now)"
+          }
         }
       }
     },
@@ -118,32 +123,68 @@
       }
     },
     "invites": {
-      ".read": "auth !== null",
       "$toUid": {
+        ".read": "auth !== null && ($toUid === auth.uid || data.child('fromUid').val() === auth.uid)",
         ".write": "auth !== null && ( ($toUid === auth.uid && !newData.exists()) || (newData.exists() && newData.child('fromUid').val() === auth.uid && root.child('users').child($toUid).child('friends').child(auth.uid).exists()) || (!newData.exists() && data.child('fromUid').val() === auth.uid) || (!data.exists() && !newData.exists()) )",
+        "fromUid": {
+          ".validate": "newData.isString() && newData.val().length <= 128"
+        },
         "fromName": {
           ".validate": "newData.isString() && newData.val().length <= 128"
         },
         "roomCode": {
           ".validate": "newData.isString() && newData.val().length <= 16"
+        },
+        "cfg": {
+          ".validate": "newData.hasChildren(['rows', 'cols'])",
+          "rows": {
+            ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 12"
+          },
+          "cols": {
+            ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 12"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "sentAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
         }
       }
     },
     "inviteRejections": {
-      ".read": "auth !== null",
       "$fromUid": {
+        ".read": "auth !== null && ($fromUid === auth.uid || data.child('rejectedBy').val() === auth.uid)",
         ".write": "auth !== null && ( ($fromUid === auth.uid && !newData.exists()) || (newData.exists() && newData.child('rejectedBy').val() === auth.uid && root.child('users').child($fromUid).child('friends').child(auth.uid).exists()) || (!data.exists() && !newData.exists()) )",
+        "rejectedBy": {
+          ".validate": "newData.isString() && newData.val().length <= 128"
+        },
         "name": {
           ".validate": "newData.isString() && newData.val().length <= 128"
         },
         "roomCode": {
           ".validate": "newData.isString() && newData.val().length <= 16"
+        },
+        "ts": {
+          ".validate": "newData.isNumber()"
+        },
+        "reason": {
+          ".validate": "newData.val() === 'rejected' || newData.val() === 'playing'"
+        },
+        "$other": {
+          ".validate": false
         }
       }
     },
     "chats": {
       "$key": {
         ".read": "auth !== null && ($key.beginsWith(auth.uid + '_') || $key.endsWith('_' + auth.uid))",
+        ".indexOn": [
+          "ts"
+        ],
         "$msgid": {
           ".write": "auth !== null && ($key.beginsWith(auth.uid + '_') || $key.endsWith('_' + auth.uid)) && !data.exists() && newData.exists() && newData.hasChildren(['fromUid', 'text', 'ts']) && newData.child('fromUid').val() === auth.uid && (!newData.child('status').exists() || newData.child('status').val() === 'sent') && root.child('users').child($key.replace(auth.uid + '_', '').replace('_' + auth.uid, '')).child('friends').child(auth.uid).exists()",
           "fromUid": {
@@ -156,7 +197,7 @@
             ".validate": "newData.isString() && newData.val().length <= 2000"
           },
           "ts": {
-            ".validate": "newData.isNumber()"
+            ".validate": "newData.isNumber() && newData.val() <= now + 600000"
           },
           "status": {
             ".write": "auth !== null && ($key.beginsWith(auth.uid + '_') || $key.endsWith('_' + auth.uid)) && data.parent().exists() && newData.exists() && data.parent().child('fromUid').val() !== auth.uid",
@@ -177,7 +218,28 @@
         "results": {
           ".read": "auth !== null",
           "$uid": {
-            ".write": "$uid === auth.uid"
+            ".write": "$uid === auth.uid",
+            "result": {
+              ".validate": "newData.val() === 'win' || newData.val() === 'loss' || newData.val() === 'draw'"
+            },
+            "myScore": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 200"
+            },
+            "oppScore": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 200"
+            },
+            "duration": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 86400"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 128"
+            },
+            "ts": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
           }
         }
       }

@@ -37,7 +37,7 @@ const sections = [
   ['🎮 دعوات الأصدقاء', [() => IV.inviteAcceptAndAgain(verbose), () => IV.inviteReject(verbose), () => IV.inviteStaleReply(verbose),
     () => IV.inviteCancelled(verbose), () => IV.inviteBusy(verbose), () => IV.inviteFromWaiting(verbose),
     () => IV.inviteInviterBlip(verbose), () => IV.inviteExpires(verbose), () => IV.inviteOneAtATime(verbose),
-    () => IV.inviteReviewFixes(verbose), () => IV.inviteDuringPendingOp(verbose)]],
+    () => IV.inviteReviewFixes(verbose), () => IV.inviteDuringPendingOp(verbose), () => IV.inviteSpoofedReply(verbose)]],
   ['🟢 الحضور', [() => IV.presenceFollowsMatch(verbose), () => IV.presenceHeals(verbose)]],
   ['🔤 أمان النصوص', [() => TS.namesInSearchAndVote(verbose), () => TS.namesInCodeLobby(verbose), () => TS.roomMaxIsText(verbose)]],
   ['🔐 تحضير قفل الغرف (3.3ب-1)', [() => RM.lobbyLeaveUnderMemberRules(verbose), () => RM.roomCodeCollision(verbose)]],
