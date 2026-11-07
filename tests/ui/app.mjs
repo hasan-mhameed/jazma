@@ -22,6 +22,8 @@ const injected = H => H.doc.querySelectorAll('.xss').length + (H.win.__xss !== u
 // والقواعد القديمة (الإنتاج حتى 2026-10-19) لفحص التصرّف حين تُرفض الكتابة
 export const RULES = JSON.parse(fs.readFileSync(path.join(PROJECT, 'database.rules.json'), 'utf8'));
 export const OLD_RULES = JSON.parse(fs.readFileSync(new URL('../shared/rules_prod_2026-10-19.json', import.meta.url), 'utf8'));
+// قواعد v36.8 (3.3ج-1) كما نُشرت — لفحص "الكود أولاً ثم القواعد" في 3.3ج-2 (الكود الجديد فوق القواعد السابقة)
+export const C1_RULES = JSON.parse(fs.readFileSync(new URL('../shared/rules_c1_v36.8.json', import.meta.url), 'utf8'));
 export async function bootApp({ user = ME, data = {}, cold = false, rules = RULES, autoProfiles = true } = {}) {
   const H = boot({ firebase: true, polyfills: true, cold, rules });
   for (const [p, v] of Object.entries(data)) H.fb.set(p, v);
@@ -311,7 +313,7 @@ export async function namesAndPhotosInDomUIs() {
       `فشل البحث: الزر "${$(H, 'friends-search-btn').textContent}" والنتيجة "${$(H, 'search-results').textContent.trim().slice(0, 40)}"`);
     // طلبات الصداقة وقائمة الأصدقاء: المعرّف من مفتاح المدخل لا من حقل uid داخله (يكتبه الطرف الآخر — مراجعة v36.0 الرابعة)
     // (v36.1 — 1.13: طلب حقيقي يحمل دليل مرسله في ملفه sentRequests/<أنا> — بدونه لا يُقبل)
-    H.fb.set('users/x2', { uid: 'x2', name: 'إكس', sentRequests: { me: 1 } });
+    H.fb.set('users/x2', { uid: 'x2', name: 'إكس', sentRequests: { me: Date.now() } });
     H.fb.set('users/me/friendRequests/x2', { uid: 'w', name: 'إكس' });
     H.fb.set('users/me/friendRequests/nouid', { name: 'بلا معرّف' });
     H.fb.set('users/me/friendRequests/ghost', { uid: 'ghost', name: 'شبح' });
@@ -369,6 +371,7 @@ export async function namesAndPhotosInDomUIs() {
 // القواعد القديمة (الإنتاج حتى 2026-10-19) كانت ترفض كل كتابة في ملف الآخر: لا طلب يصل، والحذف من طرف واحد،
 // والواجهة تقول "✅ أُرسل" قبل الكتابة. الآن: الطلب = صندوقه + دليلي في ملفي، والقبول والحذف من الطرفين بكتابة واحدة.
 // الطرف الآخر يُحاكى بـ fb.writeAs (جهازه يكتب بالقواعد نفسها).
+const SVT = { '.sv': 'timestamp' };   // 3.3ج-2: الطلب ودليله بوقت الخادم (كما يكتبهما friends.js)
 const searchFor = async (H, q) => { $(H, 'friends-search-input').value = q; $(H, 'friends-search-btn').click(); await H.settle(0, 10); };
 const flashText = H => ($(H, 'friends-flash') && !$(H, 'friends-flash').classList.contains('hidden')) ? $(H, 'friends-flash').textContent : '';
 // قبول من جهاز الطرف الآخر كما يفعل friends.js (يستهلك الدليل)؛ consume=false: كما تفعل نسخة أقدم (يبقى الدليل لتنظيف المرسل)
@@ -503,7 +506,7 @@ export async function friendsUnderRules() {
     const H = await bootApp({ data: {
       'users/me': { uid: 'me', name: 'أنا', friendRequests: { r: { uid: 'r', name: 'رامي' }, k: { uid: 'k', name: 'كمال' } },
         friends: { k: { uid: 'k', name: 'كمال' } } },
-      'users/r': { uid: 'r', name: 'رامي', sentRequests: { me: 1 } },
+      'users/r': { uid: 'r', name: 'رامي', sentRequests: { me: Date.now() } },
       'users/k': { uid: 'k', name: 'كمال', friends: { me: { uid: 'me', name: 'أنا' } } },
     } });
     try {
@@ -526,7 +529,7 @@ export async function friendsUnderRules() {
     const H = await bootApp({ rules: OLD_RULES, data: {
       'users/me': { uid: 'me', name: 'أنا', friends: { f: { uid: 'f', name: 'فرح' } }, friendRequests: { q: { uid: 'q', name: 'قيس' } } },
       'users/f': { uid: 'f', name: 'فرح', friends: { me: { uid: 'me', name: 'أنا' } } },
-      'users/q': { uid: 'q', name: 'قيس', sentRequests: { me: 1 } },
+      'users/q': { uid: 'q', name: 'قيس', sentRequests: { me: Date.now() } },
       'users/b': { uid: 'b', name: 'باسل' },
     } });
     H.win.confirm = () => true;
@@ -769,12 +772,12 @@ export async function uiNotes115() {
       'users/me': { uid: 'me', name: 'أنا', friends: { c: { uid: 'c', name: 'كريم' } } },
       'users/b': { uid: 'b', name: 'باسل' },
       'users/c': { uid: 'c', name: 'كريم' },   // في قائمتي وحدي (صداقة من طرف واحد)
-      'users/q': { uid: 'q', name: 'قيس', sentRequests: { me: 1 } },
+      'users/q': { uid: 'q', name: 'قيس', sentRequests: { me: Date.now() } },
       'users/l': { uid: 'l', name: 'ليث' },     // دليل طلبٍ قديم بقي بلا طلب في صندوقه (رفضته نسخة أقدم)
       'users/n': { uid: 'n', name: 'نادر' },
     } });
     H.fb.set('users/me/friendRequests/q', { uid: 'q', name: 'قيس' });
-    H.fb.set('users/me/sentRequests/l', 1);
+    H.fb.set('users/me/sentRequests/l', Date.now());
     H.win.confirm = () => true;
     try {
       $(H, 'friends-btn').click(); await H.settle();
@@ -787,6 +790,10 @@ export async function uiNotes115() {
       r.ok(label() === '✓ صديقك', `(أ) قَبِل وأنا أنظر — بلا إعادة فتح: "${label()}" (كانت تبقى "✅ أُرسل")`);
       cardOf(H, 'باسل')?.querySelector('.btn-remove')?.click(); await H.settle(0, 30);
       r.ok(label() === '➕ إضافة' && H.fb.get('users/me/friends/b') == null, `(أ) حذفته: "${label()}"`);
+      // 3.3ج-2: الحذف يترك مهلة في ملفه — لا أعيد طلبي إليه قبل 10 دقائق (نقدّمها هنا 11 دقيقة لنكمل)
+      const cd = H.fb.get('users/b/requestCooldown/me');
+      r.ok(typeof cd === 'number', `(أ) حذف الصديق لم يترك مهلة في ملفه (${JSON.stringify(cd)})`);
+      H.fb.set('users/b/requestCooldown/me', H.win.Date.now() - 11 * 60_000);
       searchBtn(H, 'b').click(); await H.settle(0, 30);
       r.ok(label() === '✅ أُرسل', `(أ) طلب جديد: "${label()}"`);
       const rej = H.fb.writeAs('b', [['users/b/friendRequests/me', null], ['users/me/sentRequests/b', null]]); await H.settle(0, 10);
@@ -838,28 +845,35 @@ export async function uiNotes115() {
   {
     const H = await bootApp({ data: {
       'users/me': { uid: 'me', name: 'أنا', friendRequests: { o: { uid: 'o', name: 'عمر' } } },
-      'users/o': { uid: 'o', name: 'عمر', sentRequests: { me: 1 } },
+      'users/o': { uid: 'o', name: 'عمر', sentRequests: { me: Date.now() } },
       'users/k': { uid: 'k', name: 'كمال' },
       'users/x': { uid: 'x', name: XSS_NAME },
       'users/z': { uid: 'z', name: 'زياد' },
     } });
     try {
       r.ok(!notifShown(H) && $(H, 'friend-requests-badge').textContent === '1', '(ب) طلب قائم عند الدخول: إشعار (تكفيه الشارة)');
-      const sent = H.fb.writeAs('k', [['users/me/friendRequests/k', { uid: 'k', name: 'كمال' }], ['users/k/sentRequests/me', 1]]);
+      const sent = H.fb.writeAs('k', [['users/me/friendRequests/k', { uid: 'k', name: 'كمال', sentAt: SVT }], ['users/k/sentRequests/me', SVT]]);
       await H.settle(0, 20);
       r.ok(sent.ok && notifShown(H) && notif(H).textContent.includes('كمال') && notif(H).textContent.includes('طلب صداقة'),
         `(ب) طلب جديد: لا إشعار أو نصه خاطئ ("${notif(H)?.textContent || ''}")`);
       r.ok($(H, 'friend-requests-badge').textContent === '2', '(ب) الشارة لم تصر 2');
       notif(H).click(); await H.settle();
       r.ok(!$(H, 'friends-panel').classList.contains('hidden') && !notifShown(H), '(ب) النقر لا يفتح قائمة الأصدقاء');
-      H.fb.writeAs('z', [['users/me/friendRequests/z', { uid: 'z', name: 'زياد' }], ['users/z/sentRequests/me', 1]]); await H.settle(0, 20);
+      H.fb.writeAs('z', [['users/me/friendRequests/z', { uid: 'z', name: 'زياد', sentAt: SVT }], ['users/z/sentRequests/me', SVT]]); await H.settle(0, 20);
       r.ok(!notifShown(H), '(ب) إشعار والقائمة مفتوحة (الطلب ظاهر فيها)');
       $(H, 'close-friends-btn').click(); await H.settle();
-      // سحب طلبه وإعادته (إزعاج): لا إشعار ثانٍ للمرسل نفسه خلال 10 دقائق
-      H.fb.writeAs('k', [['users/me/friendRequests/k', null]]); await H.settle(0, 10);
-      H.fb.writeAs('k', [['users/me/friendRequests/k', { uid: 'k', name: 'كمال' }], ['users/k/sentRequests/me', 1]]); await H.settle(0, 20);
-      r.ok(!notifShown(H), '(ب) سحب طلبه وإعادته: إشعار ثانٍ (إزعاج)');
-      H.fb.writeAs('x', [['users/me/friendRequests/x', { uid: 'x', name: XSS_NAME }], ['users/x/sentRequests/me', 1]]); await H.settle(0, 20);
+      // 3.3ج-2: سحب طلبه وإعادته (إزعاج): القواعد لا تقبل السحب بلا مهلة، ولا الإعادة قبل 10 دقائق — فلا إشعار ثانٍ
+      notif(H).style.display = 'none';
+      const wNo = H.fb.writeAs('k', [['users/me/friendRequests/k', null]]);
+      const wd = H.fb.writeAs('k', [['users/me/friendRequests/k', null], ['users/me/requestCooldown/k', SVT]]); await H.settle(0, 10);
+      const again = H.fb.writeAs('k', [['users/me/friendRequests/k', { uid: 'k', name: 'كمال', sentAt: SVT }], ['users/k/sentRequests/me', SVT]]); await H.settle(0, 20);
+      r.ok(!wNo.ok && wd.ok && !again.ok && !notifShown(H), `(ب) سحب طلبه وإعادته: سحب بلا مهلة ${wNo.ok}، بمهلة ${wd.ok}، إعادة فورية ${again.ok}، إشعار ${notifShown(H)}`);
+      // بعد 10 دقائق: إعادته تُقبل — وإشعارٌ لكل طلب (لا حدّ في الصفحة بعد اليوم)
+      H.fb.set('users/me/requestCooldown/k', H.win.Date.now() - 11 * 60_000); await H.settle(0, 10);
+      const later = H.fb.writeAs('k', [['users/me/friendRequests/k', { uid: 'k', name: 'كمال', sentAt: SVT }], ['users/k/sentRequests/me', SVT]]); await H.settle(0, 20);
+      r.ok(later.ok && notifShown(H) && notif(H).textContent.includes('كمال'), `(ب) إعادته بعد المهلة: كتابة ${later.ok}، إشعار ${notifShown(H)}`);
+      notif(H).style.display = 'none';
+      H.fb.writeAs('x', [['users/me/friendRequests/x', { uid: 'x', name: XSS_NAME, sentAt: SVT }], ['users/x/sentRequests/me', SVT]]); await H.settle(0, 20);
       r.ok(notifShown(H) && injected(H) === 0, `(ب) اسم خبيث في الإشعار: نص لا شيفرة (${injected(H)})`);
       r.ok(H.errors.length === 0, '(ب) أخطاء' + errText(H));
     } catch (e) { r.ok(false, '(ب) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
@@ -926,7 +940,135 @@ export async function privacyProfileSplit() {
 
 export const APP_ALL = [friendPresenceAcrossRerender, logoutFreshPage, accountChangesSamePage, guestUpgrade, registrationName,
   repeatedSameAccountEvent, namesAndPhotosInDomUIs, friendsUnderRules, localStatsKeys, presenceSelfHeal, uiNotes115, privacyProfileSplit,
-  chatUnderRules];
+  chatUnderRules, friendRequestsC2];
+
+// ── 3.3ج-2: طلبات الصداقة — مهلة 10 دقائق بعد الرفض/السحب/الحذف برسالة واضحة للمرسل، والطلب ودليله 30 يوماً ──
+export async function friendRequestsC2() {
+  const r = checker('3.3ج-2: طلبات الصداقة — مهلة إعادة الطلب برسالة "بعد N دقائق"، والطلب الأقدم من 30 يوماً يختفي ولا يُقبل ويُعاد');
+  const DAY = 86_400_000;
+  const sleep = ms => new Promise(res => setTimeout(res, ms));
+  const reqCard = (H, n) => [...$(H, 'friend-requests-list').querySelectorAll('.friend-card')].find(c => c.querySelector('.friend-name')?.textContent === n);
+  // (أ) أرسلتُ، ورفضه بنسخته الجديدة (يترك المهلة في ملفه)، فأعدتُ فوراً → رسالة المهلة بالدقائق، ولا شيء يُكتب
+  {
+    const H = await bootApp({ data: { 'users/me': { uid: 'me', name: 'أنا' }, 'users/b': { uid: 'b', name: 'باسل' } } });
+    H.fb.serverSkew = 4000;   // ساعة الخادم تسبق ساعة الجهاز 4 ثوانٍ: الطلب يُكتب بوقت الخادم لا بساعة الجهاز
+    try {
+      $(H, 'friends-btn').click(); await H.settle();
+      await searchFor(H, 'باسل');
+      const label = () => searchBtn(H, 'b')?.textContent;
+      searchBtn(H, 'b').click(); await H.settle(0, 30);
+      const sentAt = H.fb.get('users/b/friendRequests/me/sentAt');
+      r.ok(label() === '✅ أُرسل' && typeof sentAt === 'number' && sentAt === H.fb.get('users/me/sentRequests/b'),
+        `(أ) الإرسال: "${label()}" — الطلب ودليله بوقت الخادم نفسه (${sentAt} / ${H.fb.get('users/me/sentRequests/b')})`);
+      const rej = H.fb.writeAs('b', [['users/b/friendRequests/me', null], ['users/b/requestCooldown/me', SVT]]);
+      H.fb.writeAs('b', [['users/me/sentRequests/b', null]]);
+      await H.settle(0, 10); await sleep(1000); await H.settle(0, 10);
+      r.ok(rej.ok && label() === '➕ إضافة', `(أ) رفضه: "${label()}"`);
+      searchBtn(H, 'b').click(); await H.settle(0, 30);
+      r.ok(/⏳ تقدر تعيد طلبك إلى باسل بعد (10|9) دقائق/.test(flashText(H)) && H.fb.get('users/b/friendRequests/me') == null && H.fb.get('users/me/sentRequests/b') == null,
+        `(أ) إعادة فورية: الرسالة "${flashText(H)}" أو كُتب شيء`);
+      r.ok(H.errors.length === 0, '(أ) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(أ) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  // (ب) أنا أرفض: الطلب ودليله يزولان والمهلة في ملفي؛ (ج) طلب أقدم من 30 يوماً: لا يظهر ولا يُعدّ ويُمسح من صندوقي؛
+  // (د) قبول طلبٍ دليله منتهٍ: رسالة "انتهت مدة" ويُحذف بلا صداقة
+  {
+    const now = Date.now();
+    const H = await bootApp({ data: {
+      'users/me': { uid: 'me', name: 'أنا', friendRequests: {
+        q: { uid: 'q', name: 'قيس', sentAt: now - 60_000 },
+        old: { uid: 'old', name: 'قديم', sentAt: now - 32 * DAY },
+        edge: { uid: 'edge', name: 'حدّي', sentAt: now - 30 * DAY - 6 * 3600_000 },
+        t: { uid: 't', name: 'تامر' } } },
+      'users/q': { uid: 'q', name: 'قيس', sentRequests: { me: now - 60_000 } },
+      'users/old': { uid: 'old', name: 'قديم', sentRequests: { me: now - 32 * DAY } },
+      'users/edge': { uid: 'edge', name: 'حدّي', sentRequests: { me: now - 30 * DAY - 6 * 3600_000 } },
+      'users/t': { uid: 't', name: 'تامر', sentRequests: { me: now - 31 * DAY } },
+    } });
+    try {
+      $(H, 'friends-btn').click(); await H.settle(0, 10);
+      const names = [...$(H, 'friend-requests-list').querySelectorAll('.friend-name')].map(e => e.textContent);
+      r.ok(!names.includes('قديم') && !names.includes('حدّي') && names.includes('قيس') && names.includes('تامر') && $(H, 'friend-requests-badge').textContent === '2',
+        `(ج) طلب أقدم من 30 يوماً ظهر أو عُدّ (${names.join('، ')} — شارة ${$(H, 'friend-requests-badge').textContent})`);
+      // مراجعة ج-2 (L1، الجولتان): المنتهي يُخفى ولا يُمسح من الخادم — المسح بساعة الجهاز كان يمحو طلبات صالحة لطرفيها
+      r.ok(!!H.fb.get('users/me/friendRequests/old') && !!H.fb.get('users/me/friendRequests/edge'), '(ج) طلب منتهٍ مُسح من الخادم (يُخفى فقط)');
+      reqCard(H, 'قيس')?.querySelector('.btn-reject')?.click(); await H.settle(0, 20);
+      r.ok(H.fb.get('users/me/friendRequests/q') == null && H.fb.get('users/q/sentRequests/me') == null && typeof H.fb.get('users/me/requestCooldown/q') === 'number',
+        `(ب) الرفض: بقي الطلب أو دليله أو لا مهلة (${JSON.stringify(H.fb.get('users/me/requestCooldown/q'))})`);
+      reqCard(H, 'تامر')?.querySelector('.btn-accept')?.click(); await H.settle(0, 20);
+      r.ok(/انتهت مدة طلب تامر/.test(flashText(H)) && H.fb.get('users/me/friendRequests/t') == null && H.fb.get('users/me/friends/t') == null && H.fb.get('users/t/friends/me') == null,
+        `(د) قبول بدليل منتهٍ: "${flashText(H)}" — صداقة ${!!H.fb.get('users/me/friends/t')}، الطلب ${!!H.fb.get('users/me/friendRequests/t')}`);
+      r.ok(H.errors.length === 0, '(ب-د) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(ب-د) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  // (و) إشعار لكل طلب: طلبٌ قائم (أقدم من 10 دقائق) أعاد صاحبه إرساله → إشعار جديد (وقت إرسال آخر)
+  {
+    const now = Date.now();
+    const H = await bootApp({ data: {
+      'users/me': { uid: 'me', name: 'أنا', friendRequests: { k: { uid: 'k', name: 'كمال', sentAt: now - 20 * 60_000 } } },
+      'users/k': { uid: 'k', name: 'كمال', sentRequests: { me: now - 20 * 60_000 } },
+    } });
+    try {
+      const nt = () => H.doc.getElementById('chat-notification');
+      const shown = () => !!nt() && nt().style.display === 'flex';
+      r.ok(!shown() && $(H, 'friend-requests-badge').textContent === '1', '(و) طلب قائم عند الدخول: إشعار (تكفيه الشارة)');
+      const again = H.fb.writeAs('k', [['users/me/friendRequests/k', { uid: 'k', name: 'كمال', sentAt: SVT }], ['users/k/sentRequests/me', SVT]]);
+      await H.settle(0, 20);
+      r.ok(again.ok && shown() && nt().textContent.includes('كمال'), `(و) أعاد إرسال طلبه القائم: كتابة ${again.ok}، إشعار ${shown()}`);
+      r.ok(H.errors.length === 0, '(و) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(و) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  // (ز) الكود أولاً ثم القواعد: الكود الجديد فوق قواعد v36.8 — إرسال، رفض، قبول، وحذف صديق (يعيد الكتابة بلا المهلة)
+  {
+    const H = await bootApp({ rules: C1_RULES, data: {
+      'users/me': { uid: 'me', name: 'أنا', friends: { f: { uid: 'f', name: 'فرح' } }, friendRequests: { q: { uid: 'q', name: 'قيس' }, j: { uid: 'j', name: 'جاد' } } },
+      'users/f': { uid: 'f', name: 'فرح', friends: { me: { uid: 'me', name: 'أنا' } } },
+      'users/q': { uid: 'q', name: 'قيس', sentRequests: { me: Date.now() } },
+      'users/j': { uid: 'j', name: 'جاد', sentRequests: { me: Date.now() } },
+      'users/b': { uid: 'b', name: 'باسل' },
+    } });
+    H.win.confirm = () => true;
+    try {
+      $(H, 'friends-btn').click(); await H.settle();
+      await searchFor(H, 'باسل');
+      searchBtn(H, 'b').click(); await H.settle(0, 30);
+      r.ok(searchBtn(H, 'b')?.textContent === '✅ أُرسل' && !!H.fb.get('users/b/friendRequests/me'), `(ز) الإرسال فوق قواعد v36.8: "${searchBtn(H, 'b')?.textContent}"`);
+      reqCard(H, 'قيس')?.querySelector('.btn-accept')?.click(); await H.settle(0, 20);
+      r.ok(!!H.fb.get('users/me/friends/q') && !!H.fb.get('users/q/friends/me'), '(ز) القبول فوق قواعد v36.8 لم يتم');
+      reqCard(H, 'جاد')?.querySelector('.btn-reject')?.click(); await H.settle(0, 20);
+      r.ok(H.fb.get('users/me/friendRequests/j') == null, '(ز) الرفض فوق قواعد v36.8 لم يتم');
+      cardOf(H, 'فرح')?.querySelector('.btn-remove')?.click(); await H.settle(0, 30);
+      r.ok(H.fb.get('users/me/friends/f') == null && H.fb.get('users/f/friends/me') == null && !/تعذّر/.test(flashText(H)),
+        `(ز) حذف صديق فوق قواعد v36.8 (بلا المهلة): عندي ${!!H.fb.get('users/me/friends/f')}، عندها ${!!H.fb.get('users/f/friends/me')}، "${flashText(H)}"`);
+      r.ok(H.errors.length === 0, '(ز) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(ز) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  // (هـ) دليلي الأقدم من 30 يوماً: يُمسح من ملفي فتعود البطاقة "➕ إضافة"، وإعادة الإرسال تكتب فوق طلبي القديم في صندوقه
+  {
+    const now = Date.now();
+    const H = await bootApp({ data: {
+      'users/me': { uid: 'me', name: 'أنا', sentRequests: { s: now - 32 * DAY } },
+      'users/s': { uid: 's', name: 'سامي', friendRequests: { me: { uid: 'me', name: 'أنا', sentAt: now - 32 * DAY } } },
+    } });
+    try {
+      $(H, 'friends-btn').click(); await H.settle(0, 10);
+      r.ok(!!H.fb.get('users/me/sentRequests/s'), '(هـ) دليلي المنتهي مُسح من ملفي (يُخفى فقط، وإعادة الإرسال تكتب فوقه)');
+      await searchFor(H, 'سامي');
+      const label = () => searchBtn(H, 's')?.textContent;
+      r.ok(label() === '➕ إضافة', `(هـ) بطاقة من دليله منتهٍ: "${label()}"`);
+      searchBtn(H, 's').click(); await H.settle(0, 30);
+      const at = H.fb.get('users/s/friendRequests/me/sentAt');
+      r.ok(label() === '✅ أُرسل' && typeof at === 'number' && at > now - DAY, `(هـ) إعادة الإرسال: "${label()}" (وقت الطلب ${at})`);
+      r.ok(H.errors.length === 0, '(هـ) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(هـ) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  return r;
+}
 
 // ─── 13. المحادثة فوق القواعد (3.3أ-3): الطرفان من مفتاحها، الرسالة لصديق فقط، والحالة يغيّرها المستلم ───
 export async function chatUnderRules() {

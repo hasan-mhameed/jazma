@@ -1,13 +1,13 @@
 // 📄 ui/friendsUI.js
 // قائمة الأصدقاء + البحث + الإجراءات
-import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1793490698";
+import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1793749802";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend,
-         listenFriendRequests, listenFriends, listenSentRequests, isMutualFriend, isRequestPending } from "../friends.js?v=1793490698";
-import { outgoingInvite, onInviteStateChange } from "./inviteUI.js?v=1793490698";
-import { asText, firstInitial, safeImageSrc } from "./safeText.js?v=1793490698";
-import { getCurrentUser } from "../auth.js?v=1793490698";
-import { showNotificationCard } from "./chatUI.js?v=1793490698";
+         listenFriendRequests, listenFriends, listenSentRequests, isMutualFriend, isRequestPending } from "../friends.js?v=1793749802";
+import { outgoingInvite, onInviteStateChange } from "./inviteUI.js?v=1793749802";
+import { asText, firstInitial, safeImageSrc } from "./safeText.js?v=1793749802";
+import { getCurrentUser } from "../auth.js?v=1793749802";
+import { showNotificationCard } from "./chatUI.js?v=1793749802";
 
 // زر "دعوة" يعكس حالة الدعوة الصادرة (v35.9): ⏳ للصديق المدعوّ ما دامت دعوته قائمة، ويرجع مع أي نهاية لها
 // (قبول ثم مباراة، رفض، "في مباراة"، انتهاء المهلة، إلغاء، فشل) — كان لا يرجع إلا عند الرفض
@@ -19,6 +19,14 @@ function paintInviteBtn(btn) {
   btn.title = mine ? "بانتظار ردّه على دعوتك" : "";
 }
 let _inviteStateUnsub = null;
+
+// "بعد دقيقة / دقيقتين / N دقائق" — ما بقي من مهلة إعادة الطلب (3.3ج-2، حتى 10 دقائق)
+export function afterMinutes(ms) {
+  const n = Math.max(1, Math.ceil((Number(ms) || 0) / 60_000));
+  if (n === 1) return "بعد دقيقة";
+  if (n === 2) return "بعد دقيقتين";
+  return n <= 10 ? `بعد ${n} دقائق` : `بعد ${n} دقيقة`;
+}
 
 // متابعات بطاقات الأصدقاء الظاهرة (الحضور + مؤقّت التحديث) — تُوقف كلها قبل إعادة رسم القائمة (v36.0 — 1.11).
 // كانت: تبقى متابعة البطاقة المحذوفة، ولا تستلم الجديدة شيئاً (حالة الصديق تتجمّد)، ومؤقّتها لا يتوقف أبداً
@@ -214,9 +222,11 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
             try {
               await sendFriendRequest(user.uid);
               _sentHere.add(user.uid); _staleProof.delete(user.uid);   // أرسلته للتوّ: طلبي في صندوقه أكيد
-            } catch {
+            } catch (e) {
               _sendFailed.add(user.uid);
-              flash(`⚠️ تعذّر إرسال الطلب إلى ${userName} — حاول مجدداً`);
+              // 3.3ج-2: طلبه رُفض أو سُحب (أو حُذفت صداقتكما) قبل أقل من 10 دقائق — القواعد تمنع إعادته قبلها
+              if (e?.code === "cooldown") flash(`⏳ تقدر تعيد طلبك إلى ${userName} ${afterMinutes(e.waitMs)}`);
+              else flash(`⚠️ تعذّر إرسال الطلب إلى ${userName} — حاول مجدداً`);
               setTimeout(() => { _sendFailed.delete(user.uid); repaintSearch(); }, 3000);
             } finally {
               _sending.delete(user.uid); repaintSearch();
@@ -251,6 +261,7 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
         const res = await acceptFriendRequest(user.uid);
         if (res?.reason === "stale") flash(`📭 طلب ${userName} من نسخة قديمة من اللعبة — اطلب منه تحديث الصفحة وإرساله من جديد`);
         else if (res?.reason === "gone") flash("📭 هذا الطلب لم يعد صالحاً");
+        else if (res?.reason === "expired") flash(`📭 انتهت مدة طلب ${userName} (أكثر من 30 يوماً) — اطلب منه إرساله من جديد`);
       } catch {
         flash(`⚠️ تعذّر قبول طلب ${userName} — حاول مجدداً`);
         setBusy(false);
@@ -281,11 +292,10 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
 
   // ── الاستماع لطلبات الأصدقاء والقائمة ──────────────────────
   // v36.2 (1.15): طلب جديد يصل والصفحة مفتوحة → بطاقة إشعار عابرة (كإشعار الرسائل)، والنقر يفتح القائمة على الطلب —
-  // كانت الشارة وحدها (فحص 3 لـv36.1). الطلبات القائمة عند الدخول (أول لقطة) تكفيها الشارة، ولا إشعار واللوحة مفتوحة،
-  // ولا أكثر من إشعار لكل مرسل في 10 دقائق (سحب طلبه وإعادته مراراً لا يصير إزعاجاً — مراجعة v36.2)
-  let _reqSeen = null;
-  const _toastedAt = new Map();
-  const TOAST_GAP_MS = 10 * 60 * 1000;
+  // كانت الشارة وحدها (فحص 3 لـv36.1). الطلبات القائمة عند الدخول (أول لقطة) تكفيها الشارة، ولا إشعار واللوحة مفتوحة.
+  // 3.3ج-2: إشعار لكل طلب — جديدٍ أو أُعيد إرساله (وقت إرسال آخر) — بلا حدّ في الصفحة: القواعد تمنع إعادة الطلب
+  // للشخص نفسه قبل 10 دقائق من رفضه أو سحبه، ولا تقبل طلباً فوق طلب أحدث من 10 دقائق (كان الحدّ هنا: إشعار لكل مرسل في 10 دقائق)
+  let _reqSeen = null;   // uid → وقت إرسال الطلب كما رأيناه
   const notifyRequests = (fresh) => {
     const names = fresh.map(r => asText(r.name, "لاعب"));
     const title = names.length === 1 ? names[0] : "طلبات صداقة جديدة";
@@ -297,12 +307,9 @@ export function initFriendsUI({ onInviteFriend, onOpenChat }) {
     });
   };
   listenFriendRequests(requests => {
-    const now = Date.now();
-    const fresh = (_reqSeen ? requests.filter(r => !_reqSeen.has(r.uid)) : [])
-      .filter(r => now - (_toastedAt.get(r.uid) || 0) > TOAST_GAP_MS);
-    _reqSeen = new Set(requests.map(r => r.uid));
+    const fresh = _reqSeen ? requests.filter(r => !_reqSeen.has(r.uid) || _reqSeen.get(r.uid) !== r.sentAt) : [];
+    _reqSeen = new Map(requests.map(r => [r.uid, r.sentAt]));
     if (fresh.length && friendsPanel?.classList.contains("hidden")) {
-      fresh.forEach(r => _toastedAt.set(r.uid, now));
       try { notifyRequests(fresh); } catch {}
     }
     if (requests.length > 0) {

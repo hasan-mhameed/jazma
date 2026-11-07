@@ -1,11 +1,11 @@
 // 📄 friends.js — v12.1 (أُعيد بناء الإرسال والقبول والحذف في v36.1 — الخطوة 1.13)
 // نظام الأصدقاء الكامل — يعمل مع قواعد الأمان في database.rules.json (كل واحد يكتب في ملفه، وفي ملف غيره ما يخصّه فقط)
 
-import { getDatabase, ref, get, update, onValue, remove }
+import { getDatabase, ref, get, update, onValue, remove, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getCurrentUser } from "./auth.js?v=1793490698";
+import { getCurrentUser } from "./auth.js?v=1793749802";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -18,6 +18,39 @@ const firebaseConfig = {
 };
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const db  = getDatabase(app);
+
+// 3.3ج-2 — كما في القواعد: دليل الطلب لا يصلح للقبول بعد 30 يوماً، ومن رُفض طلبه أو سحبه (أو حُذفت صداقتهما) لا يعيده
+// للشخص نفسه قبل 10 دقائق (المهلة في ملف المستقبل — users/<المستقبل>/requestCooldown/<المرسل> — لا يمحوها المرسل)
+export const REQUEST_TTL_MS      = 30 * 24 * 60 * 60 * 1000;
+export const REQUEST_COOLDOWN_MS = 10 * 60 * 1000;
+// وقت الخادم كما يقدّره هذا الجهاز: ساعته + الفرق الذي تقيسه الحزمة عند الاتصال (.info/serverTimeOffset — يصل قبل أي
+// بيانات). مراجعة ج-2: ساعة جهاز متقدّمة شهراً كانت تُعدّ كل طلب "منتهياً" فتمحوه من الخادم — لطرفيه
+let _serverOffset = 0, _offsetWatch = null;
+function watchServerOffset() {
+  if (_offsetWatch) return;
+  try { _offsetWatch = onValue(ref(db, ".info/serverTimeOffset"), s => { const v = s.val(); _serverOffset = typeof v === "number" ? v : 0; }); }
+  catch { _offsetWatch = () => {}; }
+}
+const serverNow = () => Date.now() + _serverOffset;
+const HOUR = 60 * 60 * 1000;
+// للقبول: منتهٍ بهامش ساعة قبل الحدّ — لا نحاول قبولاً ترفضه القاعدة (ودليلٌ ليس رقماً لا يصلح)
+export const isRequestExpired = at => typeof at !== "number" || at <= serverNow() - REQUEST_TTL_MS + HOUR;
+// للعرض: انتهى فعلاً (القاعدة لم تعد تقبله) — يُخفى ولا يُمسح من الخادم (مراجعة ج-2: المسح بساعة الجهاز — ولو بوقت
+// الخادم المقدَّر، فساعة تُغيَّر والاتصال قائم تقفز به — كان يمحو طلبات صالحة لطرفيها؛ والمخفيّ صغير، وإعادة الإرسال تكتب فوقه)
+const isPastTtl = at => typeof at === "number" && at <= serverNow() - REQUEST_TTL_MS;
+const isDenied = e => /permission[_ ]denied/i.test(String(e?.code || e?.message || e));
+
+// كم بقي من مهلتي عند فلان (0 = لا مهلة) — أقرأ مدخلي أنا وحده (القاعدة تسمح لي به)، والوقت بساعة الخادم
+async function cooldownLeft(toUid, fromUid) {
+  try {
+    watchServerOffset();
+    const at = (await get(ref(db, `users/${toUid}/requestCooldown/${fromUid}`))).val();
+    if (typeof at !== "number") return 0;
+    const left = at + REQUEST_COOLDOWN_MS - serverNow();
+    if (left <= -60_000) return 0;                       // انتهت فعلاً: الرفض لسبب آخر
+    return Math.min(REQUEST_COOLDOWN_MS, Math.max(left, 30_000));
+  } catch { return 0; }
+}
 
 // ─── البحث عن مستخدم بالاسم ──────────────────────────────────
 export async function searchUsers(query) {
@@ -47,16 +80,23 @@ export async function sendFriendRequest(toUid) {
   const fromUid = getCurrentUser()?.uid;
   if (!fromUid || !toUid || toUid === fromUid) throw new Error("طلب صداقة غير صالح");
   const fromData = (await get(ref(db, `users/${fromUid}`))).val() || {};   // ملف ناقص/غائب لا يكسر الإرسال
-  const at = Date.now();
-  await update(ref(db), {
-    [`users/${toUid}/friendRequests/${fromUid}`]: {
-      uid: fromUid,                       // للنسخ القديمة فقط — الجديدة تأخذ المعرّف من المفتاح
-      name: fromData.name ?? "لاعب",
-      photo: fromData.photo || "",
-      sentAt: at,
-    },
-    [`users/${fromUid}/sentRequests/${toUid}`]: at,
-  });
+  const at = serverTimestamp();           // 3.3ج-2: وقت الخادم (القواعد تقبل الطلب ودليله بوقت كتابتهما فقط)
+  try {
+    await update(ref(db), {
+      [`users/${toUid}/friendRequests/${fromUid}`]: {
+        uid: fromUid,                       // للنسخ القديمة فقط — الجديدة تأخذ المعرّف من المفتاح
+        name: fromData.name ?? "لاعب",
+        photo: fromData.photo || "",
+        sentAt: at,
+      },
+      [`users/${fromUid}/sentRequests/${toUid}`]: at,
+    });
+  } catch (e) {
+    // 3.3ج-2: رُفض لأن طلبي رُفض أو سُحب (أو حُذفت صداقتنا) قبل أقل من 10 دقائق؟ — يُقال لصاحبه كم بقي
+    const waitMs = isDenied(e) ? await cooldownLeft(toUid, fromUid) : 0;
+    if (waitMs > 0) { const err = new Error("cooldown"); err.code = "cooldown"; err.waitMs = waitMs; throw err; }
+    throw e;
+  }
 }
 
 // ─── قبول طلب صداقة ──────────────────────────────────────────
@@ -67,6 +107,7 @@ export async function sendFriendRequest(toUid) {
 export async function acceptFriendRequest(fromUid) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid || !fromUid) throw new Error("طلب صداقة غير صالح");
+  watchServerOffset();
   // 3.3أ: لا نقرأ ملف المرسل الكامل (صار لصاحبه وحده). اسمه وصورته من طلبه في صندوقي (كتبهما هو عند الإرسال)،
   // والدليل وصداقته لي من مسارين تسمح القاعدة لي بقراءتهما: sentRequests/<أنا> وfriends/<أنا> في ملفه
   const [mySnap, proofSnap, fromFriendsMe] = await Promise.all([
@@ -86,6 +127,8 @@ export async function acceptFriendRequest(fromUid) {
     await dropRequest();
     return { ok: false, reason: "stale" };
   }
+  // 3.3ج-2: دليل أقدم من 30 يوماً لا تقبله القواعد — يُحذف الطلب، ويُطلب من صاحبه إرساله من جديد
+  if (isRequestExpired(proofSnap.val())) { await dropRequest().catch(() => {}); return { ok: false, reason: "expired" }; }
   const since = Date.now();
   try {
     await update(ref(db), {
@@ -110,25 +153,37 @@ const isEntry = v => !!v && typeof v === "object";
 // ─── رفض طلب صداقة ───────────────────────────────────────────
 // v36.1: ومعه دليل الطلب في ملف مرسله (إذنه ينتهي برفضه) — خطوة ثانية لا تُفشل الرفض: طلب قديم بلا دليل، أو
 // القواعد القديمة قبل نشر الجديدة (ترفض حذفه)، لا يضرّ بقاؤه
+// 3.3ج-2: ومعه "مهلة" في ملفي — لا يعيد طلبه قبل 10 دقائق (الإشعار صار لكل طلب، فلا إزعاج برفض وإعادة)
 export async function rejectFriendRequest(fromUid) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid || !fromUid) throw new Error("طلب صداقة غير صالح");
-  await remove(ref(db, `users/${myUid}/friendRequests/${fromUid}`));
+  await update(ref(db), {
+    [`users/${myUid}/friendRequests/${fromUid}`]: null,
+    [`users/${myUid}/requestCooldown/${fromUid}`]: serverTimestamp(),
+  });
   await remove(ref(db, `users/${fromUid}/sentRequests/${myUid}`)).catch(() => {});
 }
 
 // ─── حذف صديق ────────────────────────────────────────────────
 // v36.1: من الطرفين بكتابة واحدة (كانت كتابتين: الثانية ترفضها القواعد فتبقى صداقة من طرف واحد بصمت)، ومعها
 // سحب طلبي إليه إن بقي (من صندوقه، ودليله من ملفي) — فلا يعيد نفسه لقائمتي بطلب قديم، ولا يقبل طلباً سحبته
+// 3.3ج-2: ومعها "مهلة" في ملفه — لا أعيد طلبي إليه قبل 10 دقائق (القواعد لا تسمح بسحب طلبي من صندوقه بدونها). قبل نشر
+// القواعد الجديدة لا مكان لي في ملفه أكتب فيه المهلة فتُرفض الكتابة كلها — فنعيدها بدونها (تعمل بالقواعد القديمة والجديدة)
 export async function removeFriend(friendUid) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid || !friendUid) throw new Error("صديق غير صالح");
-  await update(ref(db), {
+  const writes = {
     [`users/${myUid}/friends/${friendUid}`]: null,
     [`users/${friendUid}/friends/${myUid}`]: null,
     [`users/${friendUid}/friendRequests/${myUid}`]: null,
     [`users/${myUid}/sentRequests/${friendUid}`]: null,
-  });
+  };
+  try {
+    await update(ref(db), { ...writes, [`users/${friendUid}/requestCooldown/${myUid}`]: serverTimestamp() });
+  } catch (e) {
+    if (!isDenied(e)) throw e;
+    await update(ref(db), writes);
+  }
 }
 
 // v36.0: كل مدخل (صديق أو طلب صداقة) قد يكتبه الطرف الآخر — المعرّف من مفتاحه، لا من حقل uid داخله. كان طلب مخزَّن
@@ -150,12 +205,14 @@ export async function getFriends() {
 }
 
 // ─── الاستماع لطلبات الصداقة الواردة ────────────────────────
+// 3.3ج-2: طلب أقدم من 30 يوماً (بوقت إرساله، بوقت الخادم) لا يُعرض — دليله لم يعد يصلح للقبول
 export function listenFriendRequests(cb) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid) return () => {};
+  watchServerOffset();
   const unsub = onValue(ref(db, `users/${myUid}/friendRequests`), (snap) => {
-    const requests = snap.exists() ? entriesWithKey(snap.val()) : [];
-    cb(requests);
+    const all = snap.exists() ? entriesWithKey(snap.val()) : [];
+    cb(all.filter(r => !isPastTtl(r.sentAt)));
   });
   return unsub;
 }
@@ -163,12 +220,15 @@ export function listenFriendRequests(cb) {
 // ─── طلباتي القائمة (لم يُقبل أو يُرفض بعد) ─────────────────────
 // v36.2 (1.15): مفاتيح users/<أنا>/sentRequests — بطاقة البحث تقول "✅ أُرسل" ما دام الطلب قائماً، وتعود
 // "➕ إضافة" إن رُفض أو سحبته، ولو أُعيد البحث أو فُتحت اللوحة من جديد (من القاعدة لا من ذاكرة الصفحة)
+// 3.3ج-2: ودليلٌ أقدم من 30 يوماً لم يعد طلباً قائماً — لا يُعدّ، فتعود البطاقة "➕ إضافة" (أعيد إرساله إن شئت — يكتب فوقه)
 export function listenSentRequests(cb) {
   const myUid = getCurrentUser()?.uid;
   if (!myUid) return () => {};
+  watchServerOffset();
   return onValue(ref(db, `users/${myUid}/sentRequests`), (snap) => {
     const v = snap.val();
-    cb(v && typeof v === "object" ? Object.keys(v) : []);
+    const keys = v && typeof v === "object" ? Object.keys(v) : [];
+    cb(keys.filter(k => !isPastTtl(v[k])));
   });
 }
 

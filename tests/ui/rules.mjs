@@ -25,23 +25,27 @@ export function rulesMatrix() {
     V: { name: 'ضحية' },
   } };
   const W = (rules, uid, writes, root = base) => checkWrite(rules, writes, { uid, root }).ok;
-  const withToken = JSON.parse(JSON.stringify(base)); withToken.users.B.sentRequests = { A: 1 };
+  // 3.3ج-2: الطلب ودليله بوقت الخادم (SV = serverTimestamp كما يكتبه الكود)، والدليل يصلح 30 يوماً
+  const SV = { '.sv': 'timestamp' };
+  const REQ = (extra = {}) => ({ name: 'أ', sentAt: SV, ...extra });
+  const withToken = JSON.parse(JSON.stringify(base)); withToken.users.B.sentRequests = { A: Date.now() - 60_000 };
   // ملفي
   r.ok(W(NEW, 'A', [['users/A/xp', 5]]), 'لا أكتب في ملفي');
   r.ok(!W(NEW, 'A', [['users/B/xp', 5]]), 'أكتب في ملف غيري');
   r.ok(!W(NEW, 'A', [['users/B', { name: 'x' }]]), 'أستبدل ملف غيري كاملاً');
   // طلب الصداقة
-  r.ok(W(NEW, 'A', [['users/B/friendRequests/A', { name: 'أ' }], ['users/A/sentRequests/B', 1]]), 'طلب صداقة (الصندوق + دليلي) مرفوض');
-  r.ok(!W(NEW, 'A', [['users/B/friendRequests/C', { name: 'ج' }]]), 'أكتب طلباً باسم غيري');
-  r.ok(!W(NEW, 'A', [['users/B/sentRequests/A', 1]]), 'أكتب دليل طلب في ملف غيري');
-  r.ok(W(NEW, 'A', [['users/B/friendRequests/A', null]]), 'أسحب طلبي من صندوقه');
+  r.ok(W(NEW, 'A', [['users/B/friendRequests/A', REQ()], ['users/A/sentRequests/B', SV]]), 'طلب صداقة (الصندوق + دليلي) مرفوض');
+  r.ok(!W(NEW, 'A', [['users/B/friendRequests/C', REQ({ name: 'ج' })], ['users/C/sentRequests/B', SV]]), 'أكتب طلباً باسم غيري');
+  r.ok(!W(NEW, 'A', [['users/B/sentRequests/A', SV]]), 'أكتب دليل طلب في ملف غيري');
+  r.ok(W(NEW, 'A', [['users/B/friendRequests/A', null]]), 'سحب طلب غير موجود (كما يكتبه حذف صديق بلا طلب قائم) رُفض');
   // الطلب لا يُقبل إلا ومعه دليله في ملف مرسله بالكتابة نفسها (نسخة أقدم مفتوحة بعد نشر القواعد كانت تُنشئ طلباً بلا
   // دليل، فيصنع قبولُها بنسختها صداقةً من طرف واحد — مراجعة v36.1)، ولمستخدم موجود فقط (لا عُقد بأي مفتاح)
-  r.ok(!W(NEW, 'A', [['users/B/friendRequests/A', { name: 'أ' }]]), 'طلب بلا دليل (كما تكتبه نسخة أقدم) قُبل');
-  r.ok(!W(NEW, 'A', [['users/Z9/friendRequests/A', { name: 'أ' }], ['users/A/sentRequests/Z9', 1]]), 'طلب لمفتاح لا مستخدم له أنشأ عقدة جديدة');
-  r.ok(W(NEW, 'A', [['users/B/friendRequests/A/name', 'أ'], ['users/A/sentRequests/B', 1]]), 'تعديل حقل في طلبي (مع دليله) مرفوض');
+  r.ok(!W(NEW, 'A', [['users/B/friendRequests/A', REQ()]]), 'طلب بلا دليل (كما تكتبه نسخة أقدم) قُبل');
+  r.ok(!W(NEW, 'A', [['users/Z9/friendRequests/A', REQ()], ['users/A/sentRequests/Z9', SV]]), 'طلب لمفتاح لا مستخدم له أنشأ عقدة جديدة');
+  const withReqOld = JSON.parse(JSON.stringify(base)); withReqOld.users.B.friendRequests = { A: { name: 'أ', sentAt: 5 } };
+  r.ok(!W(NEW, 'A', [['users/B/friendRequests/A/name', 'أ2'], ['users/A/sentRequests/B', SV]], withReqOld), 'تعديل حقل في طلب قائم قُبل (الطلب يُكتب كاملاً بوقته — 3.3ج-2)');
   // كتابة على مستوى الأب أو حقل داخل مدخل غيري
-  r.ok(!W(NEW, 'A', [['users/B/friends', { A: { name: 'أ' } }]], withToken) && !W(NEW, 'A', [['users/B/friendRequests', { A: { name: 'أ' } }], ['users/A/sentRequests/B', 1]]),
+  r.ok(!W(NEW, 'A', [['users/B/friends', { A: { name: 'أ' } }]], withToken) && !W(NEW, 'A', [['users/B/friendRequests', { A: REQ() }], ['users/A/sentRequests/B', SV]]),
     'كتابة قائمة أصدقاء غيري أو صندوقه كاملاً');
   r.ok(W(NEW, 'A', [['users/B/friends/A/name', 'أ2']], withToken) && !W(NEW, 'A', [['users/B/friends/A/name', 'أ2']]),
     'تعديل حقل مدخلي في قائمة غيري: يتبع الدليل نفسه');
@@ -260,7 +264,7 @@ export function rulesMatrix() {
   // حدود الملف العام والطلب
   r.ok(!W(NEW, 'A', [['profiles/A', { name: 'ن'.repeat(129) }]]), 'اسم عام أطول من الحدّ (128) قُبل');
   r.ok(!W(NEW, 'A', [['profiles/A', { xp: 'كثير' }]]), 'خبرة ليست رقماً قُبلت');
-  r.ok(W(NEW, 'A', [['users/B/friendRequests/A', { name: 'أ' }], ['users/A/sentRequests/B', 1]]) && !W(NEW, 'A', [['users/B/friendRequests/A', { name: 'ن'.repeat(129) }], ['users/A/sentRequests/B', 1]]),
+  r.ok(W(NEW, 'A', [['users/B/friendRequests/A', REQ()], ['users/A/sentRequests/B', SV]]) && !W(NEW, 'A', [['users/B/friendRequests/A', REQ({ name: 'ن'.repeat(129) })], ['users/A/sentRequests/B', SV]]),
     'حدّ اسم الطلب (128) لم يُطبَّق');
   // ── 3.3ج-1: تحدي اليوم والدعوات والمحادثة — حدود الحقول، ومن يقرأ الدعوة، ووقت الرسالة ──
   const T1 = 1_800_000_000_000;
@@ -311,6 +315,69 @@ export function rulesMatrix() {
   r.ok(!RW1('A', [['users/A/lastRead/A_B', 'أمس']], lr()) && !RW1('B', [['users/A/lastRead/A_B', T1]], lr()),
     '"قرأتُ حتى" ليست رقماً، أو يكتبها غير صاحبها، قُبلت');
   r.ok(RW1('A', [['users/A/lastRead', null]], lr(T1)), 'حذف "قرأتُ حتى" (ملفي) رُفض');
+  // ── 3.3ج-2: طلبات الصداقة — بوقت الخادم، والدليل 30 يوماً، ومهلة 10 دقائق بعد الرفض/السحب/الحذف ──
+  const T2 = 1_900_000_000_000, MIN = 60_000, DAY = 86_400_000;
+  const RW2 = (uid, writes, root = base) => checkWrite(NEW, writes, { uid, root, now: T2 }).ok;
+  const RD2 = (uid, p, root) => canRead(NEW, p, { uid, root, now: T2 });
+  const tree = (fn) => { const t = JSON.parse(JSON.stringify(base)); fn(t.users); return t; };
+  const send = (root, req = REQ(), tok = SV) => RW2('A', [['users/B/friendRequests/A', req], ['users/A/sentRequests/B', tok]], root);
+  // الإرسال: الطلب ودليله بوقت الخادم معاً؛ ووقت الجهاز (نسخة أقدم) أو أحدهما وحده مرفوض
+  r.ok(send(base) && !send(base, REQ({ sentAt: T2 - 5 }), T2 - 5) && !send(base, REQ({ sentAt: T2 - 5 })) && !send(base, REQ(), T2 - 5),
+    'الطلب: بوقت الخادم مرفوض، أو بوقت الجهاز (كله أو بعضه) قُبل');
+  // الدليل يُكتب مع الطلب نفسه: دليلٌ قديم باقٍ في ملفي لا يكفي لطلب جديد (فيبقى عمر الدليل عمر الطلب)
+  r.ok(!RW2('A', [['users/B/friendRequests/A', REQ()]], tree(u => { u.A.sentRequests = { B: T2 - DAY }; })), 'طلب جديد بدليل قديم باقٍ (بلا دليل معه) قُبل');
+  // الشكل: حقوله المعروفة فقط، والمعرّف هو المرسل، والاسم ووقت الإرسال إلزاميان
+  r.ok(!send(base, REQ({ extra: 'x' })) && !send(base, REQ({ uid: 'V' })) && send(base, REQ({ uid: 'A', photo: 'p' })) && !send(base, { sentAt: SV })
+    && !send(base, REQ({ photo: 'x'.repeat(1025) })), 'شكل الطلب: حقل غريب/معرّف غير المرسل/بلا اسم/صورة طويلة قُبل، أو الصحيح رُفض');
+  // المهلة: بعد رفض/سحب/حذف بأقل من 10 دقائق لا طلب جديد للشخص نفسه، وبعدها يُقبل
+  const cool = (at) => tree(u => { u.B.requestCooldown = { A: at }; });
+  r.ok(!send(cool(T2 - 5 * MIN)) && !send(cool(T2 - 10 * MIN)) && send(cool(T2 - 10 * MIN - 1)), 'المهلة: طلب قبل مرور 10 دقائق قُبل، أو بعدها رُفض');
+  r.ok(RW2('C', [['users/B/friendRequests/C', REQ({ name: 'ج' })], ['users/C/sentRequests/B', SV]], tree(u => { u.B.requestCooldown = { A: T2 }; u.C = { name: 'ج' }; })),
+    'مهلة فلان منعت طلب شخص آخر');
+  // لا طلب فوق طلب أحدث من 10 دقائق (إعادة الإرسال المتكررة كانت إشعاراً كل مرة)، وفوق الأقدم يُقبل (إعادة بعد انتهاء المدة)
+  const pending = (at) => tree(u => { u.B.friendRequests = { A: { name: 'أ', sentAt: at } }; });
+  r.ok(!send(pending(T2 - 5 * MIN)) && send(pending(T2 - 31 * DAY)) && send(tree(u => { u.B.friendRequests = { A: { name: 'أ' } }; })),
+    'طلب فوق طلب قائم أحدث من 10 دقائق قُبل، أو فوق طلب قديم/بلا وقت رُفض');
+  // سحب طلبي القائم من صندوقه: لا يمرّ إلا ومعه المهلة بوقت الخادم (وإلا: سحب وإعادة = إشعار كل مرة)
+  const withReq = pending(T2 - DAY);
+  r.ok(!RW2('A', [['users/B/friendRequests/A', null]], withReq) && RW2('A', [['users/B/friendRequests/A', null], ['users/B/requestCooldown/A', SV]], withReq)
+    && !RW2('A', [['users/B/friendRequests/A', null], ['users/B/requestCooldown/A', T2 - 20 * MIN]], withReq),
+    'سحب طلب قائم بلا مهلة (أو بمهلة بوقت قديم) قُبل، أو معها رُفض');
+  // المهلة نفسها: يكتبها المرسل لنفسه بوقت الخادم فقط، ولا يمحوها، ولا يكتبها لغيره؛ وصاحب الملف يكتبها ويمحوها
+  const cooled = cool(T2 - MIN);
+  r.ok(RW2('A', [['users/B/requestCooldown/A', SV]]) && !RW2('A', [['users/B/requestCooldown/A', null]], cooled) && !RW2('A', [['users/B/requestCooldown/C', SV]])
+    && !RW2('A', [['users/B/requestCooldown/A', T2 - 20 * MIN]]) && !RW2('A', [['users/B/requestCooldown', null]], cooled),
+    'المهلة: المرسل محاها أو كتبها لغيره أو بوقت قديم، أو لم يستطع كتابتها لنفسه');
+  // مراجعة ج-2 (L2): المهلة لا يكتبها إلا من له صلة بصاحب الملف (صديق عنده أو طلب في صندوقه) — لا عُقد في ملف غريب ولا لمستخدم لا وجود له
+  r.ok(!RW2('A', [['users/V/requestCooldown/A', SV]]) && !RW2('A', [['users/Z9/requestCooldown/A', SV]]) && RW2('A', [['users/V/requestCooldown/A', SV]], tree(u => { u.V.friendRequests = { A: { name: 'أ', sentAt: T2 - DAY } }; })),
+    'المهلة: كتبها غريب في ملف لا صلة له به أو لمستخدم لا وجود له، أو صاحب طلب قائم لم يستطع');
+  const oneSidedRm = tree(u => { u.A.friends = { V: { name: 'ضحية' } }; });
+  r.ok(!RW2('A', [['users/A/friends/V', null], ['users/V/friends/A', null], ['users/V/friendRequests/A', null], ['users/A/sentRequests/V', null], ['users/V/requestCooldown/A', SV]], oneSidedRm)
+    && RW2('A', [['users/A/friends/V', null], ['users/V/friends/A', null], ['users/V/friendRequests/A', null], ['users/A/sentRequests/V', null]], oneSidedRm),
+    'حذف صديق من طرف واحد: الكتابة مع المهلة قُبلت (ملف لا صلة له) أو بدونها رُفضت (الكود يعيدها بدونها)');
+  r.ok(RW2('B', [['users/B/friendRequests/A', null], ['users/B/requestCooldown/A', SV]], withReq) && RW2('B', [['users/B/requestCooldown/A', null]], cooled),
+    'الرفض (حذف الطلب + المهلة في ملفي) أو محو صاحب الملف لمهلته رُفض');
+  r.ok(RD2('A', 'users/B/requestCooldown/A', cooled) && !RD2('A', 'users/B/requestCooldown', cooled) && !RD2('C', 'users/B/requestCooldown/A', cooled),
+    'المهلة: لا يقرأ المرسل مهلته (كم بقي)، أو يقرأ غيرُه مهلته أو المهل كلها');
+  // القبول: الدليل يصلح 30 يوماً بوقت الخادم، والدليل ليس رقماً لا يصلح
+  const tok = (v) => tree(u => { u.B.sentRequests = { A: v }; u.A.friendRequests = { B: { name: 'ب', sentAt: 1 } }; });
+  const accept2 = (root) => RW2('A', [['users/A/friends/B', { uid: 'B', name: 'ب', since: T2 }], ['users/B/friends/A', { uid: 'A', name: 'أ', since: T2 }],
+    ['users/A/friendRequests/B', null], ['users/B/sentRequests/A', null]], root);
+  r.ok(accept2(tok(T2 - 29 * DAY)) && !accept2(tok(T2 - 30 * DAY)) && !accept2(tok(T2 - 31 * DAY)) && !accept2(tok(true)),
+    'القبول: دليل عمره 29 يوماً رُفض، أو 30 يوماً فأكثر أو ليس رقماً قُبل');
+  // الدليل في ملفي: بوقت الخادم فقط (كان يُكتب بأي قيمة فيبقى صالحاً للأبد)
+  r.ok(!RW2('A', [['users/A/sentRequests/B', T2 + 365 * DAY]]) && RW2('A', [['users/A/sentRequests/B', null]], tok(T2)), 'دليل بوقت غير وقت الخادم قُبل، أو حذف دليلي رُفض');
+  // مدخل الصديق: حقوله المعروفة فقط، ومعرّفه صاحبه
+  const okEntry = { uid: 'A', name: 'أ', photo: '', since: T2 };
+  r.ok(accept2(tok(T2)) && !RW2('A', [['users/B/friends/A', { ...okEntry, extra: 1 }]], tok(T2)) && !RW2('A', [['users/B/friends/A', { ...okEntry, uid: 'V' }]], tok(T2))
+    && !RW2('A', [['users/B/friends/A', { ...okEntry, since: 'أمس' }]], tok(T2)), 'مدخل الصديق: حقل غريب أو معرّف غيره أو وقت ليس رقماً قُبل');
+  // حذف صديق كما يكتبه الكود: الطرفان + سحب طلبي إليه + المهلة في ملفه؛ وبلا المهلة (القواعد القديمة) ينجح ما لم يكن طلبي قائماً
+  const friendsAB = tree(u => { u.A.friends = { B: { name: 'ب' } }; u.B.friends = { A: { name: 'أ' } }; });
+  const rmWrites = [['users/A/friends/B', null], ['users/B/friends/A', null], ['users/B/friendRequests/A', null], ['users/A/sentRequests/B', null]];
+  const friendsReq = tree(u => { u.A.friends = { B: { name: 'ب' } }; u.B.friends = { A: { name: 'أ' } }; u.B.friendRequests = { A: { name: 'أ', sentAt: T2 - DAY } }; });
+  r.ok(RW2('A', [...rmWrites, ['users/B/requestCooldown/A', SV]], friendsAB) && RW2('A', rmWrites, friendsAB)
+    && RW2('A', [...rmWrites, ['users/B/requestCooldown/A', SV]], friendsReq) && !RW2('A', rmWrites, friendsReq),
+    'حذف صديق: مع المهلة رُفض، أو بلا مهلة وطلبي قائم قُبل (أو بلا طلب رُفض)');
   // ولماذا كان لا بدّ منها: القواعد السابقة ترفض الطلب والحذف والقبول
   r.ok(!W(OLD, 'A', [['users/B/friendRequests/A', { name: 'أ' }]]) && !W(OLD, 'A', [['users/B/friends/A', null]])
     && !W(OLD, 'A', [['users/B/friends/A', { name: 'أ' }]], withToken), 'القواعد السابقة كانت تسمح بالأصدقاء (التشخيص خاطئ؟)');

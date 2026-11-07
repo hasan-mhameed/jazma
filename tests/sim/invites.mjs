@@ -84,6 +84,10 @@ export async function inviteReject(verbose = false) {
   r.ok(A.outgoing() === null && A.onlineUI.activity() === 'idle', 'الزر رجع وأحمد في القائمة');
   r.ok(replySlot(w, A) == null && inviteSlot(w, B) == null, 'لا بقايا: الرد والدعوة مُسحا');
   r.ok(!B.invitePopup() && B.matches.length === 0, 'الإشعار اختفى عند باسل ولا مباراة');
+  // 3.3ج-2 (فحص ج-1): بعد ردّه لا يسحب أحمد الدعوة من خانة باسل — باسل مسحها مع ردّه، وقراءة خانة غيرك الفارغة
+  // مرفوضة (تحذير "transaction … permission_denied" في الـconsole)
+  const invDenied = w.server.denied.filter(d => /^invites\//.test(d.path));
+  r.ok(invDenied.length === 0, `صاحب الدعوة حاول سحبها بعد الرفض: ${invDenied.map(d => d.op + ' ' + d.path).join('، ')}`);
   noErr(r, w); w.dispose(); return r;
 }
 
@@ -192,6 +196,8 @@ export async function inviteBusy(verbose = false) {
   r.ok(B.om.roomCode === mcode && rm.status === 'playing' && endsOf(B, 'end').length === 0 && endsOf(C, 'end').length === 0,
     'مباراة باسل وكريم لم تتأثر');
   r.ok(inviteSlot(w, B) == null && replySlot(w, A) == null, 'لا بقايا دعوة ولا رد');
+  const invDenied = w.server.denied.filter(d => /^invites\//.test(d.path));
+  r.ok(invDenied.length === 0, `صاحب الدعوة حاول سحبها بعد ردّ "في مباراة": ${invDenied.map(d => d.op + ' ' + d.path).join('، ')}`);
   // أحمد نفسه في مباراة لا يستطيع الدعوة (الطريق إليها من المحادثة أثناء اللعب)
   const before = Object.keys(w.rooms()).length;
   B.invite(A);

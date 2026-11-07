@@ -13,6 +13,7 @@ import fsx from 'node:fs';
 import { memberOnlyRooms } from '../shared/roomsOverlay.mjs';
 import { RULES as PROJECT_RULES } from './fakertdb.mjs';
 import net from 'node:net';
+import { spawn } from 'node:child_process';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const results = [];
@@ -906,6 +907,9 @@ async function friendsRealRules() {
   await wait(300);
   await A.sendFriendRequest('uB'); await wait(300);
   r.ok(!!S.getAt('users/uB/friendRequests/uA') && !!S.getAt('users/uA/sentRequests/uB'), 'الطلب ودليله لم يصلا الخادم');
+  // 3.3ج-2: الطلب ودليله بوقت الخادم نفسه (قيمة serverTimestamp واحدة في الكتابة الواحدة)
+  const sAt = S.getAt('users/uB/friendRequests/uA/sentAt'), tok = S.getAt('users/uA/sentRequests/uB');
+  r.ok(typeof sAt === 'number' && sAt === tok && Math.abs(sAt - Date.now()) < 5000, `الطلب ودليله ليسا بوقت الخادم نفسه (${sAt} / ${tok})`);
   r.ok(reqs.some(q => q.uid === 'uA'), 'باسل لا يرى طلب أحمد');
   const res = await B.acceptFriendRequest('uA'); await wait(500);
   r.ok(res && res.ok === true, `القبول: ${JSON.stringify(res)}`);
@@ -916,6 +920,12 @@ async function friendsRealRules() {
   await A.removeFriend('uB'); await wait(400);
   r.ok(!S.getAt('users/uA/friends/uB') && !S.getAt('users/uB/friends/uA'), 'الحذف لم يكن من الطرفين');
   r.ok(await denies(dbUpdate(dbRef(B.__db), { 'users/uA/friends/uB': { name: 'باسل' } })) && !S.getAt('users/uA/friends/uB'), 'باسل أعاد نفسه لقائمة أحمد بعد الحذف بلا طلب جديد');
+  // 3.3ج-2: الحذف يترك مهلة في ملف باسل — طلب أحمد الفوري يُرفض بسبب "مهلة" ومعه كم بقي، ولا يُكتب شيء
+  r.ok(typeof S.getAt('users/uB/requestCooldown/uA') === 'number', `الحذف لم يترك مهلة (${JSON.stringify(S.getAt('users/uB/requestCooldown/uA'))})`);
+  let cdErr = null; try { await A.sendFriendRequest('uB'); } catch (e) { cdErr = e; } await wait(300);
+  r.ok(cdErr?.code === 'cooldown' && cdErr.waitMs > 9 * 60_000 && cdErr.waitMs <= 10 * 60_000 && !S.getAt('users/uB/friendRequests/uA') && !S.getAt('users/uA/sentRequests/uB'),
+    `طلب فوري بعد الحذف: ${cdErr ? cdErr.code + ' ' + cdErr.waitMs : 'نجح'} (طلب ${!!S.getAt('users/uB/friendRequests/uA')}، دليل ${!!S.getAt('users/uA/sentRequests/uB')})`);
+  S.setAt('users/uB/requestCooldown/uA', Date.now() - 11 * 60_000); await wait(100);   // مضت 10 دقائق
   // طلب قديم بلا دليل في ملف مرسله (من نسخة قبل v36.1)
   S.setAt('users/uB/friendRequests/uO', { uid: 'uO', name: 'عمر' }); await wait(200);
   const stale = await B.acceptFriendRequest('uO'); await wait(300);
@@ -941,6 +951,9 @@ async function friendsRealRules() {
   await Z.sendFriendRequest('uB'); await wait(300);
   await B.rejectFriendRequest('uZ'); await wait(300);
   r.ok(!S.getAt('users/uB/friendRequests/uZ') && !S.getAt('users/uZ/sentRequests/uB'), 'الرفض أبقى الطلب أو دليله');
+  r.ok(typeof S.getAt('users/uB/requestCooldown/uZ') === 'number', 'الرفض لم يترك مهلة في ملف باسل');
+  let zErr = null; try { await Z.sendFriendRequest('uB'); } catch (e) { zErr = e; } await wait(200);
+  r.ok(zErr?.code === 'cooldown' && !S.getAt('users/uB/friendRequests/uZ'), `طلب زياد فوراً بعد رفضه: ${zErr ? zErr.code : 'نجح'}`);
   // القواعد القديمة: كل عملية تُرفض كاملة (لا نصف كتابة)، والوعد يُرفض (الواجهة تقول "تعذّر")
   S.rules = OLD_RULES;
   r.ok(await denies(A.removeFriend('uB')), 'القواعد القديمة: الحذف لم يُرفض');
@@ -955,6 +968,67 @@ async function friendsRealRules() {
   S.close();
 }
 
+// ── 3.3ج-2: الكود أولاً ثم القواعد — friends.js الجديد بالحزمة الحقيقية فوق قواعد v36.8 (المنشورة قبل هذه الدفعة):
+// الإرسال بوقت الخادم، والقبول، والرفض (المهلة في ملفي)، وحذف الصديق — كتابته الأولى (مع المهلة في ملفه) ترفضها القواعد
+// السابقة فيعيدها بدونها: لا رسالة "تعذّر" ولا نصف كتابة، والحالة المحلية بعد الرفض الأول تعود صحيحة ──
+const C1_RULES = JSON.parse(fsx.readFileSync(new URL('../shared/rules_c1_v36.8.json', import.meta.url), 'utf8'));
+async function friendsCodeFirstReal() {
+  const r = suite('3.3ج-2: الكود الجديد فوق قواعد v36.8 (الكود أولاً ثم القواعد): إرسال وقبول ورفض وحذف صديق تعمل');
+  const S = new FakeRTDB({ rules: C1_RULES }); const port = await S.listen();
+  S.setAt('users/uA', { uid: 'uA', name: 'أحمد' }); S.setAt('users/uB', { uid: 'uB', name: 'باسل' }); S.setAt('users/uC', { uid: 'uC', name: 'كريم' });
+  const A = await import(pathToFileURL(genFriends('A', port)).href);
+  const B = await import(pathToFileURL(genFriends('B', port)).href);
+  const C = await import(pathToFileURL(genFriends('C', port)).href);
+  let aFriends = [];
+  const unA = A.listenFriends(x => { aFriends = x; });
+  await wait(300);
+  await A.sendFriendRequest('uB'); await wait(300);
+  r.ok(!!S.getAt('users/uB/friendRequests/uA') && typeof S.getAt('users/uA/sentRequests/uB') === 'number', 'الإرسال فوق قواعد v36.8 لم يصل');
+  const acc = await B.acceptFriendRequest('uA'); await wait(400);
+  r.ok(acc?.ok && !!S.getAt('users/uA/friends/uB') && !!S.getAt('users/uB/friends/uA'), `القبول فوق قواعد v36.8: ${JSON.stringify(acc)}`);
+  await C.sendFriendRequest('uB'); await wait(300);
+  await B.rejectFriendRequest('uC'); await wait(300);
+  r.ok(!S.getAt('users/uB/friendRequests/uC') && typeof S.getAt('users/uB/requestCooldown/uC') === 'number', 'الرفض فوق قواعد v36.8 لم يتم أو بلا مهلة');
+  let err = null; try { await A.removeFriend('uB'); } catch (e) { err = e; } await wait(500);
+  r.ok(!err && !S.getAt('users/uA/friends/uB') && !S.getAt('users/uB/friends/uA'), `حذف صديق فوق قواعد v36.8: ${err ? err.code || err.message : 'تم'} (عندي ${!!S.getAt('users/uA/friends/uB')}، عنده ${!!S.getAt('users/uB/friends/uA')})`);
+  r.ok(!aFriends.some(f => f.uid === 'uB'), 'قائمة أحمد المحلية ما زالت تُظهر باسل بعد الحذف');
+  unA(); S.close();
+}
+
+// ── 3.3ج-2 (مراجعة L1): جهاز ساعته متقدّمة شهراً (عملية منفصلة بساعتها — الحزمة تقيس فرقها عن الخادم بها):
+// (أ) مستقبِلٌ متقدّم: الطلب الواصل يظهر عنده ويبقى على الخادم (كان يُمسح لحظة وصوله فلا يراه ولا إشعار)؛
+// (ب) مرسِلٌ متقدّم: دليله يبقى في ملفه وقبول صديقه يتمّ (كان دليله يُمسح فيقول القبول "نسخة قديمة") ──
+function runSkewDevice(modPath, skewMs, mode, target = '', ms = 2500) {
+  return new Promise(resolve => {
+    const p = spawn(process.execPath, [new URL('./skewdevice.mjs', import.meta.url).pathname, pathToFileURL(modPath).href, String(skewMs), mode, target, String(ms)],
+      { cwd: new URL('.', import.meta.url).pathname });
+    let buf = ''; p.stdout.on('data', d => { buf += d; }); p.stderr.on('data', () => {});
+    p.on('close', () => resolve(buf.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return { ev: 'raw', l }; } })));
+  });
+}
+async function friendsClockSkewReal() {
+  const r = suite('3.3ج-2: جهاز ساعته متقدّمة شهراً — الطلب الواصل يظهر ويبقى، ودليل المرسل يبقى وقبوله يتمّ (لا مسح بساعة الجهاز)');
+  const DAY = 86_400_000;
+  const S = new FakeRTDB(); const port = await S.listen();
+  S.setAt('users/uA', { uid: 'uA', name: 'أحمد' }); S.setAt('users/uB', { uid: 'uB', name: 'باسل' }); S.setAt('users/uC', { uid: 'uC', name: 'كريم' });
+  const A = await import(pathToFileURL(genFriends('A', port)).href);
+  const B = await import(pathToFileURL(genFriends('B', port)).href);
+  // (أ) باسل بجهاز متقدّم يستمع لطلباته، وأحمد يرسل
+  const recv = runSkewDevice(genFriends('Bfast', port, { uid: 'uB' }), 31 * DAY, 'receiver', '', 2500);
+  await wait(1200);
+  await A.sendFriendRequest('uB');
+  const evs = await recv;
+  const snaps = evs.filter(e => e.ev === 'reqs');
+  r.ok(!evs.some(e => e.ev === 'error') && snaps.length && snaps[snaps.length - 1].uids.includes('uA'),
+    `(أ) الطلب لم يظهر عند المستقبل المتقدّم (${JSON.stringify(evs.slice(-4))})`);
+  r.ok(!!S.getAt('users/uB/friendRequests/uA') && !!S.getAt('users/uA/sentRequests/uB'), '(أ) الطلب أو دليله مُسح من الخادم بساعة جهاز المستقبل');
+  // (ب) كريم بجهاز متقدّم يرسل لباسل، وباسل (جهاز عادي) يقبل
+  const sendEvs = await runSkewDevice(genFriends('Cfast', port, { uid: 'uC' }), 31 * DAY, 'sender', 'uB', 1500);
+  r.ok(sendEvs.some(e => e.ev === 'sentOk') && !!S.getAt('users/uC/sentRequests/uB'), `(ب) دليل المرسل المتقدّم مُسح أو لم يُرسل (${JSON.stringify(sendEvs.slice(-3))})`);
+  const acc = await B.acceptFriendRequest('uC'); await wait(400);
+  r.ok(acc?.ok && !!S.getAt('users/uC/friends/uB') && !!S.getAt('users/uB/friends/uC'), `(ب) قبول طلب المرسل المتقدّم: ${JSON.stringify(acc)}`);
+  S.close();
+}
 
 // ── 3.3أ-3: المحادثة (chat.js الحقيقي) بالحزمة الحقيقية فوق القواعد المنشورة — الطرفان من مفتاح المحادثة: الاستماع
 // (استعلام limitToLast) والإرسال (push يُحلّ بمرجع الرسالة) وتعليم الوصول/القراءة (كتابة متعددة المسارات)، ومن ليس
@@ -1206,7 +1280,7 @@ const all = [offlineExitThenReconnect, blipDuringWithdraw, onlineExit, creatorSt
   duoCancelThenClose, duoJoinAckLost, duoCodeJoinAckLost, duoCreateBlip, duoAbortRetried, duoCancelDuringReopen,
   duoHostBlipRestores, duoRestoreKeepsGuestOut, duoEvictedGuestOp, duoOrphanNodeRestores, duoCancelStrayFinished,
   inviteConditionalRemovals, registrationProfile, friendsRealRules, presenceHealsReal, mixedVersions, twoTabAccept,
-  chatRealRules, chatLastReadReal, roomCodeCollisionReal, lobbyRacesReal];
+  chatRealRules, chatLastReadReal, roomCodeCollisionReal, lobbyRacesReal, friendsCodeFirstReal, friendsClockSkewReal];
 // ONLY=اسم1,اسم2 npm test — تشغيل فحوص بعينها (للتطوير وفحص الطفرات)
 const pick = process.env.ONLY ? all.filter(f => process.env.ONLY.split(',').includes(f.name)) : all;
 console.log('\n🔬 firebase.js بحزمة Firebase الحقيقية');

@@ -2,19 +2,19 @@
 // النهايات: اكتمال اللوحة، نفاد بنك الوقت، انسحاب/انقطاع الخصوم (نافذة النتيجة + التسجيل)،
 // والانسحاب بالزر (تسجيل الخسارة فقط — recordForfeit)، والخروج من مباراة جماعية جارية
 // (نفاد الوقت أو الانقطاع بلا عودة — recordElimination، v35.7).
-import { audioManager } from "../audio/audioManager.js?v=1793490698";
+import { audioManager } from "../audio/audioManager.js?v=1793749802";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1793490698";
-import { saveMatch } from "../history.js?v=1793490698";
-import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1793490698";
-import { showNewAchievements } from "./achievementsUI.js?v=1793490698";
-import { calcXP, addXP } from "../xp.js?v=1793490698";
-import { showXPGain } from "./xpUI.js?v=1793490698";
-import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1793490698";
-import { commitMatchCoins, getMatchCoins } from "../core/wallet.js?v=1793490698";
-import { computeMatchResult, multiHistoryResult, getMyNum, OUT_LABELS } from "../core/matchResult.js?v=1793490698";
-import { esc } from "./safeText.js?v=1793490698";
-import { localStatsKey, isSafeKey } from "../core/statsKey.js?v=1793490698";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1793749802";
+import { saveMatch } from "../history.js?v=1793749802";
+import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1793749802";
+import { showNewAchievements } from "./achievementsUI.js?v=1793749802";
+import { calcXP, addXP } from "../xp.js?v=1793749802";
+import { showXPGain } from "./xpUI.js?v=1793749802";
+import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1793749802";
+import { commitMatchCoins, getMatchCoins } from "../core/wallet.js?v=1793749802";
+import { computeMatchResult, multiHistoryResult, getMyNum, OUT_LABELS } from "../core/matchResult.js?v=1793749802";
+import { esc } from "./safeText.js?v=1793749802";
+import { localStatsKey, isSafeKey } from "../core/statsKey.js?v=1793749802";
 
 export let _matchStartTime = Date.now();
 // مرة واحدة لكل مباراة: نهايتان متزامنتان (مثلاً آخر حركة + خروج خصم) لا تسجّلان مرتين

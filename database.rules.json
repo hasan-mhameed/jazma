@@ -25,31 +25,58 @@
         "friendRequests": {
           "$fromUid": {
             ".read": "$fromUid === auth.uid",
-            ".write": "auth !== null && $fromUid === auth.uid && (!newData.exists() || (root.child('users').child($uid).exists() && newData.parent().parent().parent().child($fromUid).child('sentRequests').child($uid).exists()))",
+            ".write": "auth !== null && $fromUid === auth.uid && ((!newData.exists() && (!data.exists() || newData.parent().parent().child('requestCooldown').child($fromUid).val() === now)) || (newData.exists() && root.child('users').child($uid).exists() && newData.child('sentAt').val() === now && newData.parent().parent().parent().child($fromUid).child('sentRequests').child($uid).val() === now && (!data.child('sentAt').isNumber() || data.child('sentAt').val() < now - 600000) && (!root.child('users').child($uid).child('requestCooldown').child($fromUid).isNumber() || root.child('users').child($uid).child('requestCooldown').child($fromUid).val() < now - 600000)))",
+            ".validate": "newData.hasChildren(['name', 'sentAt'])",
+            "uid": {
+              ".validate": "newData.val() === $fromUid"
+            },
             "name": {
               ".validate": "newData.isString() && newData.val().length <= 128"
             },
             "photo": {
               ".validate": "newData.isString() && newData.val().length <= 1024"
+            },
+            "sentAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
             }
+          }
+        },
+        "requestCooldown": {
+          "$fromUid": {
+            ".read": "$fromUid === auth.uid",
+            ".write": "auth !== null && $fromUid === auth.uid && newData.exists() && (root.child('users').child($uid).child('friends').child(auth.uid).exists() || root.child('users').child($uid).child('friendRequests').child(auth.uid).exists())",
+            ".validate": "newData.isNumber() && newData.val() === now"
           }
         },
         "friends": {
           "$friendUid": {
             ".read": "$friendUid === auth.uid",
-            ".write": "auth !== null && $friendUid === auth.uid && (!newData.exists() || root.child('users').child($uid).child('sentRequests').child(auth.uid).exists())",
+            ".write": "auth !== null && $friendUid === auth.uid && (!newData.exists() || (root.child('users').child($uid).child('sentRequests').child(auth.uid).isNumber() && root.child('users').child($uid).child('sentRequests').child(auth.uid).val() > now - 2592000000))",
+            "uid": {
+              ".validate": "newData.val() === $friendUid"
+            },
             "name": {
               ".validate": "newData.isString() && newData.val().length <= 128"
             },
             "photo": {
               ".validate": "newData.isString() && newData.val().length <= 1024"
+            },
+            "since": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
             }
           }
         },
         "sentRequests": {
           "$toUid": {
             ".read": "$toUid === auth.uid",
-            ".write": "auth !== null && $toUid === auth.uid && !newData.exists()"
+            ".write": "auth !== null && $toUid === auth.uid && !newData.exists()",
+            ".validate": "newData.isNumber() && newData.val() === now"
           }
         },
         "lastRead": {

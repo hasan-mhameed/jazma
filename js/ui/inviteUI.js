@@ -9,9 +9,9 @@
 //    شاشة نتيجة يُنهي ما هو فيه بهدوء ثم ينضم؛ وقبول دعوة لم تعد متاحة يعرض رسالة واضحة.
 // الواجهة الخارجية (الشاشات وبدء المباراة) يمرّرها main.js عبر initInvites(hooks).
 import { sendGameInvite, listenForInvites, watchInviteRoom, replyToInvite, listenForInviteReplies,
-         removeInviteReply, clearMyInviteReplies, clearInviteIf, withdrawInvite } from "../invite.js?v=1793490698";
-import { onlineManager } from "../firebase.js?v=1793490698";
-import { getCurrentUser } from "../auth.js?v=1793490698";
+         removeInviteReply, clearMyInviteReplies, clearInviteIf, withdrawInvite } from "../invite.js?v=1793749802";
+import { onlineManager } from "../firebase.js?v=1793749802";
+import { getCurrentUser } from "../auth.js?v=1793749802";
 
 export const INVITE_TTL_SEC = 60;        // مهلة الرد على الدعوة (عند صاحبها: عدّ تنازلي في شاشة الانتظار)
 const ROOM_GONE_GRACE_MS   = 10000;      // غرفة دعوة اختفت: انقطاع لحظي عند صاحبها؟ تعود كما كانت — ننتظرها قليلاً
@@ -186,7 +186,9 @@ function endOut(s, reason, reply = null) {
   if (reason !== "accepted" && hosting) {
     tasks.push(Promise.resolve(onlineManager.leaveRoom()).catch(() => {}));   // إلغاء ذرّي لغرفة تنتظر (v35.8)
   }
-  if (reason !== "accepted" && s.code) tasks.push(Promise.resolve(withdrawInvite(s.friendUid, s.code, s.myUid)).catch(() => {}));
+  // سحب دعوتي من خانة صديقي — إلا بعد ردّه (رفض أو "في مباراة"): هو يمسحها من خانته مع ردّه (replyToInvite)، فخانته
+  // فارغة غالباً وقراءتها ممنوعة علينا (3.3ج-1: الخانة لصاحبها ومرسل دعوتها) — كان السحب يفشل بتحذير في الـconsole (فحص ج-1)
+  if (reason !== "accepted" && s.code && !reply) tasks.push(Promise.resolve(withdrawInvite(s.friendUid, s.code, s.myUid)).catch(() => {}));
   const done = Promise.all(tasks);    // يُنتظر قبل تسجيل الخروج (بحدّ أقصى)
   emit();
   if (reason === "accepted" || reason === "left") return done;

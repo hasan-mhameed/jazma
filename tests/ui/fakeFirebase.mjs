@@ -100,11 +100,12 @@ export function createFirebase({ win, users = {}, cold = false, rules = null } =
     },
     /** كتابة كأنها من جهاز مستخدم آخر (صديق يقبل/يحذف/يحاول) — تمرّ بقواعد الأمان نفسها، وذرّية: { ok, path } */
     writeAs(uid, writes) {
+      const t = now();
       if (this.rules) {
-        const res = checkWrite(this.rules, writes, { uid, root: this.root, now: now() });
+        const res = checkWrite(this.rules, writes, { uid, root: this.root, now: t });
         if (!res.ok) { this.denied.push({ op: 'as:' + uid, path: res.path }); return { ok: false, path: res.path }; }
       }
-      for (const [p, v] of writes) this.write(p, v);
+      for (const [p, v] of writes) this.write(p, v, t);
       return { ok: true };
     },
     /** يقطع الاتصال: تنفيذ أوامر onDisconnect المسجّلة (كما يفعل الخادم عند انقطاع الجهاز أو إعادة تحميل الصفحة) */
@@ -113,14 +114,18 @@ export function createFirebase({ win, users = {}, cold = false, rules = null } =
       ops.forEach(op => op.run());
     },
   };
-  const now = () => win.Date.now();
+  // ساعة الخادم: ساعة الصفحة + serverSkew (0 افتراضياً) — فحصٌ يضبطها ليفرّق "وقت الخادم" عن ساعة الجهاز (3.3ج-2)،
+  // وتُقرأ في .info/serverTimeOffset كما تقيسها الحزمة الحقيقية
+  const now = () => win.Date.now() + (fb.serverSkew || 0);
   fb.getAt = (p) => {
     let cur = fb.root;
     for (const k of parts(p)) { if (cur == null || typeof cur !== 'object') return null; cur = cur[k]; if (cur === undefined) return null; }
     return cur ?? null;
   };
-  fb.write = (p, value) => {
-    const keys = parts(p); const v = normalize(clone(value), now());
+  // t: وقت الخادم لهذه الكتابة — كتابة متعددة المسارات تأخذ وقتاً واحداً لكل قيمها (كالخادم الحقيقي: serverTimestamp
+  // في update واحد = القيمة نفسها في كل مساراته — 3.3ج-2: الطلب ودليله)
+  fb.write = (p, value, t = now()) => {
+    const keys = parts(p); const v = normalize(clone(value), t);
     fb.writes.push({ path: keys.join('/'), value: v });
     if (!keys.length) { fb.root = v; notifyAll(); return; }
     if (fb.root == null || typeof fb.root !== 'object') { if (v === null) return notifyAll(); fb.root = {}; }
@@ -142,9 +147,9 @@ export function createFirebase({ win, users = {}, cold = false, rules = null } =
 
   // ── قواعد الأمان والتحقق من المسارات (كالحزمة الحقيقية) ──
   const uidNow = () => fb.auth?.currentUser?.uid ?? null;
-  const allowWrite = (op, writes) => {
+  const allowWrite = (op, writes, t = now()) => {
     if (!fb.rules) return true;
-    const res = checkWrite(fb.rules, writes, { uid: uidNow(), root: fb.root, now: now() });
+    const res = checkWrite(fb.rules, writes, { uid: uidNow(), root: fb.root, now: t });
     if (!res.ok) fb.denied.push({ op, path: res.path });
     return res.ok;
   };
@@ -194,7 +199,7 @@ export function createFirebase({ win, users = {}, cold = false, rules = null } =
   };
   const readAt = (r) => {
     if (r._path === '.info/connected') return fb.connected;
-    if (r._path === '.info/serverTimeOffset') return 0;
+    if (r._path === '.info/serverTimeOffset') return fb.serverSkew || 0;
     return applyQuery(fb.getAt(r._path), r._q);
   };
 
@@ -281,9 +286,10 @@ export function createFirebase({ win, users = {}, cold = false, rules = null } =
       for (const [k, v] of Object.entries(values || {})) assertData(v, 'update', k);
       const writes = Object.entries(values || {}).map(([k, v]) => [parts(r._path).concat(parts(k)).join('/'), v]);
       return whenConnected(() => {
-        if (!allowWrite('update', writes)) throw PERMISSION_DENIED();   // ذرّية: مسار مرفوض واحد يرفض الكل
+        const t = now();
+        if (!allowWrite('update', writes, t)) throw PERMISSION_DENIED();   // ذرّية: مسار مرفوض واحد يرفض الكل
         fb.batches.push({ op: 'update', path: r._path, keys: Object.keys(values || {}) });
-        for (const [p, v] of writes) fb.write(p, v);
+        for (const [p, v] of writes) fb.write(p, v, t);
       });
     },
     remove: (r) => whenConnected(() => {
