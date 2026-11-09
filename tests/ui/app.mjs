@@ -964,9 +964,12 @@ export async function friendRequestsC2() {
       H.fb.writeAs('b', [['users/me/sentRequests/b', null]]);
       await H.settle(0, 10); await sleep(1000); await H.settle(0, 10);
       r.ok(rej.ok && label() === '➕ إضافة', `(أ) رفضه: "${label()}"`);
+      const deniedBefore = H.fb.denied.length;
       searchBtn(H, 'b').click(); await H.settle(0, 30);
       r.ok(/⏳ تقدر تعيد طلبك إلى باسل بعد (10|9) دقائق/.test(flashText(H)) && H.fb.get('users/b/friendRequests/me') == null && H.fb.get('users/me/sentRequests/b') == null,
         `(أ) إعادة فورية: الرسالة "${flashText(H)}" أو كُتب شيء`);
+      // 3.3ج-3 (قرار بعد فحص ج-2): المهلة تُقرأ قبل الإرسال — لا كتابة يرفضها الخادم (كانت تحذيراً أصفر في الـconsole)
+      r.ok(H.fb.denied.length === deniedBefore, `(أ) إعادة فورية: حاولت الكتابة فرفضها الخادم (${JSON.stringify(H.fb.denied.slice(deniedBefore))})`);
       r.ok(H.errors.length === 0, '(أ) أخطاء' + errText(H));
     } catch (e) { r.ok(false, '(أ) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
     H.close();

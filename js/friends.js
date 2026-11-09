@@ -5,7 +5,7 @@ import { getDatabase, ref, get, update, onValue, remove, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getCurrentUser } from "./auth.js?v=1793749802";
+import { getCurrentUser } from "./auth.js?v=1794182040";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -40,13 +40,15 @@ export const isRequestExpired = at => typeof at !== "number" || at <= serverNow(
 const isPastTtl = at => typeof at === "number" && at <= serverNow() - REQUEST_TTL_MS;
 const isDenied = e => /permission[_ ]denied/i.test(String(e?.code || e?.message || e));
 
-// كم بقي من مهلتي عند فلان (0 = لا مهلة) — أقرأ مدخلي أنا وحده (القاعدة تسمح لي به)، والوقت بساعة الخادم
-async function cooldownLeft(toUid, fromUid) {
+// كم بقي من مهلتي عند فلان (0 = لا مهلة) — أقرأ مدخلي أنا وحده (القاعدة تسمح لي به)، والوقت بساعة الخادم.
+// strict: قبل الإرسال — ما بقي فعلاً فقط (بلا هامش)؛ وبعد رفضٍ: هامش لفرق الساعات (الخادم رفض، فالمهلة قائمة غالباً)
+async function cooldownLeft(toUid, fromUid, { strict = false } = {}) {
   try {
     watchServerOffset();
     const at = (await get(ref(db, `users/${toUid}/requestCooldown/${fromUid}`))).val();
     if (typeof at !== "number") return 0;
     const left = at + REQUEST_COOLDOWN_MS - serverNow();
+    if (strict) return left > 0 ? Math.min(REQUEST_COOLDOWN_MS, left) : 0;
     if (left <= -60_000) return 0;                       // انتهت فعلاً: الرفض لسبب آخر
     return Math.min(REQUEST_COOLDOWN_MS, Math.max(left, 30_000));
   } catch { return 0; }
@@ -79,6 +81,10 @@ export async function searchUsers(query) {
 export async function sendFriendRequest(toUid) {
   const fromUid = getCurrentUser()?.uid;
   if (!fromUid || !toUid || toUid === fromUid) throw new Error("طلب صداقة غير صالح");
+  // 3.3ج-3 (قرار المستخدم بعد فحص ج-2): المهلة تُقرأ قبل الإرسال — داخلها لا نكتب شيئاً (كانت الكتابة تُرفض فيطبع
+  // Firebase تحذيراً أصفر في الـconsole مع كل محاولة). القراءة تفشل قبل نشر قواعد ج-2 (ملفه لصاحبه) فنكمل كما كنا
+  const pre = await cooldownLeft(toUid, fromUid, { strict: true });
+  if (pre > 0) { const err = new Error("cooldown"); err.code = "cooldown"; err.waitMs = pre; throw err; }
   const fromData = (await get(ref(db, `users/${fromUid}`))).val() || {};   // ملف ناقص/غائب لا يكسر الإرسال
   const at = serverTimestamp();           // 3.3ج-2: وقت الخادم (القواعد تقبل الطلب ودليله بوقت كتابتهما فقط)
   try {

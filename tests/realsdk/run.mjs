@@ -922,7 +922,9 @@ async function friendsRealRules() {
   r.ok(await denies(dbUpdate(dbRef(B.__db), { 'users/uA/friends/uB': { name: 'باسل' } })) && !S.getAt('users/uA/friends/uB'), 'باسل أعاد نفسه لقائمة أحمد بعد الحذف بلا طلب جديد');
   // 3.3ج-2: الحذف يترك مهلة في ملف باسل — طلب أحمد الفوري يُرفض بسبب "مهلة" ومعه كم بقي، ولا يُكتب شيء
   r.ok(typeof S.getAt('users/uB/requestCooldown/uA') === 'number', `الحذف لم يترك مهلة (${JSON.stringify(S.getAt('users/uB/requestCooldown/uA'))})`);
+  const dBefore = S.denied.length;
   let cdErr = null; try { await A.sendFriendRequest('uB'); } catch (e) { cdErr = e; } await wait(300);
+  r.ok(S.denied.length === dBefore, `3.3ج-3: الطلب داخل المهلة كُتب فرفضه الخادم (تحذير في الـconsole) — ${JSON.stringify(S.denied.slice(dBefore))}`);
   r.ok(cdErr?.code === 'cooldown' && cdErr.waitMs > 9 * 60_000 && cdErr.waitMs <= 10 * 60_000 && !S.getAt('users/uB/friendRequests/uA') && !S.getAt('users/uA/sentRequests/uB'),
     `طلب فوري بعد الحذف: ${cdErr ? cdErr.code + ' ' + cdErr.waitMs : 'نجح'} (طلب ${!!S.getAt('users/uB/friendRequests/uA')}، دليل ${!!S.getAt('users/uA/sentRequests/uB')})`);
   S.setAt('users/uB/requestCooldown/uA', Date.now() - 11 * 60_000); await wait(100);   // مضت 10 دقائق
@@ -1028,6 +1030,38 @@ async function friendsClockSkewReal() {
   const acc = await B.acceptFriendRequest('uC'); await wait(400);
   r.ok(acc?.ok && !!S.getAt('users/uC/friends/uB') && !!S.getAt('users/uB/friends/uC'), `(ب) قبول طلب المرسل المتقدّم: ${JSON.stringify(acc)}`);
   S.close();
+}
+
+// ── 3.3ج-3: كتابات اللعب نفسها فوق قواعد الغرف (الحقول المعروفة وحدودها) — ما لا تمرّ به المحاكاة: الساعة (تهيئة،
+// حركة، ±وقت)، وتوزيع العناصر، والحركة مع البنك، وسجل الحركات (جماعي وتخطّي الدور)، وتحديث البنك الفوري، وإشارة إعادة
+// المباراة — كلها تُكتب كما يكتبها firebase.js الحقيقي ولا رفض واحد ──
+async function gameplayWritesReal() {
+  const r = suite('3.3ج-3: كتابات اللعب (الساعة، العناصر، الحركات، البنك، إعادة المباراة) فوق قواعد الغرف — لا رفض');
+  const W = await duoWorld(['A', 'B']);
+  const { S, M, room } = W;
+  const code = await M.A.createRoom(CFG, 'أحمد'); await wait(150);
+  await M.B.joinRoom(code, 'باسل'); await wait(300);
+  r.ok(room(code)?.status === 'playing', `الانضمام: ${room(code)?.status}`);
+  const before = S.denied.length;
+  const step = async (name, fn) => { try { await fn(); } catch (e) { r.ok(false, `${name}: ${e && (e.code || e.message)}`); } await wait(150); };
+  await step('تهيئة الساعة', () => M.A.initClock({ 1: 180, 2: 180 }, 1));
+  await step('حركة مع البنك والدور التالي', () => M.A.pushMove('h_0_0', Date.now(), 172.4, 2));
+  await step('تحديث الساعة', () => M.A.pushClock(1, 172.4, 2));
+  await step('±وقت', () => M.B.updateClockBank(1, 200));
+  await step('توزيع العناصر', () => M.A.shareElementMap({ '0,0': 'water', '0,2': 'water', '2,1': 'gem', '10,10': 'gem' }));
+  await step('تحديث البنك الفوري', () => M.B.pushBankUpdate(2, 150));
+  await step('حركة جماعية', () => M.B.pushMultiMove('v_1_1', 1, Date.now(), 149));
+  await step('تخطّي الدور', () => M.A.pushTurnSkip(2));
+  await step('إعادة المباراة', () => M.B.sendRestart());
+  await wait(300);
+  const denied = S.denied.slice(before);
+  r.ok(denied.length === 0, `رُفض من كتابات اللعب: ${JSON.stringify(denied)}`);
+  const rm = room(code) || {};
+  r.ok(rm.clock?.currentPlayer === 2 && rm.clock?.banks?.[1] === 200 && typeof rm.clock?.turnStartAt === 'number', `الساعة: ${JSON.stringify(rm.clock)}`);
+  r.ok(rm.elementMap?.['2,1'] === 'gem' && rm.bankUpdate?.player === 2 && rm.move?.bank === 172.4 && rm.signals?.restart === 2 && rm.turn === 2,
+    `العناصر/البنك/الحركة/الإشارة: ${JSON.stringify({ e: rm.elementMap, b: rm.bankUpdate, m: rm.move, s: rm.signals, t: rm.turn })}`);
+  r.ok(Object.keys(rm.moves || {}).length === 3, `سجل الحركات: ${Object.keys(rm.moves || {}).length}`);
+  W.S.close();
 }
 
 // ── 3.3أ-3: المحادثة (chat.js الحقيقي) بالحزمة الحقيقية فوق القواعد المنشورة — الطرفان من مفتاح المحادثة: الاستماع
@@ -1280,7 +1314,7 @@ const all = [offlineExitThenReconnect, blipDuringWithdraw, onlineExit, creatorSt
   duoCancelThenClose, duoJoinAckLost, duoCodeJoinAckLost, duoCreateBlip, duoAbortRetried, duoCancelDuringReopen,
   duoHostBlipRestores, duoRestoreKeepsGuestOut, duoEvictedGuestOp, duoOrphanNodeRestores, duoCancelStrayFinished,
   inviteConditionalRemovals, registrationProfile, friendsRealRules, presenceHealsReal, mixedVersions, twoTabAccept,
-  chatRealRules, chatLastReadReal, roomCodeCollisionReal, lobbyRacesReal, friendsCodeFirstReal, friendsClockSkewReal];
+  chatRealRules, chatLastReadReal, roomCodeCollisionReal, lobbyRacesReal, friendsCodeFirstReal, friendsClockSkewReal, gameplayWritesReal];
 // ONLY=اسم1,اسم2 npm test — تشغيل فحوص بعينها (للتطوير وفحص الطفرات)
 const pick = process.env.ONLY ? all.filter(f => process.env.ONLY.split(',').includes(f.name)) : all;
 console.log('\n🔬 firebase.js بحزمة Firebase الحقيقية');

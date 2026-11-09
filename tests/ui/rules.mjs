@@ -141,6 +141,73 @@ export function rulesMatrix() {
   const lobbyStarted = withRooms({ '333333': { ...lobby, status: 'playing' } });
   r.ok(!RW('B', [['rooms/333333', ljoin('B', 2, { status: 'playing' })]], lobbyStarted) && !RW('B', [['rooms/333333', ljoin('B')]], lobbyStarted),
     'انضمام لمباراة جماعية بدأت (أو بإرجاعها "لوبي") قُبل');
+  // ── 3.3ج-3: المنضمّ لا يمسّ غيره — ولا حقول مجهولة في الغرفة، وكل حقل بنوعه وحدّه ──
+  // الثنائي: لا يغيّر اسم المنشئ، ولا يضيف مقاعد لوبي أو علامات نهاية (انسحاب/إلغاء/انقطاع) مع انضمامه
+  r.ok(!RW('B', [['rooms/111111', { ...join('B'), p1name: 'مزوّر' }]], rooms0), 'انضمام ثنائي يغيّر اسم المنشئ قُبل');
+  r.ok(!RW('B', [['rooms/111111', { ...join('B'), leftBy: 1 }]], rooms0) && !RW('B', [['rooms/111111', { ...join('B'), abortedBy: 1 }]], rooms0)
+    && !RW('B', [['rooms/111111', { ...join('B'), dropped1: true }]], rooms0) && !RW('B', [['rooms/111111', { ...join('B'), players: { B: { name: 'ب', num: 1 } } }]], rooms0),
+    'انضمام ثنائي ومعه علامة نهاية (انسحب/ألغى/انقطع المنشئ) أو مقاعد لوبي قُبل');
+  r.ok(RW('B', [['rooms/111111', { ...join('B'), public: false }]], withRooms({ '111111': { ...duoWaiting, public: true } })), 'انضمام لغرفة عامة (تصير خاصة) رُفض');
+  // الجماعي: مقعد المضيف يبقى باسمه ورقمه؛ ولا يغيّر المنضمّ مقعد غيره ولا يضيف مقعداً لغيره
+  const lobby2 = { ...lobby, players: { ...lobby.players, C: { name: 'ج', num: 2, active: true } }, playerCount: 2 };
+  const rooms2 = withRooms({ '333333': lobby2 });
+  const ljoin2 = (players, extra = {}) => ({ ...lobby2, players: { ...lobby2.players, B: { name: 'ب', num: 3, active: true }, ...players }, playerCount: 3, ...extra });
+  r.ok(RW('B', [['rooms/333333', ljoin2({})]], rooms2), 'انضمام للوبي فيه لاعبان مرفوض');
+  r.ok(!RW('B', [['rooms/333333', ljoin2({ A: { name: 'مزوّر', num: 1, active: true } })]], rooms2) && !RW('B', [['rooms/333333', ljoin2({ A: { name: 'أ', num: 3, active: true } })]], rooms2),
+    'المنضمّ غيّر اسم المضيف أو رقم مقعده');
+  const noHost = ljoin2({}); delete noHost.players.A;
+  r.ok(!RW('B', [['rooms/333333', noHost]], rooms2), 'المنضمّ أسقط المضيف من اللوبي');
+  r.ok(!RW('B', [['rooms/333333', ljoin2({ C: { name: 'ج', num: 2, active: false } })]], rooms2) && !RW('B', [['rooms/333333', ljoin2({ C: { name: 'ج', num: 2, active: true, waiting: true } })]], rooms2)
+    && !RW('B', [['rooms/333333', ljoin2({ C: { name: 'مزوّر', num: 2, active: true } })]], rooms2), 'المنضمّ غيّر مقعد لاعب آخر (أخرجه/علّقه/سمّاه)');
+  r.ok(!RW('B', [['rooms/333333', ljoin2({ V: { name: 'وهمي', num: 4, active: true } }, { maxPlayers: 3 })]], rooms2), 'المنضمّ أضاف مقعداً لغيره');
+  const hostGone = withRooms({ '333333': { ...lobby2, players: { C: { name: 'ج', num: 2, active: true } }, playerCount: 1, hostNum: 2 } });
+  r.ok(RW('B', [['rooms/333333', { ...lobby2, players: { C: { name: 'ج', num: 2, active: true }, B: { name: 'ب', num: 1, active: true } }, playerCount: 2, hostNum: 2 }]], hostGone),
+    'لوبي غادره مضيفه (المعرّف القديم باقٍ): الانضمام رُفض');
+  // أعضاء الغرفة يكتبون مقاعد غيرهم كما يكتبها الكود: بدء المباراة يزيل "منتظر"، وإخراج من نفد وقته أو انقطع
+  const playingMulti = withRooms({ '333333': { ...lobby2, status: 'playing', players: { A: { name: 'أ', num: 1, active: true }, C: { name: 'ج', num: 2, active: true, waiting: true } } } });
+  r.ok(RW('A', [['rooms/333333/players/C', { name: 'ج', num: 2, active: true }]], playingMulti)
+    && RW('A', [['rooms/333333/players/C', { name: 'ج', num: 2, active: false, outReason: 'timeout', outAt: T0 }]], playingMulti)
+    && RW('C', [['rooms/333333/players/C/disconnectedAt', T0]], playingMulti), 'عضو لا يكتب مقعد غيره كما يكتبه الكود (بدء/إخراج) أو مقعده');
+  // الحقول المعروفة فقط (حتى للأعضاء)، وكل حقل بنوعه وحدّه
+  const m = (path, v, root = rooms0, uid = 'A') => RW(uid, [[`rooms/222222/${path}`, v]], root);
+  r.ok(!m('junk', 'x'.repeat(5000)) && !m('players/A/junk', 1, playingMulti, 'A') && !RW('A', [['rooms/333333/players/A/junk', 1]], playingMulti), 'حقل مجهول في الغرفة أو في مقعد قُبل');
+  r.ok(m('move', { key: 'h_0_0', by: 1, seq: 5, bank: 170.5, nextTurn: 2 }) && !m('move', { key: 'x'.repeat(65), by: 1, seq: 5 }) && !m('move', { key: 'h', by: 1, seq: 5, extra: 1 })
+    && !m('move', { key: 'h', by: 9, seq: 5 }), 'الحركة: كما يكتبها الكود رُفضت، أو مفتاح طويل/حقل غريب/لاعب خارج الحد قُبل');
+  r.ok(m('moves/-Nx1', { key: '__skip__', by: 2, seq: 6, nextTurn: 1 }) && !m('moves/-Nx1', { key: 'h', by: 2, seq: 6, junk: 'x' }), 'سجل الحركات: الصحيح رُفض أو حقل غريب قُبل');
+  r.ok(m('clock', { banks: { 1: 180, 2: 180 }, currentPlayer: 1, turnStartAt: T0 }) && !m('clock', { banks: { 1: 180 }, currentPlayer: 1, turnStartAt: T0, x: 1 })
+    && !m('clock/banks/1', -5) && !m('clock/banks/1', 'كثير'), 'الساعة: الصحيحة رُفضت أو حقل غريب/بنك سالب أو نص قُبل');
+  r.ok(m('elementMap', { '0,0': 'water', '10,10': 'gem' }) && !m('elementMap', { '0,0': 'قنبلة' }) && !m('elementMap', { ['x'.repeat(40)]: 'gem' }),
+    'العناصر: الصحيحة رُفضت أو نوع مجهول/مفتاح طويل قُبل');
+  r.ok(m('approval', { state: 'asking', available: 3, wanted: 3, startedAt: T0, decisions: { 1: 'pending', 2: 'accepted' } }) && !m('approval/decisions/1', 'ربما')
+    && !m('approval', { state: 'asking', junk: 1 }) && !m('approval/state', 'x'.repeat(17)), 'التصويت: الصحيح رُفض أو قرار مجهول/حقل غريب/حالة طويلة قُبل');
+  r.ok(m('bankUpdate', { player: 2, bank: 150, seq: T0, by: 1 }) && !m('bankUpdate', { player: 2, bank: 150, seq: T0, by: 1, x: 1 }) && m('signals', { restart: 1, ts: T0 }) && !m('signals', { restart: 1, ts: T0, x: 1 }),
+    'تحديث البنك/إشارة الإعادة: الصحيح رُفض أو حقل غريب قُبل');
+  // مراجعة ج-3 (M1): بعد الانضمام يصير المنضمّ عضواً — فهويّة الغرفة لا تتغيّر لأيّ كاتب: منشئها ومضيفها، واسم المنشئ إلا
+  // بيده، واسم المقعد ورقمه إلا بيد صاحبه (حذف مقعد غيره وإضافة مقعد وهمي: يبقيان لإعادة البناء مع 3.8)
+  r.ok(!m('p1name', 'مزوّر', rooms0, 'B') && !m('p1uid', 'B', rooms0, 'B') && m('p1name', 'أ2', rooms0, 'A'), 'المنضمّ الثنائي غيّر اسم المنشئ أو المنشئ نفسه بعد انضمامه، أو المنشئ لم يغيّر اسمه');
+  const inLobby = withRooms({ '333333': lobby2 });
+  r.ok(!RW('C', [['rooms/333333/players/A/name', 'مزوّر']], inLobby) && !RW('C', [['rooms/333333/players/A/num', 3]], inLobby) && !RW('C', [['rooms/333333/hostUid', 'C']], inLobby)
+    && RW('A', [['rooms/333333/players/A/name', 'أ2']], inLobby) && RW('C', [['rooms/333333/players/C/name', 'ج2']], inLobby),
+    'عضو اللوبي غيّر اسم المضيف أو رقمه أو صار هو المضيف، أو صاحب المقعد لم يغيّر اسمه');
+  // مراجعة ج-3 (الجولة 2): ".validate" لا يعمل على حقل يُحذف — فالهويّة لا تُمحى أيضاً: لا حذف لمنشئ الغرفة أو مضيفها أو اسم المنشئ،
+  // ولا لاسم مقعد غيرك أو رقمه (داخل كتابة الانضمام وبعدها). حذف مقعد غيرك كله: يبقى لإعادة البناء مع 3.8
+  const noP1name = join('B'); delete noP1name.p1name;
+  r.ok(!RW('B', [['rooms/111111', noP1name]], rooms0), 'انضمام ثنائي يحذف اسم المنشئ قُبل');
+  r.ok(!RW('B', [['rooms/333333', ljoin2({ A: { active: true } })]], rooms2) && !RW('B', [['rooms/333333', ljoin2({ C: { name: 'ج', active: true } })]], rooms2),
+    'انضمام جماعي يمحو اسم المضيف ورقمه (يبقى مقعده فارغاً) أو رقم لاعب آخر قُبل');
+  r.ok(!m('p1uid', null, rooms0, 'B') && !RW('C', [['rooms/333333/hostUid', null]], inLobby) && !RW('C', [['rooms/333333/players/A/num', null]], inLobby)
+    && !RW('C', [['rooms/333333/players/A/name', null]], inLobby), 'عضو حذف منشئ الغرفة أو مضيفها أو اسم/رقم مقعد غيره');
+  r.ok(RW('C', [['rooms/333333/players/C/waiting', null]], withRooms({ '333333': { ...lobby2, players: { ...lobby2.players, C: { name: 'ج', num: 2, active: true, waiting: true } } } })),
+    'صاحب المقعد لم يحذف حقلاً من مقعده (منتظر)');
+  // حدود مفاتيح سجل الحركات والبنوك والقرارات (مفاتيح push ‏20 حرفاً، والأرقام 0..4)
+  r.ok(!m('moves/' + 'x'.repeat(33), { key: 'h', by: 1, seq: 1 }) && !m('clock/banks/12', 5) && !m('approval/decisions/10', 'pending') && m('approval/decisions/0', 'pending'),
+    'مفتاح طويل في سجل الحركات/البنوك/القرارات قُبل، أو القرار 0 رُفض');
+  // لوبي بلا مضيف مسجّل (مشوّه): لا انضمام — كما يفعل الخادم (child(null) خطأ تقييم يرفض)
+  const noHostUid = { ...lobby2 }; delete noHostUid.hostUid;
+  r.ok(!RW('B', [['rooms/333333', { ...noHostUid, players: { ...lobby2.players, B: { name: 'ب', num: 3, active: true } }, playerCount: 3 }]], withRooms({ '333333': noHostUid })),
+    'انضمام للوبي بلا مضيف مسجّل قُبل');
+  r.ok(m('turn', 2) && !m('turn', 9) && m('leftBy', 2) && m('dropped2', true) && !m('dropped2', 'نعم') && m('abortedBy', 1) && !m('public', 'نعم') && !m('hostNum', 7) && !m('playerCount', 99),
+    'حقول الحالة: القيم الصحيحة رُفضت أو قيمة خارج نوعها/حدّها قُبلت');
   // اللاعبون: يكتبون كل شيء في غرفتهم (حركات، ساعة، خروج غيرهم بعد مهلته، إنهاء، حذف) — حدّ مقبول (3.8)
   const lobby3 = withRooms({ '333333': { ...lobby, players: { A: { name: 'أ', num: 1 }, B: { name: 'ب', num: 2 }, C: { name: 'ج', num: 3 } }, status: 'playing' } });
   r.ok(RW('B', [['rooms/222222/move', { key: 'h1', by: 2, seq: 3 }], ['rooms/222222/clock/currentPlayer', 1]], rooms0) && RW('A', [['rooms/222222', { ...duoPlaying, status: 'finished', leftBy: 1 }]], rooms0),

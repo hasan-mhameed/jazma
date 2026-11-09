@@ -89,7 +89,8 @@
     "rooms": {
       ".read": "auth !== null",
       "$code": {
-        ".write": "auth !== null && ((!data.exists() && !newData.exists()) || ((!data.exists() || (!data.child('cfg').exists() && !data.child('p1uid').exists() && !data.child('multi').exists())) && newData.exists() && ((newData.child('p1uid').val() === auth.uid && newData.child('status').val() === 'waiting' && newData.child('p2uid').val() === '' && !newData.child('multi').exists()) || (newData.child('multi').val() === true && newData.child('hostUid').val() === auth.uid && newData.child('status').val() === 'lobby' && newData.child('players').child(auth.uid).exists()))) || (data.child('p1uid').val() === auth.uid || data.child('p2uid').val() === auth.uid || data.child('players').child(auth.uid).exists()) || (data.child('status').val() === 'waiting' && data.child('p2uid').val() === '' && !data.child('multi').exists() && newData.child('p2uid').val() === auth.uid && newData.child('status').val() === 'playing' && !newData.child('multi').exists() && newData.child('p1uid').val() === data.child('p1uid').val() && newData.child('createdAt').val() === data.child('createdAt').val() && newData.child('cfg').child('rows').val() === data.child('cfg').child('rows').val() && newData.child('cfg').child('cols').val() === data.child('cfg').child('cols').val()) || (data.child('multi').val() === true && data.child('status').val() === 'lobby' && !data.child('players').child(auth.uid).exists() && newData.child('players').child(auth.uid).exists() && newData.child('multi').val() === true && newData.child('status').val() === 'lobby' && newData.child('hostUid').val() === data.child('hostUid').val() && newData.child('maxPlayers').val() === data.child('maxPlayers').val() && newData.child('createdAt').val() === data.child('createdAt').val() && newData.child('cfg').child('rows').val() === data.child('cfg').child('rows').val() && newData.child('cfg').child('cols').val() === data.child('cfg').child('cols').val() && newData.child('players').child(auth.uid).child('num').val() <= data.child('maxPlayers').val()) || (!newData.exists() && (data.child('status').val() === 'finished' || !data.child('createdAt').exists() || data.child('createdAt').val() < now - 3600000 || (data.child('multi').val() === true && data.child('status').val() === 'lobby' && !data.child('players').exists()) || (!data.child('cfg').exists() && !data.child('p1uid').exists() && !data.child('multi').exists()))))",
+        ".write": "auth !== null && ((!data.exists() && !newData.exists()) || ((!data.exists() || (!data.child('cfg').exists() && !data.child('p1uid').exists() && !data.child('multi').exists())) && newData.exists() && ((newData.child('p1uid').val() === auth.uid && newData.child('status').val() === 'waiting' && newData.child('p2uid').val() === '' && !newData.child('multi').exists()) || (newData.child('multi').val() === true && newData.child('hostUid').val() === auth.uid && newData.child('status').val() === 'lobby' && newData.child('players').child(auth.uid).exists()))) || (data.child('p1uid').val() === auth.uid || data.child('p2uid').val() === auth.uid || data.child('players').child(auth.uid).exists()) || (data.child('status').val() === 'waiting' && data.child('p2uid').val() === '' && !data.child('multi').exists() && newData.child('p2uid').val() === auth.uid && newData.child('status').val() === 'playing' && !newData.child('multi').exists() && newData.child('p1uid').val() === data.child('p1uid').val() && newData.child('createdAt').val() === data.child('createdAt').val() && !newData.child('players').exists() && !newData.child('abortedBy').exists() && !newData.child('leftBy').exists() && !newData.child('dropped1').exists() && !newData.child('dropped2').exists() && newData.child('cfg').child('rows').val() === data.child('cfg').child('rows').val() && newData.child('cfg').child('cols').val() === data.child('cfg').child('cols').val()) || (data.child('multi').val() === true && data.child('status').val() === 'lobby' && !data.child('players').child(auth.uid).exists() && newData.child('players').child(auth.uid).exists() && newData.child('multi').val() === true && newData.child('status').val() === 'lobby' && newData.child('hostUid').val() === data.child('hostUid').val() && newData.child('maxPlayers').val() === data.child('maxPlayers').val() && data.child('hostUid').isString() && (!data.child('players').child(data.child('hostUid').val()).exists() || newData.child('players').child(data.child('hostUid').val()).exists()) && newData.child('createdAt').val() === data.child('createdAt').val() && newData.child('cfg').child('rows').val() === data.child('cfg').child('rows').val() && newData.child('cfg').child('cols').val() === data.child('cfg').child('cols').val() && newData.child('players').child(auth.uid).child('num').val() <= data.child('maxPlayers').val()) || (!newData.exists() && (data.child('status').val() === 'finished' || !data.child('createdAt').exists() || data.child('createdAt').val() < now - 3600000 || (data.child('multi').val() === true && data.child('status').val() === 'lobby' && !data.child('players').exists()) || (!data.child('cfg').exists() && !data.child('p1uid').exists() && !data.child('multi').exists()))))",
+        ".validate": "(!data.child('p1uid').exists() || newData.child('p1uid').val() === data.child('p1uid').val()) && (!data.child('hostUid').exists() || newData.child('hostUid').val() === data.child('hostUid').val()) && (!data.child('p1name').exists() || newData.child('p1name').exists())",
         "spectators": {
           "$uid": {
             ".write": "auth !== null && $uid === auth.uid && (!newData.exists() || root.child('rooms').child($code).child('cfg').exists())",
@@ -109,19 +110,19 @@
           ".validate": "newData.val() === 'waiting' || newData.val() === 'playing' || newData.val() === 'finished' || newData.val() === 'lobby'"
         },
         "p1name": {
-          ".validate": "newData.isString() && newData.val().length <= 128"
+          ".validate": "newData.isString() && newData.val().length <= 128 && (!data.exists() || newData.val() === data.val() || root.child('rooms').child($code).child('p1uid').val() === auth.uid)"
         },
         "p2name": {
           ".validate": "newData.isString() && newData.val().length <= 128"
         },
         "p1uid": {
-          ".validate": "newData.isString() && newData.val().length <= 128"
+          ".validate": "newData.isString() && newData.val().length <= 128 && (!data.exists() || newData.val() === data.val())"
         },
         "p2uid": {
           ".validate": "newData.isString() && newData.val().length <= 128"
         },
         "hostUid": {
-          ".validate": "newData.isString() && newData.val().length <= 128"
+          ".validate": "newData.isString() && newData.val().length <= 128 && (!data.exists() || newData.val() === data.val())"
         },
         "maxPlayers": {
           ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 4"
@@ -135,17 +136,186 @@
           },
           "cols": {
             ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 12"
+          },
+          "$other": {
+            ".validate": false
           }
         },
         "players": {
           "$uid": {
+            ".validate": "($uid === auth.uid || data.parent().child(auth.uid).exists() || (data.exists() && newData.child('active').val() === data.child('active').val() && newData.child('waiting').val() === data.child('waiting').val() && newData.child('disconnectedAt').val() === data.child('disconnectedAt').val() && newData.child('outReason').val() === data.child('outReason').val() && newData.child('outAt').val() === data.child('outAt').val())) && ($uid === auth.uid || ((!data.child('name').exists() || newData.child('name').exists()) && (!data.child('num').exists() || newData.child('num').exists())))",
             "name": {
-              ".validate": "newData.isString() && newData.val().length <= 128"
+              ".validate": "newData.isString() && newData.val().length <= 128 && (!data.exists() || newData.val() === data.val() || $uid === auth.uid)"
             },
             "num": {
-              ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 4"
+              ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 4 && (!data.exists() || newData.val() === data.val() || $uid === auth.uid)"
+            },
+            "active": {
+              ".validate": "newData.isBoolean()"
+            },
+            "waiting": {
+              ".validate": "newData.isBoolean()"
+            },
+            "disconnectedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "outReason": {
+              ".validate": "newData.isString() && newData.val().length <= 32"
+            },
+            "outAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
             }
           }
+        },
+        "public": {
+          ".validate": "newData.isBoolean()"
+        },
+        "multi": {
+          ".validate": "newData.val() === true"
+        },
+        "hostNum": {
+          ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 4"
+        },
+        "playerCount": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4"
+        },
+        "turn": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4"
+        },
+        "move": {
+          "key": {
+            ".validate": "newData.isString() && newData.val().length <= 64"
+          },
+          "by": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4"
+          },
+          "seq": {
+            ".validate": "newData.isNumber()"
+          },
+          "bank": {
+            ".validate": "newData.isNumber()"
+          },
+          "nextTurn": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "moves": {
+          "$mid": {
+            ".validate": "$mid.length <= 32",
+            "key": {
+              ".validate": "newData.isString() && newData.val().length <= 64"
+            },
+            "by": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4"
+            },
+            "seq": {
+              ".validate": "newData.isNumber()"
+            },
+            "bank": {
+              ".validate": "newData.isNumber()"
+            },
+            "nextTurn": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "elementMap": {
+          "$cell": {
+            ".validate": "$cell.length <= 5 && (newData.val() === 'water' || newData.val() === 'gem')"
+          }
+        },
+        "clock": {
+          "banks": {
+            "$n": {
+              ".validate": "$n.length <= 1 && newData.isNumber() && newData.val() >= 0"
+            }
+          },
+          "currentPlayer": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4"
+          },
+          "turnStartAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "waitStartedAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "approval": {
+          "state": {
+            ".validate": "newData.isString() && newData.val().length <= 16"
+          },
+          "available": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4"
+          },
+          "wanted": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4"
+          },
+          "startedAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "decisions": {
+            "$n": {
+              ".validate": "$n.length <= 1 && (newData.val() === 'pending' || newData.val() === 'accepted' || newData.val() === 'rejected')"
+            }
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "signals": {
+          "restart": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4"
+          },
+          "ts": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "bankUpdate": {
+          "player": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4"
+          },
+          "bank": {
+            ".validate": "newData.isNumber()"
+          },
+          "seq": {
+            ".validate": "newData.isNumber()"
+          },
+          "by": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "leftBy": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4"
+        },
+        "abortedBy": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 4"
+        },
+        "dropped1": {
+          ".validate": "newData.isBoolean()"
+        },
+        "dropped2": {
+          ".validate": "newData.isBoolean()"
+        },
+        "$other": {
+          ".validate": false
         }
       }
     },
