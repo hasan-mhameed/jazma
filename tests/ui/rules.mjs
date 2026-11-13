@@ -20,8 +20,8 @@ export function rulesMatrix() {
   try { NEW = load(RULES_FILE); } catch (e) { r.ok(false, 'database.rules.json غير موجود أو ليس JSON سليماً: ' + e.message); return r; }
   OLD = load(new URL('../shared/rules_prod_2026-10-19.json', import.meta.url));
   const base = { users: {
-    A: { name: 'أ', friends: { B: { name: 'ب' } } },
-    B: { name: 'ب', friends: { A: { name: 'أ' } } },
+    A: { name: 'أ', friends: { B: { uid: 'B', name: 'ب' } } },
+    B: { name: 'ب', friends: { A: { uid: 'A', name: 'أ' } } },
     V: { name: 'ضحية' },
   } };
   const W = (rules, uid, writes, root = base) => checkWrite(rules, writes, { uid, root }).ok;
@@ -45,27 +45,27 @@ export function rulesMatrix() {
   const withReqOld = JSON.parse(JSON.stringify(base)); withReqOld.users.B.friendRequests = { A: { name: 'أ', sentAt: 5 } };
   r.ok(!W(NEW, 'A', [['users/B/friendRequests/A/name', 'أ2'], ['users/A/sentRequests/B', SV]], withReqOld), 'تعديل حقل في طلب قائم قُبل (الطلب يُكتب كاملاً بوقته — 3.3ج-2)');
   // كتابة على مستوى الأب أو حقل داخل مدخل غيري
-  r.ok(!W(NEW, 'A', [['users/B/friends', { A: { name: 'أ' } }]], withToken) && !W(NEW, 'A', [['users/B/friendRequests', { A: REQ() }], ['users/A/sentRequests/B', SV]]),
+  r.ok(!W(NEW, 'A', [['users/B/friends', { A: { uid: 'A', name: 'أ' } }]], withToken) && !W(NEW, 'A', [['users/B/friendRequests', { A: REQ() }], ['users/A/sentRequests/B', SV]]),
     'كتابة قائمة أصدقاء غيري أو صندوقه كاملاً');
   r.ok(W(NEW, 'A', [['users/B/friends/A/name', 'أ2']], withToken) && !W(NEW, 'A', [['users/B/friends/A/name', 'أ2']]),
     'تعديل حقل مدخلي في قائمة غيري: يتبع الدليل نفسه');
   r.ok(!W(NEW, 'A', [['users/B/friends/V/name', 'x']], withToken), 'تعديل مدخل غيري في قائمة أحد');
   // القبول: إضافة نفسي لقائمة من أرسل لي — بدليله في ملفه فقط
-  r.ok(W(NEW, 'A', [['users/A/friends/B', { name: 'ب' }], ['users/B/friends/A', { name: 'أ' }], ['users/A/friendRequests/B', null]], withToken),
+  r.ok(W(NEW, 'A', [['users/A/friends/B', { uid: 'B', name: 'ب' }], ['users/B/friends/A', { uid: 'A', name: 'أ' }], ['users/A/friendRequests/B', null]], withToken),
     'قبول طلب له دليل في ملف مرسله مرفوض');
-  r.ok(!W(NEW, 'A', [['users/B/friends/A', { name: 'أ' }]]), 'أضيف نفسي لقائمة من لم يرسل لي');
+  r.ok(!W(NEW, 'A', [['users/B/friends/A', { uid: 'A', name: 'أ' }]]), 'أضيف نفسي لقائمة من لم يرسل لي');
   const forged = JSON.parse(JSON.stringify(base)); forged.users.A.friendRequests = { V: { name: 'ضحية' } };
-  r.ok(!W(NEW, 'A', [['users/V/friends/A', { name: 'أ' }]], forged), 'طلب مزوَّر في صندوقي يدخلني قائمة غيري');
-  r.ok(!W(NEW, 'A', [['users/B/friends/C', { name: 'ج' }]], withToken), 'أضيف غيري لقائمة أحد');
+  r.ok(!W(NEW, 'A', [['users/V/friends/A', { uid: 'A', name: 'أ' }]], forged), 'طلب مزوَّر في صندوقي يدخلني قائمة غيري');
+  r.ok(!W(NEW, 'A', [['users/B/friends/C', { uid: 'C', name: 'ج' }]], withToken), 'أضيف غيري لقائمة أحد');
   // الدليل لمرة واحدة: المستقبل يحذفه (يستهلكه بالقبول أو الرفض) ولا يكتبه، ولا يمسّه غيره
   r.ok(W(NEW, 'A', [['users/B/sentRequests/A', null]], withToken), 'المستقبل لا يستطيع حذف دليل الطلب إليه (استهلاكه)');
   r.ok(!W(NEW, 'A', [['users/B/sentRequests/A', 2]], withToken) && !W(NEW, 'A', [['users/B/sentRequests/C', null]], withToken),
     'المستقبل يعدّل دليلاً أو يحذف دليلاً ليس له');
-  const accept = checkWrite(NEW, [['users/A/friends/B', { name: 'ب' }], ['users/B/friends/A', { name: 'أ' }],
+  const accept = checkWrite(NEW, [['users/A/friends/B', { uid: 'B', name: 'ب' }], ['users/B/friends/A', { uid: 'A', name: 'أ' }],
     ['users/A/friendRequests/B', null], ['users/B/sentRequests/A', null]], { uid: 'A', root: withToken });
   r.ok(accept.ok && accept.newRoot.users.B.sentRequests == null, 'القبول مع استهلاك الدليل بكتابة واحدة مرفوض');
   const removed = accept.ok ? checkWrite(NEW, [['users/A/friends/B', null], ['users/B/friends/A', null]], { uid: 'A', root: accept.newRoot }) : { ok: false };
-  r.ok(removed.ok && !W(NEW, 'A', [['users/B/friends/A', { name: 'أ' }]], removed.newRoot),
+  r.ok(removed.ok && !W(NEW, 'A', [['users/B/friends/A', { uid: 'A', name: 'أ' }]], removed.newRoot),
     'بعد القبول ثم الحذف: يعيد نفسه لقائمة المرسل بالدليل القديم (لم يُستهلك)');
   // الحذف: أزيل نفسي من قائمة صديقي، وكل شيء بكتابة واحدة
   r.ok(W(NEW, 'A', [['users/A/friends/B', null], ['users/B/friends/A', null], ['users/B/friendRequests/A', null], ['users/A/sentRequests/B', null]]),
@@ -79,7 +79,7 @@ export function rulesMatrix() {
   // الملف العام profiles: يقرؤه كل مسجّل، ويكتبه صاحبه فقط
   r.ok(R(NEW, 'A', 'profiles') && R(NEW, 'A', 'profiles/B') && R(NEW, 'B', 'profiles/A'), 'الملف العام profiles لا يقرؤه كل مسجّل');
   r.ok(!R(NEW, null, 'profiles/A') && !R(NEW, null, 'profiles'), 'زائر بلا دخول يقرأ الملفات العامة');
-  r.ok(W(NEW, 'A', [['profiles/A', { name: 'أ', xp: 9 }]]) && !W(NEW, 'A', [['profiles/B', { name: 'x' }]]), 'الملف العام: لا يكتبه إلا صاحبه');
+  r.ok(W(NEW, 'A', [['profiles/A', { name: 'أ', xp: 0 }]]) && !W(NEW, 'A', [['profiles/B', { name: 'x' }]]), 'الملف العام: لا يكتبه إلا صاحبه');
   // الملف الكامل users لصاحبه وحده — لا الغير ولا الإيميل ولا الكل دفعة واحدة
   const withEmail = JSON.parse(JSON.stringify(base)); withEmail.users.B.email = 'b@x.com'; withEmail.users.A.email = 'a@x.com';
   r.ok(R(NEW, 'A', 'users/A', withEmail) && R(NEW, 'A', 'users/A/xp') && R(NEW, 'A', 'users/A/email', withEmail), 'لا أقرأ ملفي الكامل');
@@ -339,16 +339,17 @@ export function rulesMatrix() {
   const RD1 = (uid, p, root) => canRead(NEW, p, { uid, root, now: T1 });
   // تحدي اليوم: نتيجتي بشكلها كما يكتبها الكود، والمتصدرون يقرؤها كل مسجّل — لا نتيجة غيري ولا حقول/أرقام خارج الحد
   const daily = { result: 'win', myScore: 9, oppScore: 7, duration: 95, name: 'أ', ts: T1 };
-  r.ok(canRead(NEW, 'dailyChallenges/d1/results', { uid: 'A' }) && RW1('A', [['dailyChallenges/d1/results/A', daily]]) && !RW1('A', [['dailyChallenges/d1/results/B', daily]]),
+  r.ok(canRead(NEW, 'dailyChallenges/2026-11-12/results', { uid: 'A' }) && RW1('A', [['dailyChallenges/2026-11-12/results/A', daily]]) && !RW1('A', [['dailyChallenges/2026-11-12/results/B', daily]]),
     'تحدي اليوم: نتيجتي لا تُكتب أو نتيجة غيري تُكتب أو المتصدرون لا يُقرؤون');
-  r.ok(!RW1('A', [['dailyChallenges/d1/results/A', { ...daily, result: 'بطل' }]]) && !RW1('A', [['dailyChallenges/d1/results/A', { ...daily, myScore: 9999 }]])
-    && !RW1('A', [['dailyChallenges/d1/results/A', { ...daily, duration: -5 }]]) && !RW1('A', [['dailyChallenges/d1/results/A', { ...daily, extra: 'x'.repeat(500) }]])
-    && !RW1('A', [['dailyChallenges/d1/results/A', { ...daily, oppScore: 9999 }]]) && !RW1('A', [['dailyChallenges/d1/results/A', { ...daily, duration: 90_000 }]])
-    && !RW1('A', [['dailyChallenges/d1/results/A', { ...daily, ts: 'أمس' }]]) && !RW1('A', [['dailyChallenges/d1/results/A', { ...daily, name: 'ن'.repeat(129) }]]),
+  r.ok(!RW1('A', [['dailyChallenges/2026-11-12/results/A', { ...daily, result: 'بطل' }]]) && !RW1('A', [['dailyChallenges/2026-11-12/results/A', { ...daily, myScore: 9999 }]])
+    && !RW1('A', [['dailyChallenges/2026-11-12/results/A', { ...daily, duration: -5 }]]) && !RW1('A', [['dailyChallenges/2026-11-12/results/A', { ...daily, extra: 'x'.repeat(500) }]])
+    && !RW1('A', [['dailyChallenges/2026-11-12/results/A', { ...daily, oppScore: 9999 }]]) && !RW1('A', [['dailyChallenges/2026-11-12/results/A', { ...daily, duration: 90_000 }]])
+    && !RW1('A', [['dailyChallenges/2026-11-12/results/A', { ...daily, ts: 'أمس' }]]) && !RW1('A', [['dailyChallenges/2026-11-12/results/A', { ...daily, name: 'ن'.repeat(129) }]]),
     'تحدي اليوم: نتيجة بقيمة غير معروفة أو نقاط/مدة خارج الحد أو حقل غريب أو وقت ليس رقماً أو اسم طويل قُبلت');
-  // ساعة جهاز متقدّمة (مراجعة ج-1): الأوقات التي لا ترتّب شيئاً (التحدي، الدعوة، الردّ) بلا سقف — لا يُفشل جهازٌ ساعته متقدّمة
-  // الإرسال (الكود الجديد يكتب وقت الخادم؛ والقديم ساعته)
-  r.ok(RW1('A', [['dailyChallenges/d1/results/A', { ...daily, ts: T1 + 3_600_000 }]]), 'تحدي اليوم من جهاز ساعته متقدّمة ساعة رُفض');
+  // ساعة جهاز متقدّمة (مراجعة ج-1): الأوقات التي لا ترتّب شيئاً (الدعوة، الردّ) بلا سقف — لا يُفشل جهازٌ ساعته متقدّمة.
+  // 3.3ج-4: ونتيجة التحدي بوقت الخادم بالضبط (الكود يكتبه serverTimestamp منذ ج-1 — فساعة الجهاز لا تدخل): وقت آخر مرفوض
+  r.ok(RW1('A', [['dailyChallenges/2026-11-12/results/A', { ...daily, ts: SV }]]) && !RW1('A', [['dailyChallenges/2026-11-12/results/A', { ...daily, ts: T1 + 3_600_000 }]])
+    && !RW1('A', [['dailyChallenges/2026-11-12/results/A', { ...daily, ts: T1 - 86_400_000 }]]), 'نتيجة التحدي بوقت الخادم رُفضت، أو بوقت آخر (ساعة الجهاز/أمس) قُبلت');
   // الدعوة: لا يقرؤها إلا صاحب الخانة ومرسلها (فيها رمز غرفة الدعوة) — ولا أحد يقرأ كل الدعوات
   const inv = { fromUid: 'A', fromName: 'أ', roomCode: '123456', cfg: { rows: 4, cols: 4 }, sentAt: T1 };
   const withInv = JSON.parse(JSON.stringify(base)); withInv.invites = { B: inv }; withInv.inviteRejections = { A: { rejectedBy: 'B', name: 'ب', ts: T1, roomCode: '123456', reason: 'rejected' } };
@@ -438,6 +439,11 @@ export function rulesMatrix() {
   const okEntry = { uid: 'A', name: 'أ', photo: '', since: T2 };
   r.ok(accept2(tok(T2)) && !RW2('A', [['users/B/friends/A', { ...okEntry, extra: 1 }]], tok(T2)) && !RW2('A', [['users/B/friends/A', { ...okEntry, uid: 'V' }]], tok(T2))
     && !RW2('A', [['users/B/friends/A', { ...okEntry, since: 'أمس' }]], tok(T2)), 'مدخل الصديق: حقل غريب أو معرّف غيره أو وقت ليس رقماً قُبل');
+  // 3.3ج-4 (مراجعة): "صديق خفي" — بعد طلب من ب، أ يكتب نصاً مكان مدخله في قائمة ب: الواجهة لا تعرضه (فلا زرّ حذف) وأ يقرأ
+  // حضور ب ويراسله ويدعوه — المدخل كائن بمعرّفه
+  r.ok(!RW2('A', [['users/B/friends/A', 'x'.repeat(5000)]], tok(T2)) && !RW2('A', [['users/B/friends/A', true]], tok(T2))
+    && !RW2('A', [['users/B/friends/A', { name: 'أ', since: T2 }]], tok(T2)) && RW2('A', [['users/B/friends/A', null]], tok(T2)) && accept2(tok(T2)),
+    'مدخل الصديق: قيمة مفردة أو مدخل بلا معرّف قُبل (صديق خفي)، أو القبول/الحذف رُفض');
   // حذف صديق كما يكتبه الكود: الطرفان + سحب طلبي إليه + المهلة في ملفه؛ وبلا المهلة (القواعد القديمة) ينجح ما لم يكن طلبي قائماً
   const friendsAB = tree(u => { u.A.friends = { B: { name: 'ب' } }; u.B.friends = { A: { name: 'أ' } }; });
   const rmWrites = [['users/A/friends/B', null], ['users/B/friends/A', null], ['users/B/friendRequests/A', null], ['users/A/sentRequests/B', null]];
@@ -445,6 +451,73 @@ export function rulesMatrix() {
   r.ok(RW2('A', [...rmWrites, ['users/B/requestCooldown/A', SV]], friendsAB) && RW2('A', rmWrites, friendsAB)
     && RW2('A', [...rmWrites, ['users/B/requestCooldown/A', SV]], friendsReq) && !RW2('A', rmWrites, friendsReq),
     'حذف صديق: مع المهلة رُفض، أو بلا مهلة وطلبي قائم قُبل (أو بلا طلب رُفض)');
+  // ── 3.3ج-4: حدود الأرقام — تصعّب الغش ولا تمنعه (المنع الكامل بكود على الخادم — 3.8) ──
+  const T4 = 1_950_000_000_000;
+  const RW4 = (uid, writes, root = base) => checkWrite(NEW, writes, { uid, root, now: T4 }).ok;
+  const withU = (fields) => tree(u => { Object.assign(u.A, fields); });
+  // الخبرة: لا تنقص، ولا تزيد أكثر من 100 في الكتابة (أعلى مكسب حقيقي 70)، وأول كتابة كذلك
+  r.ok(RW4('A', [['users/A/xp', 70]]) && !RW4('A', [['users/A/xp', 101]]) && RW4('A', [['users/A/xp', 570]], withU({ xp: 500 })) && RW4('A', [['users/A/xp', 600]], withU({ xp: 500 }))
+    && !RW4('A', [['users/A/xp', 601]], withU({ xp: 500 })) && !RW4('A', [['users/A/xp', 400]], withU({ xp: 500 })) && !RW4('A', [['users/A/xp', 'كثير']]) && !RW4('A', [['users/A/xp', -1]])
+    && RW4('A', [['users/A/xp', 10]], withU({ xp: 'خربان' })), 'الخبرة: مكسب حقيقي رُفض، أو قفزة فوق 100 أو نقصان أو قيمة ليست رقماً قُبلت');
+  // الخبرة العامة (منها المتصدرون) = الخاصة دائماً — بكتابة واحدة معها أو مطابقة لها؛ وصفر لمن لا خبرة له؛ والملف العام بحقوله فقط
+  r.ok(RW4('A', [['users/A/xp', 570], ['profiles/A/xp', 570]], withU({ xp: 500 })) && RW4('A', [['profiles/A', { name: 'أ', photo: '', xp: 500 }]], withU({ xp: 500 }))
+    && !RW4('A', [['profiles/A/xp', 99999]], withU({ xp: 500 })) && !RW4('A', [['users/A/xp', 570], ['profiles/A/xp', 600]], withU({ xp: 500 }))
+    && RW4('A', [['profiles/A/xp', 0]]) && !RW4('A', [['profiles/A/xp', 5]]) && !RW4('A', [['profiles/A', { name: 'أ', xp: 0, junk: 'x'.repeat(5000) }]]),
+    'الخبرة العامة: المطابقة رُفضت، أو رقم مزوّر للمتصدرين أو حقل غريب في الملف العام قُبل');
+  // الجواهر: لا سالبة، ولا تزيد أكثر من 100 في الكتابة، والصرف حرّ
+  r.ok(RW4('A', [['users/A/coins', 9]]) && !RW4('A', [['users/A/coins', 101]]) && RW4('A', [['users/A/coins', 150]], withU({ coins: 50 })) && !RW4('A', [['users/A/coins', 151]], withU({ coins: 50 }))
+    && RW4('A', [['users/A/coins', 2]], withU({ coins: 50 })) && !RW4('A', [['users/A/coins', -1]], withU({ coins: 50 })) && !RW4('A', [['users/A/coins', 'مليون']]),
+    'الجواهر: مكسب أو صرف حقيقي رُفض، أو قفزة فوق 100 أو سالبة أو ليست رقماً قُبلت');
+  // الإحصائيات والإنجازات: شكلها كما يكتبه الكود فقط، وسلسلة الانتصارات تزيد واحداً أو تعود صفراً
+  r.ok(RW4('A', [['users/A/stats/ai/history/1950000000000', { r: 'w' }]]) && !RW4('A', [['users/A/stats/ai/history/1950000000000', { r: 'x' }]])
+    && !RW4('A', [['users/A/stats/ai/history/1950000000000', { r: 'w', junk: 1 }]]) && !RW4('A', [['users/A/stats/ai/history/' + '9'.repeat(16), { r: 'w' }]])
+    && RW4('A', [['users/A/stats/multi/history/1950000000000', { rank: 1, players: 3, score: 9 }]]) && !RW4('A', [['users/A/stats/multi/history/1950000000000', { rank: 9, players: 3, score: 9 }]])
+    && RW4('A', [['users/A/stats/local/vs_سيمو', { name: 'سيمو' }], ['users/A/stats/local/vs_سيمو/history/1950000000000', { r: 'd' }]]) && !RW4('A', [['users/A/stats/local/vs_x', { name: 'ن'.repeat(129) }]])
+    && RW4('A', [['users/A/stats/online/B', { name: 'ب' }]]) && !RW4('A', [['users/A/stats/hack', 1]])
+    && RW4('A', [['users/A/stats', { ai: { wins: 0, losses: 0 }, local: { wins: 0, losses: 0 } }]])
+    && !RW4('A', [['users/A/stats/ai/junk', 1]]) && !RW4('A', [['users/A/stats/local/vs_x/junk', 1]]) && !RW4('A', [['users/A/stats/online/B/junk', 1]])
+    && !RW4('A', [['users/A/stats/multi/junk', 1]]) && !RW4('A', [['users/A/stats/online/B/history/1950000000000', { r: 'w', junk: 1 }]])
+    && !RW4('A', [['users/A/stats/multi/history/1950000000000', { rank: 1, players: 3, score: 9, junk: 1 }]]) && !RW4('A', [['users/A/stats/local/' + 'k'.repeat(401), { name: 'x' }]]),
+    'الإحصائيات: ما يكتبه الكود رُفض، أو نتيجة/مركز مجهول أو حقل غريب أو اسم/مفتاح طويل قُبل');
+  r.ok(RW4('A', [['users/A/stats/currentStreak', 0]], withU({ stats: { currentStreak: 4 } })) && RW4('A', [['users/A/stats/currentStreak', 5]], withU({ stats: { currentStreak: 4 } }))
+    && !RW4('A', [['users/A/stats/currentStreak', 9]], withU({ stats: { currentStreak: 4 } })) && !RW4('A', [['users/A/stats/currentStreak', 6]], withU({ stats: { currentStreak: 4 } }))
+    && RW4('A', [['users/A/stats/currentStreak', 1]]) && !RW4('A', [['users/A/stats/currentStreak', 5]]),
+    'سلسلة الانتصارات: زيادة واحدة أو العودة صفراً رُفضت، أو قفزة قُبلت');
+  r.ok(RW4('A', [['users/A/achievements/win_streak_5', { unlockedAt: T4 }]]) && !RW4('A', [['users/A/achievements/win_streak_5', { unlockedAt: T4, x: 1 }]])
+    && !RW4('A', [['users/A/achievements/' + 'x'.repeat(33), { unlockedAt: T4 }]]), 'الإنجازات: الصحيح رُفض أو حقل غريب/مفتاح طويل قُبل');
+  // العقد الحاوية لا تقبل قيمة مفردة بدل أبنائها (نص طويل بدل الإحصائيات كلها يتخطّى قواعد الأبناء)، والملف العام كذلك
+  // (يقرؤه المتصدرون كله لكل لاعب)؛ وعدّادات المحلي القديمة (يكتبها الملف الجديد) أرقام
+  const leafAt = ['users/A/stats', 'users/A/stats/ai', 'users/A/stats/ai/history', 'users/A/stats/ai/history/1950000000000', 'users/A/stats/local',
+    'users/A/stats/local/vs_x', 'users/A/stats/local/vs_x/history', 'users/A/stats/local/vs_x/history/1950000000000', 'users/A/stats/online', 'users/A/stats/online/B',
+    'users/A/stats/online/B/history', 'users/A/stats/online/B/history/1950000000000', 'users/A/stats/multi', 'users/A/stats/multi/history',
+    'users/A/stats/multi/history/1950000000000', 'users/A/achievements', 'users/A/achievements/first_win', 'users/A/matchHistory', 'users/A/matchHistory/-Nx1', 'profiles/A'];
+  const leafOk = leafAt.filter(p => RW4('A', [[p, 'x'.repeat(5000)]]) || RW4('A', [[p, 7]]));
+  r.ok(leafOk.length === 0 && RW4('A', [['users/A/stats/local', { wins: 0, losses: 0 }]]) && RW4('A', [['users/A/stats/local/wins', 3]]) && !RW4('A', [['users/A/stats/local/wins', -1]])
+    && !RW4('A', [['users/A/stats/local/wins', { name: 'x' }]]) && !RW4('A', [['users/A/stats/multi/history/1950000000000', { rank: 1, players: 3 }]])
+    && !RW4('A', [['users/A/achievements/first_win', { other: 1 }]]),
+    `العقد الحاوية: قيمة مفردة قُبلت بدل الأبناء (${leafOk.join('، ')})، أو عدّادات المحلي/سجل ناقص الحقول بخلاف المتوقع`);
+  // سجل المباريات: المدخل كما يكتبه saveMatch (كل الأنماط)، ولا نتيجة/نمط مجهول ولا نقاط فوق 200 ولا حقل غريب ولا نص طويل
+  const MH = 'users/A/matchHistory/-Nx1';
+  const mh = (x = {}) => ({ mode: 'online', result: 'win', myScore: 9, oppScore: 7, vs: 'باسل', grid: '4x4', duration: 95, ts: T4, ...x });
+  r.ok(RW4('A', [[MH, mh()]]) && RW4('A', [[MH, mh({ mode: 'multi', result: 'draw', oppScore: 0, vs: '' })]]) && RW4('A', [[MH, mh({ mode: 'ai', vs: 'الكمبيوتر', grid: '6x6' })]])
+    && RW4('A', [[MH, mh({ mode: 'local', result: 'loss', vs: 'ن'.repeat(128) })]]) && !RW4('A', [[MH, mh({ mode: 'هكر' })]]) && !RW4('A', [[MH, mh({ result: 'بطل' })]])
+    && !RW4('A', [[MH, mh({ myScore: 201 })]]) && !RW4('A', [[MH, mh({ oppScore: -1 })]]) && !RW4('A', [[MH, mh({ vs: 'ن'.repeat(129) })]]) && !RW4('A', [[MH, mh({ grid: 'x'.repeat(9) })]])
+    && !RW4('A', [[MH, mh({ duration: -5 })]]) && !RW4('A', [[MH, mh({ ts: 'أمس' })]]) && !RW4('A', [[MH, mh({ junk: 'x'.repeat(5000) })]])
+    && !RW4('A', [['users/A/matchHistory/' + 'k'.repeat(33), mh()]]) && RW4('A', [['users/A/matchHistory', null]]) && !RW4('A', [[MH, { mode: 'ai', result: 'win' }]]),
+    'سجل المباريات: مدخل حقيقي (أو مسح السجل) رُفض، أو نمط/نتيجة مجهولة أو نقاط/مدة خارج الحدود أو نص طويل أو حقل غريب أو مفتاح طويل قُبل');
+  // تحدي اليوم: نتيجة واحدة لا تُعدَّل ولا تُحذف، بوقت الخادم، والفوز بنقاط أكثر ولوحة كاملة (9/16/25) ومدة ≥5 ثوانٍ، والتعادل متساوٍ
+  const D = 'dailyChallenges/2026-11-12/results/A';
+  const dres = (x = {}) => ({ result: 'win', myScore: 9, oppScore: 7, duration: 95, name: 'أ', ts: SV, ...x });
+  const played = tree(() => {}); played.dailyChallenges = { '2026-11-12': { results: { A: { result: 'loss', myScore: 3, oppScore: 6, duration: 40, name: 'أ', ts: T4 - 1000 } } } };
+  const { ts: _dropTs, ...dailyNoTs } = dres({ result: 'loss', myScore: 3, oppScore: 6 });
+  r.ok(RW4('A', [[D, dres()]]) && !RW4('A', [[D, dres()]], played) && !RW4('A', [[D, null]], played) && !RW4('A', [[D + '/result', 'win']], played)
+    && !RW4('A', [[D, dailyNoTs]]) && !RW4('A', [[D + '/result', 'loss']]),
+    'تحدي اليوم: النتيجة الأولى رُفضت، أو كتابة فوقها (خسارة تصير فوزاً) أو حذفها أو نتيجة ناقصة (بلا وقت) قُبلت');
+  r.ok(!RW4('A', [[D, dres({ myScore: 7, oppScore: 9 })]]) && !RW4('A', [[D, dres({ myScore: 10 })]]) && !RW4('A', [[D, dres({ duration: 3 })]])
+    && !RW4('A', [[D, dres({ result: 'draw', myScore: 9 })]]) && RW4('A', [[D, dres({ result: 'draw', myScore: 8, oppScore: 8 })]])
+    && RW4('A', [[D, dres({ result: 'loss', myScore: 3, oppScore: 2, duration: 2 })]]) && !RW4('A', [[D, dres({ result: 'loss', myScore: 20, oppScore: 6 })]])
+    && RW4('A', [[D, dres({ myScore: 25, oppScore: 0, duration: 60 })]]) && !RW4('A', [['dailyChallenges/2026-11/results/A', dres()]]),
+    'تحدي اليوم: فوز بنقاط أقل أو لوحة ناقصة/مدة قصيرة أو تعادل غير متساوٍ أو مجموع فوق 25 أو تاريخ مشوّه قُبل، أو نتيجة حقيقية (تعادل/خسارة بانسحاب) رُفضت');
   // ولماذا كان لا بدّ منها: القواعد السابقة ترفض الطلب والحذف والقبول
   r.ok(!W(OLD, 'A', [['users/B/friendRequests/A', { name: 'أ' }]]) && !W(OLD, 'A', [['users/B/friends/A', null]])
     && !W(OLD, 'A', [['users/B/friends/A', { name: 'أ' }]], withToken), 'القواعد السابقة كانت تسمح بالأصدقاء (التشخيص خاطئ؟)');

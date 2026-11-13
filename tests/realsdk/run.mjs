@@ -7,7 +7,7 @@
 // فحص الطفرات: JAZAM_FIREBASE_JS=<نسخة قديمة من firebase.js> npm test  (يجب أن تفشل) — وكذلك JAZAM_INVITE_JS وJAZAM_AUTH_JS
 import { pathToFileURL } from 'node:url';
 import { FakeRTDB } from './fakertdb.mjs';
-import { gen, genInvite, genAuth, genFriends, genPresence } from './gen.mjs';
+import { gen, genInvite, genAuth, genFriends, genPresence, genNumbers } from './gen.mjs';
 import { ref as dbRef, update as dbUpdate, get as dbGet, onValue as dbOnValue, query as dbQuery, limitToLast as dbLimitToLast } from 'firebase/database';
 import fsx from 'node:fs';
 import { memberOnlyRooms } from '../shared/roomsOverlay.mjs';
@@ -1064,6 +1064,93 @@ async function gameplayWritesReal() {
   W.S.close();
 }
 
+// ── 3.3ج-4: الخبرة والسلسلة والجواهر (xp.js وachievements.js وwallet.js الحقيقية) بالحزمة الحقيقية فوق القواعد — صفحة جديدة
+// ذاكرتها باردة (لا مستمع على الخبرة): المعاملة بلا قيمة معروفة تبدأ بتخمين فارغ فتقترح "المكسب وحده" — والقواعد (الخبرة لا
+// تنقص، السلسلة +1 فقط) ترفضه إن قيّمها الخادم قبل مقارنة البصمة (الترتيب غير موثّق — نفحص الاثنين). وصفحتان معاً تُحسبان ──
+async function numbersRealC4() {
+  const r = suite('3.3ج-4: الخبرة والسلسلة والجواهر بالحزمة الحقيقية فوق القواعد — صفحة باردة لا تُرفض، وصفحتان معاً تُحسبان');
+  const S = new FakeRTDB(); const port = await S.listen();
+  S.setAt('users/uA', { uid: 'uA', name: 'أ', xp: 500, coins: 50, stats: { currentStreak: 4 } });
+  S.setAt('profiles/uA', { name: 'أ', photo: '', xp: 500 });
+  globalThis.document ??= { getElementById: () => null };
+  const P1 = genNumbers('N1', port, 'uA'), P2 = genNumbers('N2', port, 'uA');
+  const X1 = await import(pathToFileURL(P1.xp).href), X2 = await import(pathToFileURL(P2.xp).href);
+  const AC = await import(pathToFileURL(P1.achievements).href), W = await import(pathToFileURL(P1.wallet).href);
+  const t = async (name, fn) => { try { return await fn(); } catch (e) { r.ok(false, `${name}: ${e && (e.code || e.message)}`); return null; } };
+  const g = await t('الخبرة', () => X1.addXP(50)); await wait(150);
+  r.ok(g && g.totalXP === 550 && S.getAt('users/uA/xp') === 550 && S.getAt('profiles/uA/xp') === 550 && S.denied.length === 0,
+    `صفحة باردة: ${JSON.stringify(g && g.totalXP)} → ${S.getAt('users/uA/xp')}/${S.getAt('profiles/uA/xp')} (المطلوب 550)، رفض: ${JSON.stringify(S.denied)}`);
+  // صفحتان معاً: اقتراح الثانية مبني على قيمة سبقتها الأولى — بترتيب "القواعد أولاً" يُرفض مرة ويُعاد على الجديدة (ويُقبل
+  // معه رفض خبرة عامة متأخرة)؛ المهم أن تُحسب الخبرتان
+  await Promise.all([t('صفحة 1', () => X1.addXP(30)), t('صفحة 2', () => X2.addXP(20))]); await wait(300);
+  r.ok(S.getAt('users/uA/xp') === 600 && S.getAt('profiles/uA/xp') === 600, `صفحتان معاً: ${S.getAt('users/uA/xp')}/${S.getAt('profiles/uA/xp')} (المطلوب 600)`);
+  r.ok(S.denied.every(d => (d.a === 'p' && d.p === '/users/uA/xp') || d.a === 'm'), `رفض غير متوقع (صفحتان): ${JSON.stringify(S.denied)}`);
+  const d0 = S.denied.length;
+  const s = await t('السلسلة', () => AC.updateStreak('win')); await wait(150);
+  r.ok(s === 5 && S.getAt('users/uA/stats/currentStreak') === 5 && S.denied.length === d0, `السلسلة من صفحة باردة: ${s} → ${S.getAt('users/uA/stats/currentStreak')} (المطلوب 5)`);
+  const AC2 = await import(pathToFileURL(P2.achievements).href);
+  await Promise.all([t('سلسلة 1', () => AC.updateStreak('win')), t('سلسلة 2', () => AC2.updateStreak('win'))]); await wait(300);
+  r.ok(S.getAt('users/uA/stats/currentStreak') === 7, `فوزان معاً من صفحتين: ${S.getAt('users/uA/stats/currentStreak')} (المطلوب 7)`);
+  const d1 = S.denied.length;
+  W.resetMatchCoins(); W.addMatchCoins(9);
+  const c = await t('الجواهر', () => W.commitMatchCoins()); const sp = await t('الصرف', () => W.spendCoins(8)); await wait(150);
+  r.ok(c && c.earned === 9 && sp === true && S.getAt('users/uA/coins') === 51, `الجواهر: +${c && c.earned}، صرف ${sp}، الرصيد ${S.getAt('users/uA/coins')} (المطلوب 51)`);
+  r.ok(S.denied.length === d1, `رفض غير متوقع (الجواهر): ${JSON.stringify(S.denied.slice(d1))}`);
+  S.close();
+}
+
+// ── 3.3ج-4 (مراجعة): نتيجة تحدي اليوم حُفظت وضاع ردّ الخادم مع انقطاع — الحزمة تعيد إرسالها بعد العودة، والنتيجة لا تُكتب
+// فوقها (القواعد) فتُرفض الإعادة: الحفظ يُعدّ ناجحاً (المحفوظ هو المحاولة نفسها) لا "مسجّلة من قبل" بلا خبرة؛ ومحاولة أخرى
+// بنتيجة مختلفة تُرفض ومعها السبب "already" ──
+async function dailyLostAckReal() {
+  const r = suite('3.3ج-4: نتيجة تحدي اليوم وردّ الخادم ضائع مع انقطاع — تُعدّ محفوظة، ومحاولة أخرى "مسجّلة من قبل"');
+  const S = new FakeRTDB(); const port = await S.listen();
+  S.setAt('users/uA', { uid: 'uA', name: 'أ' });
+  const D = await import(pathToFileURL(genNumbers('DL', port, 'uA').daily).href);
+  await wait(300);
+  const day = D.todayStr(), sq = D.boardSquares(D.getDailyConfig(day).gridSize);
+  // الخادم يطبّق الكتابة ويؤخّر ردّها حتى بعد سقوط الاتصال
+  S.replyDelayFor = (m) => (m.d && m.d.a === 'p' && /dailyChallenges/.test(m.d.b.p)) ? 1500 : null;
+  const p = D.saveDailyResult('win', sq - 2, 2, 42, 'أ', day).then(() => 'ok', e => 'rejected:' + (e && (e.daily || e.code || e.message)));
+  await wait(200); D.__off(); await wait(300); S.replyDelayFor = null; D.__on();
+  const outcome = await p; await wait(300);
+  const stored = S.getAt(`dailyChallenges/${day}/results/uA`);
+  r.ok(stored && stored.result === 'win' && stored.myScore === sq - 2, `النتيجة لم تُحفظ: ${JSON.stringify(stored)}`);
+  r.ok(S.denied.some(d => /dailyChallenges/.test(String(d.p))), 'الإعادة بعد العودة لم تحدث (الفحص لا يختبر الردّ الضائع)');
+  r.ok(outcome === 'ok', `الحفظ بردّ ضائع: ${outcome} (المطلوب ناجح — المحفوظ هو المحاولة نفسها)`);
+  const again = await D.saveDailyResult('loss', 0, sq, 30, 'أ', day).then(() => 'ok', e => (e && e.daily) || 'rejected');
+  r.ok(again === 'already' && S.getAt(`dailyChallenges/${day}/results/uA/result`) === 'win', `محاولة ثانية بنتيجة أخرى: ${again} (المطلوب already)، المحفوظ ${S.getAt(`dailyChallenges/${day}/results/uA/result`)}`);
+  S.close();
+}
+
+// ── 3.3ج-4: الدخول يكتب الملف العام (الاسم والصورة، والخبرة = الخاصة) وصفحة أخرى بالحساب نفسه تكسب خبرة بين قراءته
+// وكتابته: الخبرة المقروءة صارت قديمة فترفضها القواعد — وحدها؛ الاسم والصورة يُكتبان (كتابة واحدة للثلاثة كانت تُرفض كلها) ──
+async function profileSyncRaceReal() {
+  const r = suite('3.3ج-4: مزامنة الملف العام عند الدخول وصفحة أخرى تكسب خبرة في اللحظة نفسها — الاسم يُكتب والخبرة القديمة وحدها تُرفض');
+  const S = new FakeRTDB(); const port = await S.listen();
+  const email = 'race@x.com', uid = 'uid_' + email.replace(/\W/g, '_');
+  S.setAt(`users/${uid}`, { uid, name: 'سارة', xp: 500, joinedAt: 1, stats: { ai: { wins: 0, losses: 0 } } });
+  S.setAt(`profiles/${uid}`, { name: 'قديم', photo: '', xp: 500 });
+  const A = await import(pathToFileURL(genAuth('PS', port, uid)).href);
+  const X2 = await import(pathToFileURL(genNumbers('PS2', port, uid).xp).href);
+  A.onUserChange(() => {});
+  await wait(50);
+  let holding = true, held = 0;
+  // قراءات ملف الدخول تُجاب بقيمتها لحظة وصولها للخادم، بعد نصف ثانية (شبكة بطيئة) — وفيها تكسب الصفحة الأخرى
+  S.replyDelayFor = (m) => (holding && m.d && m.d.a === 'g' && String(m.d.b && m.d.b.p).replace(/^\//, '') === `users/${uid}` ? (held++, 500) : null);
+  globalThis.__UPDATE_PROFILE_MS = 0;
+  const reg = A.registerWithEmail('سارة', email, 'Aa1!aaaa').catch(e => e);
+  await wait(150);
+  await X2.addXP(10);
+  holding = false;
+  await reg; await wait(1200);
+  r.ok(held > 0, 'قراءة ملف الدخول لم تُحجز (الفحص لا يختبر السباق)');
+  r.ok(S.getAt(`profiles/${uid}/name`) === 'سارة', `الاسم العام: ${S.getAt(`profiles/${uid}/name`)} (المطلوب سارة)`);
+  r.ok(S.getAt(`profiles/${uid}/xp`) === 510 && S.getAt(`users/${uid}/xp`) === 510, `الخبرة: ${S.getAt(`users/${uid}/xp`)}/${S.getAt(`profiles/${uid}/xp`)} (المطلوب 510 في المكانين)`);
+  r.ok(S.denied.length > 0 && S.denied.every(d => d.a === 'm' && /profiles/.test(String(d.p))), `الرفض المتوقع (الخبرة القديمة وحدها): ${JSON.stringify(S.denied)}`);
+  S.close();
+}
+
 // ── 3.3أ-3: المحادثة (chat.js الحقيقي) بالحزمة الحقيقية فوق القواعد المنشورة — الطرفان من مفتاح المحادثة: الاستماع
 // (استعلام limitToLast) والإرسال (push يُحلّ بمرجع الرسالة) وتعليم الوصول/القراءة (كتابة متعددة المسارات)، ومن ليس
 // طرفاً لا يقرأ ولا يستمع ولا يكتب، ومن ليس صديقاً لا يرسل، والرسالة لا تُعدَّل، وبعد حذف الصداقة يبقى التاريخ ──
@@ -1314,7 +1401,7 @@ const all = [offlineExitThenReconnect, blipDuringWithdraw, onlineExit, creatorSt
   duoCancelThenClose, duoJoinAckLost, duoCodeJoinAckLost, duoCreateBlip, duoAbortRetried, duoCancelDuringReopen,
   duoHostBlipRestores, duoRestoreKeepsGuestOut, duoEvictedGuestOp, duoOrphanNodeRestores, duoCancelStrayFinished,
   inviteConditionalRemovals, registrationProfile, friendsRealRules, presenceHealsReal, mixedVersions, twoTabAccept,
-  chatRealRules, chatLastReadReal, roomCodeCollisionReal, lobbyRacesReal, friendsCodeFirstReal, friendsClockSkewReal, gameplayWritesReal];
+  chatRealRules, chatLastReadReal, roomCodeCollisionReal, lobbyRacesReal, friendsCodeFirstReal, friendsClockSkewReal, gameplayWritesReal, numbersRealC4, profileSyncRaceReal, dailyLostAckReal];
 // ONLY=اسم1,اسم2 npm test — تشغيل فحوص بعينها (للتطوير وفحص الطفرات)
 const pick = process.env.ONLY ? all.filter(f => process.env.ONLY.split(',').includes(f.name)) : all;
 console.log('\n🔬 firebase.js بحزمة Firebase الحقيقية');

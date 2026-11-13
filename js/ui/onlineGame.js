@@ -1,17 +1,17 @@
 // 📄 ui/onlineGame.js
 // منطق الأونلاين — إنشاء غرفة، انضمام، حركات
-import { audioManager } from "../audio/audioManager.js?v=1794182040";
-import { setMyPresence, presenceNote } from "../presence.js?v=1794182040";
-import { updateScoreboard } from "./scoreboard.js?v=1794182040";
-import { config } from "../config/config.js?v=1794182040";
-import { onlineManager } from "../firebase.js?v=1794182040";
-import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1794182040";
-import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1794182040";
-import { state } from "../core/state.js?v=1794182040";
-import { getCurrentUser } from "../auth.js?v=1794182040";
-import { endGame, recordForfeit, recordElimination } from "./gameEnd.js?v=1794182040";
-import { renderTurnText } from "./turnManager.js?v=1794182040";
-import { esc } from "./safeText.js?v=1794182040";
+import { audioManager } from "../audio/audioManager.js?v=1794502787";
+import { setMyPresence, presenceNote } from "../presence.js?v=1794502787";
+import { updateScoreboard } from "./scoreboard.js?v=1794502787";
+import { config } from "../config/config.js?v=1794502787";
+import { onlineManager } from "../firebase.js?v=1794502787";
+import { applyOnlineMove, skipInactiveTurn, waitForRender } from "./boardRenderer.js?v=1794502787";
+import { setBank, applyClockState, stopTurnTimer } from "./turnTimer.js?v=1794502787";
+import { state } from "../core/state.js?v=1794502787";
+import { getCurrentUser } from "../auth.js?v=1794502787";
+import { endGame, recordForfeit, recordElimination } from "./gameEnd.js?v=1794502787";
+import { renderTurnText } from "./turnManager.js?v=1794502787";
+import { esc } from "./safeText.js?v=1794502787";
 
 export function initOnlineGame({ onGameStart, gameSetupApi }) {
   const stepName        = document.getElementById("online-step-name");

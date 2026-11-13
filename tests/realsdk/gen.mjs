@@ -145,3 +145,43 @@ export function genPresence(dev, port, uid, { src = null } = {}) {
   fs.writeFileSync(out, s);
   return out;
 }
+
+// 3.3ج-4: وحدات الأرقام (xp.js وachievements.js وcore/wallet.js وdailyChallenge.js — وcore/txn.js إن وُجد) لصفحة بهوية حسابها، كلها على
+// تطبيق Firebase واحد للصفحة موصول بالخادم الوهمي — صفحة جديدة = ذاكرة باردة (لا مستمع على الخبرة). المصادقة بديل صغير.
+// JAZAM_DIR: مشروع آخر (لفحص الطفرات)
+export function genNumbers(dev, port, uid = 'u' + dev) {
+  const dir = path.join(HERE, '.gen');
+  fs.mkdirSync(dir, { recursive: true });
+  const tag = `${dev}_${port}`;
+  const appMod = `napp_${tag}.mjs`, authMod = `nauth_${tag}.mjs`;
+  fs.writeFileSync(path.join(dir, appMod),
+    `import { initializeApp } from "firebase/app";\n` +
+    `import { getDatabase, connectDatabaseEmulator, goOffline, goOnline } from "firebase/database";\n` +
+    `const app = initializeApp({ apiKey: "fake", projectId: "jazam", databaseURL: "http://localhost:${port}?ns=jazam" }, "num_${tag}");\n` +
+    `export const __db = getDatabase(app); connectDatabaseEmulator(__db, "localhost", ${port}, { mockUserToken: { sub: ${JSON.stringify(uid)} } });\n` +
+    `export const __off = () => goOffline(__db); export const __on = () => goOnline(__db);\n`);
+  fs.writeFileSync(path.join(dir, authMod),
+    `export const currentUser = { uid: ${JSON.stringify(uid)}, displayName: ${JSON.stringify(dev)} };\n` +
+    `export function getCurrentUser() { return currentUser; }\n`);
+  const out = {};
+  const txnSrc = path.join(PROJECT, 'js/core/txn.js');
+  const hasTxn = fs.existsSync(txnSrc);
+  const conv = (rel, name) => {
+    let s = fs.readFileSync(path.join(PROJECT, rel), 'utf8');
+    const rep = (re, to) => { if (!re.test(s)) throw new Error(`genNumbers(${rel}): لم أجد ${re}`); s = s.replace(re, to); };
+    rep(/from "https:\/\/www\.gstatic\.com\/firebasejs\/[\d.]+\/firebase-database\.js"/, 'from "firebase/database"');
+    s = s.replace(/from "\.{1,2}\/auth\.js(\?v=\d+)?"/, `from "./${authMod}"`);
+    s = s.replace(/from "\.{1,2}\/(core\/)?txn\.js(\?v=\d+)?"/, `from "./ntxn_${tag}.mjs"`);
+    s = s.replace(/const db\s*= getDatabase\(\);/, `import { __db as db, __off, __on } from "./${appMod}"; export { __off, __on };`);
+    const file = path.join(dir, `${name}_${tag}.mjs`);
+    fs.writeFileSync(file, s);
+    return file;
+  };
+  if (hasTxn) out.txn = conv('js/core/txn.js', 'ntxn');
+  out.xp = conv('js/xp.js', 'nxp');
+  out.achievements = conv('js/achievements.js', 'nach');
+  out.wallet = conv('js/core/wallet.js', 'nwal');
+  out.daily = conv('js/dailyChallenge.js', 'nday');
+  out.app = path.join(dir, appMod);
+  return out;
+}

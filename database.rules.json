@@ -4,6 +4,7 @@
       ".read": "auth !== null",
       "$uid": {
         ".write": "$uid === auth.uid",
+        ".validate": "newData.hasChildren()",
         "name": {
           ".validate": "newData.isString() && newData.val().length <= 128"
         },
@@ -11,7 +12,10 @@
           ".validate": "newData.isString() && newData.val().length <= 1024"
         },
         "xp": {
-          ".validate": "newData.isNumber()"
+          ".validate": "newData.isNumber() && (newData.parent().parent().parent().child('users').child($uid).child('xp').isNumber() ? newData.val() === newData.parent().parent().parent().child('users').child($uid).child('xp').val() : newData.val() === 0)"
+        },
+        "$other": {
+          ".validate": false
         }
       }
     },
@@ -55,6 +59,7 @@
           "$friendUid": {
             ".read": "$friendUid === auth.uid",
             ".write": "auth !== null && $friendUid === auth.uid && (!newData.exists() || (root.child('users').child($uid).child('sentRequests').child(auth.uid).isNumber() && root.child('users').child($uid).child('sentRequests').child(auth.uid).val() > now - 2592000000))",
+            ".validate": "newData.hasChildren(['uid'])",
             "uid": {
               ".validate": "newData.val() === $friendUid"
             },
@@ -82,6 +87,168 @@
         "lastRead": {
           "$key": {
             ".validate": "newData.isNumber() && (!data.exists() || !data.isNumber() || newData.val() >= data.val() || data.val() > now)"
+          }
+        },
+        "xp": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && (data.isNumber() ? newData.val() >= data.val() && newData.val() <= data.val() + 100 : newData.val() <= 100)"
+        },
+        "coins": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && (data.isNumber() ? newData.val() <= data.val() + 100 : newData.val() <= 100)"
+        },
+        "stats": {
+          ".validate": "newData.hasChildren()",
+          "ai": {
+            ".validate": "newData.hasChildren()",
+            "wins": {
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            },
+            "losses": {
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            },
+            "history": {
+              ".validate": "newData.hasChildren()",
+              "$ts": {
+                ".validate": "$ts.length <= 15 && newData.hasChildren(['r'])",
+                "r": {
+                  ".validate": "newData.val() === 'w' || newData.val() === 'l' || newData.val() === 'd'"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          "local": {
+            ".validate": "newData.hasChildren()",
+            "wins": {
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            },
+            "losses": {
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            },
+            "$key": {
+              ".validate": "$key.length <= 400 && newData.hasChildren()",
+              "name": {
+                ".validate": "newData.isString() && newData.val().length <= 128"
+              },
+              "history": {
+                ".validate": "newData.hasChildren()",
+                "$ts": {
+                  ".validate": "$ts.length <= 15 && newData.hasChildren(['r'])",
+                  "r": {
+                    ".validate": "newData.val() === 'w' || newData.val() === 'l' || newData.val() === 'd'"
+                  },
+                  "$other": {
+                    ".validate": false
+                  }
+                }
+              },
+              "$other": {
+                ".validate": false
+              }
+            }
+          },
+          "online": {
+            ".validate": "newData.hasChildren()",
+            "$opp": {
+              ".validate": "$opp.length <= 400 && newData.hasChildren()",
+              "name": {
+                ".validate": "newData.isString() && newData.val().length <= 128"
+              },
+              "history": {
+                ".validate": "newData.hasChildren()",
+                "$ts": {
+                  ".validate": "$ts.length <= 15 && newData.hasChildren(['r'])",
+                  "r": {
+                    ".validate": "newData.val() === 'w' || newData.val() === 'l' || newData.val() === 'd'"
+                  },
+                  "$other": {
+                    ".validate": false
+                  }
+                }
+              },
+              "$other": {
+                ".validate": false
+              }
+            }
+          },
+          "multi": {
+            ".validate": "newData.hasChildren()",
+            "history": {
+              ".validate": "newData.hasChildren()",
+              "$ts": {
+                ".validate": "$ts.length <= 15 && newData.hasChildren(['rank', 'players', 'score'])",
+                "rank": {
+                  ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 4"
+                },
+                "players": {
+                  ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 4"
+                },
+                "score": {
+                  ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 200"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          "currentStreak": {
+            ".validate": "newData.isNumber() && (newData.val() === 0 || (data.isNumber() ? newData.val() === data.val() + 1 : newData.val() === 1))"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "achievements": {
+          ".validate": "newData.hasChildren()",
+          "$ach": {
+            ".validate": "$ach.length <= 32 && newData.hasChildren(['unlockedAt'])",
+            "unlockedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "matchHistory": {
+          ".validate": "newData.hasChildren()",
+          "$mid": {
+            ".validate": "$mid.length <= 32 && newData.hasChildren(['mode', 'result', 'myScore', 'oppScore', 'vs', 'grid', 'duration', 'ts'])",
+            "mode": {
+              ".validate": "newData.val() === 'ai' || newData.val() === 'local' || newData.val() === 'online' || newData.val() === 'multi'"
+            },
+            "result": {
+              ".validate": "newData.val() === 'win' || newData.val() === 'loss' || newData.val() === 'draw'"
+            },
+            "myScore": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 200"
+            },
+            "oppScore": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 200"
+            },
+            "vs": {
+              ".validate": "newData.isString() && newData.val().length <= 128"
+            },
+            "grid": {
+              ".validate": "newData.isString() && newData.val().length <= 8"
+            },
+            "duration": {
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            },
+            "ts": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
           }
         }
       }
@@ -415,7 +582,8 @@
         "results": {
           ".read": "auth !== null",
           "$uid": {
-            ".write": "$uid === auth.uid",
+            ".write": "$uid === auth.uid && !data.exists()",
+            ".validate": "$date.length === 10 && newData.hasChildren(['result', 'myScore', 'oppScore', 'duration', 'ts']) && newData.child('myScore').val() + newData.child('oppScore').val() <= 25 && (newData.child('result').val() !== 'win' || (newData.child('myScore').val() > newData.child('oppScore').val() && newData.child('duration').val() >= 5 && (newData.child('myScore').val() + newData.child('oppScore').val() === 9 || newData.child('myScore').val() + newData.child('oppScore').val() === 16 || newData.child('myScore').val() + newData.child('oppScore').val() === 25))) && (newData.child('result').val() !== 'draw' || newData.child('myScore').val() === newData.child('oppScore').val())",
             "result": {
               ".validate": "newData.val() === 'win' || newData.val() === 'loss' || newData.val() === 'draw'"
             },
@@ -432,7 +600,7 @@
               ".validate": "newData.isString() && newData.val().length <= 128"
             },
             "ts": {
-              ".validate": "newData.isNumber()"
+              ".validate": "newData.isNumber() && newData.val() === now"
             },
             "$other": {
               ".validate": false

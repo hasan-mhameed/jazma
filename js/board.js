@@ -3,11 +3,11 @@
 // Handles game logic and player-square interactions
 
 // board.js - controller linking logic/state with renderer
-import { initState, state } from "./core/state.js?v=1794182040";
-import { initBoard } from "./ui/boardRenderer.js?v=1794182040";
-import { renderScoreboard } from "./ui/scoreboard.js?v=1794182040";
-import { updateTurn, updateTurnUI } from "./ui/turnManager.js?v=1794182040";
-import { config } from "./config/config.js?v=1794182040";
+import { initState, state } from "./core/state.js?v=1794502787";
+import { initBoard } from "./ui/boardRenderer.js?v=1794502787";
+import { renderScoreboard } from "./ui/scoreboard.js?v=1794502787";
+import { updateTurn, updateTurnUI } from "./ui/turnManager.js?v=1794502787";
+import { config } from "./config/config.js?v=1794502787";
 
 export function startBoard(cfg, aiPlayer = null) {
   // لوحة جديدة = مباراة جديدة: مسار التحدي اليومي لا يمرّ بـ launchGame (التي تصفّرها)،

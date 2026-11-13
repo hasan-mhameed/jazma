@@ -3,7 +3,7 @@
 
 import { getDatabase, ref, get, set, runTransaction }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser } from "../auth.js?v=1794182040";
+import { getCurrentUser } from "../auth.js?v=1794502787";
 
 const db = getDatabase();
 
@@ -23,10 +23,13 @@ export async function getCoins() {
 }
 
 // إضافة عملات المباراة للرصيد الدائم (عند نهاية المباراة)
+// 3.3ج-4: القواعد لا تقبل أكثر من 100 في الكتابة الواحدة (أعلى مكسب حقيقي 75: لوحة 6×6 كلها جواهر) — فوقها كانت
+// تُرفض كلها؛ غرفة بلوحة أكبر (إعداد غير عادي) تأخذ 100 (مراجعة ج-4)
+const COINS_STEP_MAX = 100;
 export async function commitMatchCoins() {
   const uid = getCurrentUser()?.uid;
   if (!uid || _matchCoins <= 0) return { earned: _matchCoins, total: await getCoins() };
-  const earned = _matchCoins;
+  const earned = Math.min(_matchCoins, COINS_STEP_MAX);
   const r = ref(db, `users/${uid}/coins`);
   await runTransaction(r, current => (current || 0) + earned);
   _matchCoins = 0;

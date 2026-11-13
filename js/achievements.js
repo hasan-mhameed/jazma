@@ -3,7 +3,8 @@
 
 import { getDatabase, ref, get, set }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1794182040";
+import { currentUser } from "./auth.js?v=1794502787";
+import { warmTransaction } from "./core/txn.js?v=1794502787";
 
 const db = getDatabase();
 
@@ -98,16 +99,15 @@ export async function checkAchievements(matchData, allStats, historyCount) {
 }
 
 // ── تحديث السلسلة في Firebase بعد كل مباراة ─────────────────────
+// 3.3ج-4: بمعاملة — القواعد لا تقبل إلا السابقة +1 (فوز) أو صفراً (خسارة أو تعادل يكسر السلسلة)؛ بقراءة ثم كتابة كانت
+// صفحتان تنهيان مباراتين معاً تقرآن القيمة نفسها فتُرفض كتابة الثانية (وتسقط معها إنجازات مباراتها). ومن قيمة الخادم
+// الحقيقية (core/txn.js): بتخمين فارغ تقترح 1 بدل السابقة +1 فترفضها القواعد
 export async function updateStreak(result) {
   if (!currentUser) return 0;
   const streakRef = ref(db, `users/${currentUser.uid}/stats/currentStreak`);
-  const snap      = await get(streakRef);
-  const current   = snap.exists() ? snap.val() : 0;
-  let newStreak;
-  if (result === 'win')        newStreak = current + 1;
-  else                         newStreak = 0; // خسارة أو تعادل يكسر السلسلة
-  await set(streakRef, newStreak);
-  return newStreak;
+  const res = await warmTransaction(streakRef, cur => result === 'win' ? (typeof cur === 'number' ? cur + 1 : 1) : 0);
+  const v = res && res.snapshot ? res.snapshot.val() : 0;
+  return typeof v === 'number' ? v : 0;
 }
 
 // ── جلب السلسلة الحالية ────────────────────────────────────────

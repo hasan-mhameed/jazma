@@ -3,7 +3,8 @@
 
 import { getDatabase, ref, get, update }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1794182040";
+import { currentUser } from "./auth.js?v=1794502787";
+import { warmTransaction } from "./core/txn.js?v=1794502787";
 
 const db = getDatabase();
 
@@ -92,19 +93,24 @@ export async function getXP(uid) {
 }
 
 // ── إضافة XP وإرجاع النتيجة ──────────────────────────────────────
+// 3.3ج-4: الخبرة بمعاملة على الملف الخاص (القواعد: لا تنقص، ولا تزيد أكثر من 100 في الكتابة) — صفحتان تكسبان معاً
+// تُضاف خبرة الاثنتين (كانت القراءة ثم الكتابة تجعل الثانية تكتب فوق الأولى فتضيع خبرتها)، ثم العام بالقيمة المعتمدة
+// (القواعد: الخبرة العامة = الخاصة دائماً). إن تأخّر العام عن معاملة أحدث رُفض ولا يضرّ: الأحدث يكتب قيمته
+const XP_STEP_MAX = 100;   // كما في القواعد — أعلى مكسب حقيقي 70 (تحدي اليوم الصعب)
 export async function addXP(amount) {
   if (!currentUser || amount <= 0) return null;
-  const uid      = currentUser.uid;
-  // القيمة المرجعية من الملف الخاص (المصدر الموثوق، يقرؤها صاحبها) — لا من العام
-  const curSnap  = await get(ref(db, `users/${uid}/xp`));
-  const current  = curSnap.exists() ? curSnap.val() : 0;
-  const newXP    = current + amount;
-  const before   = getLevelFromXP(current);
-  const after    = getLevelFromXP(newXP);
-  // 3.3أ: الخبرة في الملف الخاص (الموثوق) والعام (للعرض) معاً — كتابة واحدة ذرّية
-  await update(ref(db), { [`users/${uid}/xp`]: newXP, [`profiles/${uid}/xp`]: newXP });
+  const uid  = currentUser.uid;
+  const gain = Math.min(Math.round(amount), XP_STEP_MAX);
+  // من قيمة الخادم الحقيقية (core/txn.js): بتخمين فارغ تقترح "المكسب وحده" — أقل من المخزّن، فترفضه القواعد
+  const res  = await warmTransaction(ref(db, `users/${uid}/xp`), cur => (typeof cur === "number" ? cur : 0) + gain);
+  if (!res || !res.committed) return null;
+  const newXP   = res.snapshot.val();
+  const current = newXP - gain;
+  const before  = getLevelFromXP(current);
+  const after   = getLevelFromXP(newXP);
+  try { await update(ref(db), { [`profiles/${uid}/xp`]: newXP }); } catch (e) { console.debug("profile xp", e?.code || e); }
   return {
-    gained:      amount,
+    gained:      gain,
     totalXP:     newXP,
     before,
     after,

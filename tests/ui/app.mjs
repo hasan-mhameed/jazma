@@ -24,8 +24,11 @@ export const RULES = JSON.parse(fs.readFileSync(path.join(PROJECT, 'database.rul
 export const OLD_RULES = JSON.parse(fs.readFileSync(new URL('../shared/rules_prod_2026-10-19.json', import.meta.url), 'utf8'));
 // قواعد v36.8 (3.3ج-1) كما نُشرت — لفحص "الكود أولاً ثم القواعد" في 3.3ج-2 (الكود الجديد فوق القواعد السابقة)
 export const C1_RULES = JSON.parse(fs.readFileSync(new URL('../shared/rules_c1_v36.8.json', import.meta.url), 'utf8'));
-export async function bootApp({ user = ME, data = {}, cold = false, rules = RULES, autoProfiles = true } = {}) {
+export async function bootApp({ user = ME, data = {}, cold = false, rules = RULES, autoProfiles = true, serverSkew = 0 } = {}) {
   const H = boot({ firebase: true, polyfills: true, cold, rules });
+  // ساعة الخادم تسبق ساعة الجهاز بـserverSkew — تُضبط قبل الإقلاع، كالحزمة الحقيقية التي تقيس الفرق عند الاتصال
+  // قبل أي بيانات (فحصٌ يضبطها بعد الإقلاع يصل فرقها للصفحة مع أول كتابة فقط)
+  H.fb.serverSkew = serverSkew;
   for (const [p, v] of Object.entries(data)) H.fb.set(p, v);
   // 3.3أ: في الواقع كل لاعب له ملف عام profiles/<uid> (يكتبه saveUserProfile عند دخوله) — منه البحث والمتصدرون
   // وخبرة الخصم. نشتقّه تلقائياً من كل لاعب مزروع في users حتى تعمل هذه القراءات (أطفئه بـautoProfiles:false
@@ -940,7 +943,231 @@ export async function privacyProfileSplit() {
 
 export const APP_ALL = [friendPresenceAcrossRerender, logoutFreshPage, accountChangesSamePage, guestUpgrade, registrationName,
   repeatedSameAccountEvent, namesAndPhotosInDomUIs, friendsUnderRules, localStatsKeys, presenceSelfHeal, uiNotes115, privacyProfileSplit,
-  chatUnderRules, friendRequestsC2];
+  chatUnderRules, friendRequestsC2, numbersC4];
+
+// ── 3.3ج-4: حدود الأرقام كما يكتبها الكود فوق القواعد — الخبرة بمعاملة (صفحتان معاً لا تضيع خبرة إحداهما)، والعامة
+// تطابق الخاصة (وتُصحَّح عند الدخول)، والجواهر، وتحدي اليوم (يوم الخادم، نتيجة واحدة، والمتصدرون يتجاهلون ما لا يطابق) ──
+export async function numbersC4() {
+  const r = checker('3.3ج-4: حدود الأرقام فوق القواعد — الخبرة بمعاملة والعامة تطابقها، والجواهر، وتحدي اليوم بيوم الخادم ونتيجة واحدة');
+  const DAY = 86_400_000;
+  // (أ) الخبرة: ملف عام منفوخ (رقم مزوّر قديم) يُصحَّح عند الدخول؛ ومكسبان معاً من صفحتين يُضافان كلاهما
+  {
+    const H = await bootApp({ autoProfiles: false, data: { 'users/me': { uid: 'me', name: 'أنا', xp: 500 }, 'profiles/me': { name: 'أنا', photo: '', xp: 99999 } } });
+    try {
+      await H.settle(0, 10);
+      r.ok(H.fb.get('profiles/me/xp') === 500 && H.fb.get('profiles/me/name') === 'أنا', `(أ) الخبرة العامة المنفوخة لم تُصحَّح عند الدخول (${H.fb.get('profiles/me/xp')})`);
+      const X = await H.import('js/xp.js');
+      const [a, b] = await Promise.all([X.addXP(50), X.addXP(70)]); await H.settle(0, 10);
+      r.ok(H.fb.get('users/me/xp') === 620 && H.fb.get('profiles/me/xp') === 620 && a && b, `(أ) مكسبان معاً: ${H.fb.get('users/me/xp')} / ${H.fb.get('profiles/me/xp')} (المطلوب 620 في المكانين)`);
+      const big = await X.addXP(5000); await H.settle(0, 10);
+      r.ok(big?.gained === 100 && H.fb.get('users/me/xp') === 720, `(أ) مكسب فوق الحدّ: ${JSON.stringify(big && big.gained)} → ${H.fb.get('users/me/xp')}`);
+      // السلسلة: فوزان معاً يُحسبان كلاهما (القواعد لا تقبل إلا +1 أو صفراً)، والخسارة تصفّرها
+      const AC = await H.import('js/achievements.js');
+      const [s1, s2] = await Promise.all([AC.updateStreak('win'), AC.updateStreak('win')]); await H.settle(0, 10);
+      const sAfter = H.fb.get('users/me/stats/currentStreak');
+      const s3 = await AC.updateStreak('loss'); await H.settle(0, 10);
+      r.ok(sAfter === 2 && [s1, s2].sort().join() === '1,2' && s3 === 0 && H.fb.get('users/me/stats/currentStreak') === 0,
+        `(أ) السلسلة: فوزان معاً → ${sAfter} (${s1},${s2})، ثم خسارة → ${H.fb.get('users/me/stats/currentStreak')}`);
+      r.ok(H.errors.length === 0, '(أ) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(أ) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  // (أ٢) سجل المباراة تفرض القواعد شكله وحدوده — رفضه (هنا: قواعد ترفض كل سجل) لا يُسقط الإحصائيات والإنجازات والخبرة بعده
+  {
+    const rules = JSON.parse(JSON.stringify(RULES));
+    rules.rules.users.$uid.matchHistory['.validate'] = 'false';
+    const H = await bootApp({ rules, data: { 'users/me': { uid: 'me', name: 'أنا', xp: 40 } } });
+    try {
+      const G = await H.import('js/ui/gameEnd.js');
+      G.resetMatchTimer();
+      await G.endGame({ aiMode: 'human', online: false, rows: 3, cols: 3, players: 2, multiPlayers: null,
+        localPlayerNames: { 1: 'أنا', 2: 'سيمو' }, colors: ['#f00', '#00f'] }, { 1: 3, 2: 1 });
+      await H.settle(0, 20);
+      const st = H.fb.get('users/me/stats/local/vs_سيمو/history');
+      r.ok(H.fb.get('users/me/matchHistory') == null && Object.keys(st || {}).length === 1 && H.fb.get('users/me/xp') > 40 && H.fb.get('users/me/achievements/first_win'),
+        `(أ٢) سجل مرفوض: السجل ${JSON.stringify(H.fb.get('users/me/matchHistory'))}، الإحصائيات ${Object.keys(st || {}).length}، الخبرة ${H.fb.get('users/me/xp')}، أول فوز ${!!H.fb.get('users/me/achievements/first_win')}`);
+      r.ok(H.errors.length === 0, '(أ٢) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(أ٢) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  // (أ٣) معاملة الخبرة فشلت (انقطاع أثناءها يلغيها؛ هنا: قواعد ترفض كل خبرة) — نافذة النهاية تظهر بمربع "أنت vs" والإحصائيات
+  // والسجل محفوظان (كانت النافذة كلها تسقط: endGame ينتظر التسجيل قبل العرض)
+  {
+    const rules = JSON.parse(JSON.stringify(RULES));
+    rules.rules.users.$uid.xp['.validate'] = 'false';
+    const H = await bootApp({ rules, data: { 'users/me': { uid: 'me', name: 'أنا', xp: 40 } } });
+    try {
+      const G = await H.import('js/ui/gameEnd.js');
+      G.resetMatchTimer();
+      await G.endGame({ aiMode: 'human', online: false, rows: 3, cols: 3, players: 2, multiPlayers: null,
+        localPlayerNames: { 1: 'أنا', 2: 'سيمو' }, colors: ['#f00', '#00f'] }, { 1: 3, 2: 1 });
+      await H.settle(0, 20);
+      const shown = !$(H, 'winner-screen').classList.contains('hidden'), h2h = !$(H, 'head-to-head').classList.contains('hidden');
+      r.ok(shown && h2h && H.fb.get('users/me/xp') === 40 && Object.keys(H.fb.get('users/me/matchHistory') || {}).length === 1,
+        `(أ٣) خبرة مرفوضة: النافذة ${shown}، "أنت vs" ${h2h}، الخبرة ${H.fb.get('users/me/xp')}، السجل ${Object.keys(H.fb.get('users/me/matchHistory') || {}).length}`);
+      r.ok(H.errors.length === 0, '(أ٣) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(أ٣) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  // (ب) الجواهر: مكسب مباراة وصرف أداة كما يكتبهما الكود
+  {
+    const H = await bootApp({ data: { 'users/me': { uid: 'me', name: 'أنا', coins: 20 } } });
+    try {
+      const W = await H.import('js/core/wallet.js');
+      W.resetMatchCoins(); W.addMatchCoins(9);
+      const got = await W.commitMatchCoins(); await H.settle(0, 10);
+      const spent = await W.spendCoins(8); await H.settle(0, 10);
+      r.ok(got.earned === 9 && spent === true && H.fb.get('users/me/coins') === 21, `(ب) الجواهر: مكسب ${got.earned}، صرف ${spent}، الرصيد ${H.fb.get('users/me/coins')} (المطلوب 21)`);
+      // مكسب فوق حدّ القواعد (غرفة بلوحة أكبر من المعتاد): يُثبَّت 100 لا يُرفض كله
+      W.resetMatchCoins(); W.addMatchCoins(150);
+      const big = await W.commitMatchCoins(); await H.settle(0, 10);
+      r.ok(big.earned === 100 && H.fb.get('users/me/coins') === 121, `(ب) مكسب فوق الحدّ: ${big.earned} → ${H.fb.get('users/me/coins')} (المطلوب 100 → 121)`);
+      r.ok(H.errors.length === 0, '(ب) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(ب) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  // (ج) تحدي اليوم: اليوم من ساعة الخادم (الجهاز متأخر يومين)، نتيجة واحدة، والمتصدرون لا يعرضون ما لا يطابق يومه ولوحته
+  {
+    const H = await bootApp({ serverSkew: 2 * DAY, data: { 'users/me': { uid: 'me', name: 'أنا' }, 'users/o': { uid: 'o', name: 'عمر' } } });
+    try {
+      await H.settle(0, 10);
+      const DC = await H.import('js/dailyChallenge.js');
+      const serverDay = new H.win.Date(H.win.Date.now() + 2 * DAY).toISOString().slice(0, 10);
+      r.ok(DC.todayStr() === serverDay, `(ج) "اليوم" من ساعة الجهاز (${DC.todayStr()}) لا الخادم (${serverDay})`);
+      const sq = DC.boardSquares(DC.getDailyConfig(serverDay).gridSize);
+      await DC.saveDailyResult('win', sq, 0, 60, 'أنا'); await H.settle(0, 10);
+      const first = H.fb.get(`dailyChallenges/${serverDay}/results/me`);
+      let second = null; try { await DC.saveDailyResult('loss', 0, sq, 30, 'أنا'); } catch (e) { second = e; } await H.settle(0, 10);
+      r.ok(first?.result === 'win' && second && H.fb.get(`dailyChallenges/${serverDay}/results/me/result`) === 'win', `(ج) نتيجة ثانية لليوم كُتبت فوق الأولى (${H.fb.get(`dailyChallenges/${serverDay}/results/me/result`)})`);
+      // نتائج أخرى في قائمة اليوم: فوز وقته أمس (كُتب ليوم آخر)، وفوز بلوحة غير لوحة اليوم — لا يظهران
+      const start = Date.parse(serverDay + 'T00:00:00Z');
+      H.fb.set(`dailyChallenges/${serverDay}/results/o`, { result: 'win', myScore: sq, oppScore: 0, duration: 50, name: 'عمر', ts: start - 3 * 3600_000 });
+      H.fb.set(`dailyChallenges/${serverDay}/results/x`, { result: 'win', myScore: sq === 25 ? 16 : 25, oppScore: 0, duration: 50, name: 'إكس', ts: start + 3600_000 });
+      const lb = await DC.getDailyLeaderboard();
+      r.ok(lb.length === 1 && lb[0].uid === 'me', `(ج) المتصدرون: ${JSON.stringify(lb.map(e => e.uid))} (المطلوب نتيجتي وحدها)`);
+      // حدود الفلتر: ربع ساعة قبل اليوم وبعده، ولوحة اليوم كاملة، وفوز حقيقي
+      const W = (o) => DC.isValidDailyWin({ result: 'win', myScore: sq, oppScore: 0, ts: start + 3600_000, ...o }, serverDay);
+      const G = 15 * 60_000;
+      const edges = [W({}), W({ ts: start - G }), W({ ts: start + DAY + G }), !W({ ts: start - G - 1 }), !W({ ts: start + DAY + G + 1 }),
+        !W({ myScore: sq - 1 }), !W({ myScore: 0, oppScore: sq }), !W({ result: 'draw' }), !W({ ts: '1' }), !DC.isValidDailyWin(null, serverDay)];
+      r.ok(edges.every(Boolean), `(ج) حدود فلتر المتصدرين: ${edges.map(b => b ? '✓' : '✗').join('')}`);
+      r.ok(H.errors.length === 0, '(ج) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(ج) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  // (د) واجهة التحدي كما يلعبه اللاعب (بلا لوحة — onGameStart بديل): نتيجة تُحفظ وخبرتها، ونتيجة سبقتها صفحة أخرى لا
+  // تُحتسب (تنبيه، بلا خبرة)، وحفظ يُرفض لسبب آخر لا خبرة له، وتحدٍّ بدأ قبل منتصف الليل يُكتب ليومه لا لليوم التالي
+  {
+    const H = boot({ firebase: true, polyfills: true, rules: RULES });
+    H.fb.serverSkew = -DAY;                     // ساعة الجهاز تسبق الخادم بيوم
+    H.fb.set('users/me', { uid: 'me', name: 'أنا', xp: 300 });
+    H.fb.set('profiles/me', { name: 'أنا', photo: '', xp: 300 });
+    H.fb.auth.currentUser = JSON.parse(JSON.stringify(ME));
+    await H.loaded();
+    try {
+      const A = await H.import('js/auth.js');
+      A.onUserChange(() => {}); await H.settle(0, 10);
+      const DC = await H.import('js/dailyChallenge.js');
+      const UI = await H.import('js/ui/dailyChallengeUI.js');
+      let started = 0;
+      UI.initDailyChallengeUI({ onGameStart: () => { started++; }, getAiPlayer: () => null });
+      await H.settle(0, 10);
+      const start = async () => { H.doc.getElementById('daily-start-btn').click(); await H.settle(0, 10); };
+      const toasts = (t) => [...H.doc.body.children].filter(e => e.tagName === 'DIV' && !e.id && e.textContent.includes(t)).length;
+      const ALREADY = 'مسجّلة من قبل', FAILED = 'تعذّر حفظ';
+      const day = DC.todayStr();
+      const serverDay = new H.win.Date(H.win.Date.now() - DAY).toISOString().slice(0, 10);
+      const sq = DC.boardSquares(DC.getDailyConfig(day).gridSize);
+      const P = `dailyChallenges/${day}/results/me`;
+      r.ok(day === serverDay, `(د) يوم التحدي ${day} لا يوم الخادم ${serverDay}`);
+      await start();
+      await UI.finishDailyChallenge('loss', 0, sq); await H.settle(0, 10);
+      const xp1 = H.fb.get('users/me/xp');
+      r.ok(started === 1 && H.fb.get(P + '/result') === 'loss' && xp1 > 300 && H.fb.get('profiles/me/xp') === xp1,
+        `(د) نتيجة عادية: بدأ ${started}، النتيجة ${H.fb.get(P + '/result')}، الخبرة ${xp1}/${H.fb.get('profiles/me/xp')}`);
+      // صفحة أو جهاز آخر سجّل نتيجة اليوم والمباراة هنا جارية
+      H.fb.set(P, null); await start();
+      H.fb.set(P, { result: 'loss', myScore: 1, oppScore: sq - 1, duration: 40, name: 'أنا', ts: H.win.Date.now() - DAY });
+      await UI.finishDailyChallenge('win', sq, 0); await H.settle(0, 10);
+      r.ok(started === 2 && H.fb.get(P + '/result') === 'loss' && H.fb.get('users/me/xp') === xp1 && toasts(ALREADY) === 1 && toasts(FAILED) === 0,
+        `(د) نتيجة سبقتها صفحة أخرى: النتيجة ${H.fb.get(P + '/result')}، الخبرة ${H.fb.get('users/me/xp')} (كانت ${xp1})، التنبيه ${toasts(ALREADY)}/${toasts(FAILED)}`);
+      // حفظ يُرفض لسبب آخر (فوز في أقل من 5 ثوانٍ) — لا نتيجة ولا خبرة، وتنبيه بالفشل
+      H.fb.set(P, null); await start();
+      await UI.finishDailyChallenge('win', sq, 0); await H.settle(0, 10);
+      r.ok(started === 3 && H.fb.get(P) == null && H.fb.get('users/me/xp') === xp1 && toasts(FAILED) === 1 && toasts(ALREADY) === 1,
+        `(د) حفظ مرفوض: النتيجة ${JSON.stringify(H.fb.get(P))}، الخبرة ${H.fb.get('users/me/xp')}، التنبيه ${toasts(FAILED)}/${toasts(ALREADY)}`);
+      // تحدٍّ يبدأ 23:59 بتوقيت الخادم وينتهي بعد منتصف الليل: يُكتب ليومه، ويبقى تحدي اليوم التالي متاحاً
+      // (منتصف ليل يختلف فيه تحدي اليومين في خبرته — فخبرة تُحسب بإعداد اليوم الجديد لا تمرّ)
+      const X = await H.import('js/xp.js');
+      const dayOf = t => new Date(t).toISOString().slice(0, 10);
+      const xpFor = d => { const c = DC.getDailyConfig(d); return Math.min(100, X.calcXP({ mode: 'ai', result: 'win', aiDifficulty: c.difficulty, gridSize: c.gridSize, rank: 1, players: 2 }) + 20); };
+      const realNow = H.win.Date.now.bind(H.win.Date);
+      const sNow = realNow() - DAY;
+      let nextMid = Math.ceil((sNow + 1) / DAY) * DAY;
+      for (let k = 0; k < 90 && xpFor(dayOf(nextMid - 1)) === xpFor(dayOf(nextMid)); k++) nextMid += DAY;
+      const D = dayOf(nextMid - 1), D1 = dayOf(nextMid);
+      let shift = nextMid - 60_000 - sNow;
+      H.win.Date.now = () => realNow() + shift;
+      await start();
+      shift += 3 * 60_000;                        // 00:02 من اليوم التالي
+      const sqD = DC.boardSquares(DC.getDailyConfig(D).gridSize);
+      await UI.finishDailyChallenge('win', sqD, 0); await H.settle(0, 10);
+      const vD = H.fb.get(`dailyChallenges/${D}/results/me`);
+      const playedNext = await DC.hasPlayedToday();
+      const xp2 = H.fb.get('users/me/xp');
+      r.ok(started === 4 && vD?.result === 'win' && H.fb.get(`dailyChallenges/${D1}/results/me`) == null && DC.todayStr() === D1 && playedNext === false
+        && DC.isValidDailyWin(vD, D) && xp2 - xp1 === xpFor(D) && xpFor(D) !== xpFor(D1),
+        `(د) عبر منتصف الليل: ${D} → ${JSON.stringify(vD)}، ${D1} → ${JSON.stringify(H.fb.get(`dailyChallenges/${D1}/results/me`))}، لعب اليوم التالي؟ ${playedNext}، الخبرة +${xp2 - xp1} (المطلوب ${xpFor(D)} لا ${xpFor(D1)})`);
+      // ردّ الحفظ ضاع مع انقطاع فأعادت الحزمة إرساله — الإعادة تُرفض (النتيجة لا تُكتب فوقها) والمحفوظ هو هذه المحاولة
+      // نفسها: تُحتسب (خبرتها)، بلا تنبيه "مسجّلة من قبل" (مراجعة ج-4)
+      { H.fb.set(`dailyChallenges/${D}/results/me`, null);
+        shift = nextMid - 60_000 - sNow; await start();
+        H.fb.set(`dailyChallenges/${D}/results/me`, { result: 'win', myScore: sqD, oppScore: 0, duration: 180, name: 'أنا', ts: nextMid + 120_000 });
+        shift += 3 * 60_000;
+        const a0 = toasts(ALREADY), f0 = toasts(FAILED), x0 = H.fb.get('users/me/xp');
+        await UI.finishDailyChallenge('win', sqD, 0); await H.settle(0, 10);
+        r.ok(H.fb.get('users/me/xp') - x0 === xpFor(D) && toasts(ALREADY) === a0 && toasts(FAILED) === f0,
+          `(د) ردّ ضائع (المحفوظ هو المحاولة نفسها): الخبرة +${H.fb.get('users/me/xp') - x0} (المطلوب ${xpFor(D)})، تنبيهات جديدة ${toasts(ALREADY) - a0}/${toasts(FAILED) - f0}`); }
+      const xp2b = H.fb.get('users/me/xp');
+      // وعبر منتصف الليل ونتيجة يومه سبقتها صفحة أخرى: "مسجّلة من قبل" (يُسأل عن يوم التحدي لا اليوم الجديد)
+      H.fb.set(`dailyChallenges/${D}/results/me`, null);
+      shift = nextMid - 60_000 - sNow; await start();
+      H.fb.set(`dailyChallenges/${D}/results/me`, { result: 'loss', myScore: 0, oppScore: sqD, duration: 40, name: 'أنا', ts: nextMid - 30_000 });
+      shift += 3 * 60_000;
+      await UI.finishDailyChallenge('win', sqD, 0); await H.settle(0, 10);
+      r.ok(started === 6 && H.fb.get(`dailyChallenges/${D}/results/me/result`) === 'loss' && H.fb.get('users/me/xp') === xp2b && toasts(ALREADY) === 2 && toasts(FAILED) === 1,
+        `(د) عبر منتصف الليل ونتيجة سابقة: ${H.fb.get(`dailyChallenges/${D}/results/me/result`)}، الخبرة ${H.fb.get('users/me/xp')}/${xp2b}، التنبيهات ${toasts(ALREADY)}/${toasts(FAILED)}`);
+      r.ok(H.errors.length === 0, '(د) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(د) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  // (د٢) تحدي اليوم حُفظ ومعاملة خبرته فشلت (انقطاع أثناءها؛ هنا: قواعد ترفض كل خبرة) — لا يسقط ما بعدها ولا يُرمى خطأ
+  {
+    const rules = JSON.parse(JSON.stringify(RULES));
+    rules.rules.users.$uid.xp['.validate'] = 'false';
+    const H = boot({ firebase: true, polyfills: true, rules });
+    H.fb.set('users/me', { uid: 'me', name: 'أنا', xp: 300 });
+    H.fb.auth.currentUser = JSON.parse(JSON.stringify(ME));
+    await H.loaded();
+    try {
+      const A = await H.import('js/auth.js');
+      A.onUserChange(() => {}); await H.settle(0, 10);
+      const DC = await H.import('js/dailyChallenge.js');
+      const UI = await H.import('js/ui/dailyChallengeUI.js');
+      UI.initDailyChallengeUI({ onGameStart: () => {}, getAiPlayer: () => null });
+      H.doc.getElementById('daily-start-btn').click(); await H.settle(0, 10);
+      const day = DC.todayStr(), sq = DC.boardSquares(DC.getDailyConfig(day).gridSize);
+      let threw = null;
+      try { await UI.finishDailyChallenge('loss', 0, sq); } catch (e) { threw = e; }
+      await H.settle(0, 10);
+      r.ok(!threw && H.fb.get(`dailyChallenges/${day}/results/me/result`) === 'loss' && H.fb.get('users/me/xp') === 300,
+        `(د٢) خبرة التحدي مرفوضة: رُمي ${threw && (threw.code || threw.message)}، النتيجة ${H.fb.get(`dailyChallenges/${day}/results/me/result`)}، الخبرة ${H.fb.get('users/me/xp')}`);
+      r.ok(H.errors.length === 0, '(د٢) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(د٢) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  return r;
+}
 
 // ── 3.3ج-2: طلبات الصداقة — مهلة 10 دقائق بعد الرفض/السحب/الحذف برسالة واضحة للمرسل، والطلب ودليله 30 يوماً ──
 export async function friendRequestsC2() {

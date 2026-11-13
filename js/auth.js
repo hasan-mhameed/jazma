@@ -8,7 +8,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getDatabase, ref, get, update, remove }
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { localStatsKey, isSafeKey }   from "./core/statsKey.js?v=1794182040";
+import { localStatsKey, isSafeKey }   from "./core/statsKey.js?v=1794502787";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -154,7 +154,10 @@ async function saveUserProfile(user) {
   else pubName = user.displayName || "لاعب";
   const pubPhoto = (cur && cur.photo) || user.photoURL || "";
   const pubXP    = (cur && typeof cur.xp === "number") ? cur.xp : 0;
-  try { await update(ref(db, `profiles/${user.uid}`), { name: pubName, photo: pubPhoto, xp: pubXP }); } catch {}
+  // 3.3ج-4: الخبرة العامة = الخاصة (القواعد) — تُكتب وحدها: لو تغيّرت الخاصة من صفحة أخرى بين قراءتنا وكتابتنا تُرفض
+  // هي وحدها (ويكتبها addXP هناك)، ولا يضيع معها الاسم والصورة
+  try { await update(ref(db, `profiles/${user.uid}`), { name: pubName, photo: pubPhoto }); } catch {}
+  try { await update(ref(db, `profiles/${user.uid}`), { xp: pubXP }); } catch {}
 }
 
 // ─── جلب ملف مستخدم ──────────────────────────────────────────
