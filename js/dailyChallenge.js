@@ -1,7 +1,7 @@
 // 📄 dailyChallenge.js
 import { getDatabase, ref, get, set, serverTimestamp, onValue }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1794502787";
+import { currentUser } from "./auth.js?v=1794697618";
 
 const db = getDatabase();
 
@@ -27,11 +27,11 @@ export function getDailyConfig(dateStr = null) {
   const rand  = seededRandom(seed);
   const grids = [4, 4, 4, 5, 5, 6];
   const diffs = ['easy', 'medium', 'medium', 'nightmare'];
-  return {
-    date:       today,
-    gridSize:   grids[Math.floor(rand() * grids.length)],
-    difficulty: diffs[Math.floor(rand() * diffs.length)],
-  };
+  const gridSize   = grids[Math.floor(rand() * grids.length)];
+  const difficulty = diffs[Math.floor(rand() * diffs.length)];
+  // 3.3ج-5أ (1.17): بذرة توزيع أدوات اللوحة (🐟 و💎) — من اليوم نفسه، فاللوحة واحدة لكل من يلعب تحدي اليوم
+  const elementSeed = Math.floor(rand() * 0x100000000) >>> 0;
+  return { date: today, gridSize, difficulty, elementSeed };
 }
 
 export function difficultyName(d) {

@@ -1123,6 +1123,27 @@ async function dailyLostAckReal() {
   S.close();
 }
 
+// ── 3.3ج-5أ: طلب صداقة حُفظ وضاع ردّ الخادم مع انقطاع — الحزمة تعيد إرساله بعد العودة، والقواعد لا تقبل طلباً فوق طلب أحدث
+// من 10 دقائق فترفض الإعادة: الإرسال يُعدّ ناجحاً (الطلب في صندوقه) لا "تعذّر الإرسال" ──
+async function friendLostAckReal() {
+  const r = suite('3.3ج-5أ: طلب صداقة وردّ الخادم ضائع مع انقطاع — يُعدّ مرسلاً (الطلب في صندوقه)، وطلب لمن لا ملف له فشل حقيقي');
+  const S = new FakeRTDB(); const port = await S.listen();
+  S.setAt('users/uA', { uid: 'uA', name: 'أحمد' }); S.setAt('users/uB', { uid: 'uB', name: 'باسل' });
+  const A = await import(pathToFileURL(genFriends('LA', port, { uid: 'uA' })).href);
+  await A.getFriends(); await wait(200);                       // اتصال قائم قبل الإرسال
+  // الخادم يطبّق كتابة الطلب (متعددة المسارات) ويؤخّر ردّها حتى بعد سقوط الاتصال
+  S.replyDelayFor = (m) => (m.d && m.d.a === 'm' && JSON.stringify(m.d.b && m.d.b.d || {}).includes('friendRequests')) ? 1500 : null;
+  const p = A.sendFriendRequest('uB').then(() => 'ok', e => 'rejected:' + (e && (e.code || e.message)));
+  await wait(400); A.__off(); await wait(300); S.replyDelayFor = null; A.__on();
+  const outcome = await p; await wait(300);
+  r.ok(!!S.getAt('users/uB/friendRequests/uA') && typeof S.getAt('users/uA/sentRequests/uB') === 'number', 'الطلب ودليله لم يُحفظا');
+  r.ok(S.denied.some(d => d.a === 'm'), `الإعادة بعد العودة لم تحدث أو لم تُرفض (الفحص لا يختبر الردّ الضائع): ${JSON.stringify(S.denied)}`);
+  r.ok(outcome === 'ok', `الإرسال بردّ ضائع: ${outcome} (المطلوب ناجح — الطلب في صندوقه)`);
+  const none = await A.sendFriendRequest('uNobody').then(() => 'ok', e => 'rejected:' + (e && (e.code || e.message)));
+  r.ok(/^rejected:/.test(none) && !/cooldown/.test(none), `طلب لمن لا ملف له: ${none} (المطلوب فشل حقيقي)`);
+  S.close();
+}
+
 // ── 3.3ج-4: الدخول يكتب الملف العام (الاسم والصورة، والخبرة = الخاصة) وصفحة أخرى بالحساب نفسه تكسب خبرة بين قراءته
 // وكتابته: الخبرة المقروءة صارت قديمة فترفضها القواعد — وحدها؛ الاسم والصورة يُكتبان (كتابة واحدة للثلاثة كانت تُرفض كلها) ──
 async function profileSyncRaceReal() {
@@ -1401,7 +1422,7 @@ const all = [offlineExitThenReconnect, blipDuringWithdraw, onlineExit, creatorSt
   duoCancelThenClose, duoJoinAckLost, duoCodeJoinAckLost, duoCreateBlip, duoAbortRetried, duoCancelDuringReopen,
   duoHostBlipRestores, duoRestoreKeepsGuestOut, duoEvictedGuestOp, duoOrphanNodeRestores, duoCancelStrayFinished,
   inviteConditionalRemovals, registrationProfile, friendsRealRules, presenceHealsReal, mixedVersions, twoTabAccept,
-  chatRealRules, chatLastReadReal, roomCodeCollisionReal, lobbyRacesReal, friendsCodeFirstReal, friendsClockSkewReal, gameplayWritesReal, numbersRealC4, profileSyncRaceReal, dailyLostAckReal];
+  chatRealRules, chatLastReadReal, roomCodeCollisionReal, lobbyRacesReal, friendsCodeFirstReal, friendsClockSkewReal, gameplayWritesReal, numbersRealC4, profileSyncRaceReal, dailyLostAckReal, friendLostAckReal];
 // ONLY=اسم1,اسم2 npm test — تشغيل فحوص بعينها (للتطوير وفحص الطفرات)
 const pick = process.env.ONLY ? all.filter(f => process.env.ONLY.split(',').includes(f.name)) : all;
 console.log('\n🔬 firebase.js بحزمة Firebase الحقيقية');

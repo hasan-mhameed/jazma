@@ -2,19 +2,19 @@
 // النهايات: اكتمال اللوحة، نفاد بنك الوقت، انسحاب/انقطاع الخصوم (نافذة النتيجة + التسجيل)،
 // والانسحاب بالزر (تسجيل الخسارة فقط — recordForfeit)، والخروج من مباراة جماعية جارية
 // (نفاد الوقت أو الانقطاع بلا عودة — recordElimination، v35.7).
-import { audioManager } from "../audio/audioManager.js?v=1794502787";
+import { audioManager } from "../audio/audioManager.js?v=1794697618";
 import { updateAIStats, updateLocalStats, updateOnlineStats,
-         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1794502787";
-import { saveMatch } from "../history.js?v=1794502787";
-import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1794502787";
-import { showNewAchievements } from "./achievementsUI.js?v=1794502787";
-import { calcXP, addXP } from "../xp.js?v=1794502787";
-import { showXPGain } from "./xpUI.js?v=1794502787";
-import { isDailyActive, finishDailyChallenge } from "./dailyChallengeUI.js?v=1794502787";
-import { commitMatchCoins, getMatchCoins } from "../core/wallet.js?v=1794502787";
-import { computeMatchResult, multiHistoryResult, getMyNum, OUT_LABELS } from "../core/matchResult.js?v=1794502787";
-import { esc } from "./safeText.js?v=1794502787";
-import { localStatsKey, isSafeKey } from "../core/statsKey.js?v=1794502787";
+         updateMultiStats, currentUser, getAllStats } from "../auth.js?v=1794697618";
+import { saveMatch } from "../history.js?v=1794697618";
+import { checkAchievements, updateStreak, getTotalMatches } from "../achievements.js?v=1794697618";
+import { showNewAchievements } from "./achievementsUI.js?v=1794697618";
+import { calcXP, addXP } from "../xp.js?v=1794697618";
+import { showXPGain } from "./xpUI.js?v=1794697618";
+import { takeDailyToken, finishDailyChallenge } from "./dailyChallengeUI.js?v=1794697618";
+import { commitMatchCoins, getMatchCoins } from "../core/wallet.js?v=1794697618";
+import { computeMatchResult, multiHistoryResult, getMyNum, OUT_LABELS } from "../core/matchResult.js?v=1794697618";
+import { esc } from "./safeText.js?v=1794697618";
+import { localStatsKey, isSafeKey } from "../core/statsKey.js?v=1794697618";
 
 export let _matchStartTime = Date.now();
 // مرة واحدة لكل مباراة: نهايتان متزامنتان (مثلاً آخر حركة + خروج خصم) لا تسجّلان مرتين
@@ -51,7 +51,7 @@ function recordMyResult(cfg, R, scores, opts = {}) {
   if (!_recordPromise) {
     // ما يتغيّر مع بدء مباراة جديدة يُلتقط الآن (التسجيل يمرّ بعدة رحلات شبكة)
     const startedAt = _matchStartTime;
-    const daily = isDailyActive();
+    const daily = takeDailyToken();   // 3.3ج-5أ: يؤخذ الآن (رمز التحدي) — مباراة جديدة أثناء التسجيل لا تُسقطه
     _recordPromise = doRecord(cfg, R, scores, { ...opts, startedAt, daily })
       .catch(e => { console.error("recordMyResult", e); return null; });
   }
@@ -201,7 +201,8 @@ async function doRecord(cfg, R, scores, { silent = false, startedAt, daily }) {
       await finishDailyChallenge(
         mainResult,
         scores[1] || 0,
-        scores[2] || 0
+        scores[2] || 0,
+        daily
       );
     } catch (e) { console.warn("recordMyResult: daily", e); }
   } else {

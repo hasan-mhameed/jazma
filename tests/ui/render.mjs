@@ -181,7 +181,7 @@ function endStubs(stats, saved = []) {
     'js/ui/achievementsUI.js': { showNewAchievements: noop },
     'js/xp.js': { calcXP: () => 0, addXP: async () => null },
     'js/ui/xpUI.js': { showXPGain: noop },
-    'js/ui/dailyChallengeUI.js': { isDailyActive: () => false, finishDailyChallenge: async () => {} },
+    'js/ui/dailyChallengeUI.js': { isDailyActive: () => false, takeDailyToken: () => null, finishDailyChallenge: async () => {} },
     'js/core/wallet.js': { commitMatchCoins: async () => ({ earned: 0, total: null }), getMatchCoins: () => 0 },
   };
 }

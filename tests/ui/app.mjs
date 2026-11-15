@@ -943,7 +943,149 @@ export async function privacyProfileSplit() {
 
 export const APP_ALL = [friendPresenceAcrossRerender, logoutFreshPage, accountChangesSamePage, guestUpgrade, registrationName,
   repeatedSameAccountEvent, namesAndPhotosInDomUIs, friendsUnderRules, localStatsKeys, presenceSelfHeal, uiNotes115, privacyProfileSplit,
-  chatUnderRules, friendRequestsC2, numbersC4];
+  chatUnderRules, friendRequestsC2, numbersC4, shapeC5];
+
+// ── 3.3ج-5أ: الشكل في كل مكان — ما يكتبه الكود يمرّ فوق القواعد الجديدة (ملف اللاعب بحقوله وحدودها)، وما ضُمّ للدفعة:
+// أدوات تحدي اليوم من بذرة اليوم (1.17)، وتحدٍّ خرج منه اللاعب لا يأخذ نتيجة مباراة أخرى، وطلب صداقة ضاع ردّه ──
+export async function shapeC5() {
+  const r = checker('3.3ج-5أ: ملف اللاعب بحدوده (اسم/صورة أطول من الحدّ)، وتحدي اليوم بلوحة واحدة للجميع ولا يأخذ نتيجة مباراة أخرى، وطلب صداقة قائم ليس فشلاً');
+  const DAY = 86_400_000;
+  const sleep = ms => new Promise(res => setTimeout(res, ms));
+  // (أ) اسم حساب أطول من الحدّ (وفيه رموز من خانتين عند الحدّ) ورابط صورة أطول من الحدّ: الملف يُنشأ — الاسم مقصوص بلا رمز
+  // مشطور، والصورة فارغة (كان إنشاء الملف كله يُرفض: لا ملف = لا لعب)
+  {
+    const longName = 'س'.repeat(127) + '😀😀😀' + 'ذيل'.repeat(40);   // الحدّ (128) يقع في منتصف رمز من خانتين
+    const U = { uid: 'me', displayName: longName, email: 'x@example.com', photoURL: 'https://lh3.googleusercontent.com/' + 'a'.repeat(1100), isAnonymous: false, providerData: [] };
+    const H = await bootApp({ user: U });
+    try {
+      await H.settle(0, 20);
+      const me = H.fb.get('users/me') || {}, pub = H.fb.get('profiles/me') || {};
+      const whole = (t) => typeof t === 'string' && !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(t);
+      r.ok(me.uid === 'me' && typeof me.joinedAt === 'number' && !!me.stats, `(أ) الملف لم يُنشأ باسم طويل: [${Object.keys(me).sort().join(', ')}]`);
+      r.ok(typeof me.name === 'string' && me.name.length <= 128 && me.name.length >= 126 && longName.startsWith(me.name) && whole(me.name) && me.photo === '',
+        `(أ) الاسم/الصورة في الملف الخاص: طول ${me.name && me.name.length}، سليم ${whole(me.name)}، الصورة ${JSON.stringify(String(me.photo).slice(0, 30))}`);
+      r.ok(pub.name === me.name && pub.photo === '', `(أ) الملف العام: طول الاسم ${pub.name && pub.name.length}، الصورة ${JSON.stringify(String(pub.photo).slice(0, 30))}`);
+      r.ok(H.errors.length === 0, '(أ) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(أ) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  // (أ٢) ملف قديم باسم أطول من الحدّ (كُتب قبل القواعد) وبلا ملف عام: الدخول يكتب الملف العام باسم مقصوص (كان يُرفض كله)
+  {
+    const H = await bootApp({ autoProfiles: false, data: { 'users/me': { uid: 'me', name: 'ق'.repeat(300), joinedAt: 5, stats: { ai: { wins: 0, losses: 0 } } } } });
+    try {
+      await H.settle(0, 20);
+      const pub = H.fb.get('profiles/me') || {};
+      r.ok(typeof pub.name === 'string' && pub.name === 'ق'.repeat(128), `(أ٢) الملف العام لصاحب اسم قديم طويل: ${JSON.stringify(pub).slice(0, 80)}`);
+    } catch (e) { r.ok(false, '(أ٢) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  // (ب) 1.17: تحدي اليوم كما يبدؤه اللاعب (اللوحة الحقيقية ببديل PIXI) — توزيع الأدوات واحد لصفحتين في اليوم نفسه، ويختلف
+  // بين الأيام، والمباراة العادية بعده عشوائية كما كانت
+  const dailyMap = async (skew) => {
+    const H = await bootApp({ serverSkew: skew, data: { 'users/me': { uid: 'me', name: 'أنا' } } });
+    H.win.PIXI = pixiStub();
+    $(H, 'daily-btn').click(); await H.settle(0, 10);
+    $(H, 'daily-start-btn').click(); await H.settle(0, 20);
+    const SS = await H.import('js/core/specialSquares.js');
+    const DC = await H.import('js/dailyChallenge.js');
+    return { H, SS, DC, map: JSON.stringify(SS.getElementMap()), shown: !$(H, 'board').classList.contains('hidden') };
+  };
+  {
+    let A = null, B = null;
+    try {
+      A = await dailyMap(0); B = await dailyMap(0);
+      r.ok(A.shown && A.map !== '{}' && A.map === B.map, `(ب) لوحة تحدي اليوم ليست واحدة لصفحتين: ${A.map} ≠ ${B.map} (ظاهرة ${A.shown})`);
+      B.H.close(); B = null;
+      // يوم آخر بحجم لوحة اليوم نفسه (فالاختلاف من البذرة لا من الحجم): توزيعه غير توزيع اليوم
+      const dayAt = (k) => new Date(Date.parse(A.DC.todayStr() + 'T12:00:00Z') + k * DAY).toISOString().slice(0, 10);
+      const g0 = A.DC.getDailyConfig(A.DC.todayStr()).gridSize;
+      let k = 1; while (k < 40 && A.DC.getDailyConfig(dayAt(k)).gridSize !== g0) k++;
+      const O = await dailyMap(k * DAY);
+      r.ok(O.DC.todayStr() === dayAt(k) && O.DC.getDailyConfig(dayAt(k)).gridSize === g0 && O.map !== '{}' && O.map !== A.map,
+        `(ب) لوحة يوم آخر بالحجم نفسه (${dayAt(k)}) كلوحة اليوم: ${O.map} / ${A.map}`);
+      O.H.close();
+      // (ج) خرج من التحدي قبل نهايته ثم لعب مباراة محلية وربحها 9–0: ليست نتيجة تحدي اليوم (كانت تُحفظ كفوز في متصدري اليوم)
+      const { H, SS, DC } = A;
+      const DUI = await H.import('js/ui/dailyChallengeUI.js');
+      r.ok(DUI.isDailyActive() === true, '(ج) التحدي لم يبدأ (الفحص لا يختبر شيئاً)');
+      $(H, 'restart').click(); await H.settle(0, 20);
+      const local = [...H.doc.querySelectorAll('#mode-cards .mode-card')].find(c => /محلي|لاعبان|صديق/.test(c.textContent) && !c.textContent.includes('الكمبيوتر') && !/أونلاين/.test(c.textContent));
+      (local || [...H.doc.querySelectorAll('#mode-cards .mode-card')][0])?.click(); $(H, 'start-game').click(); await H.settle(0, 20);
+      const m1 = JSON.stringify(SS.getElementMap());
+      r.ok(DUI.isDailyActive() === false, '(ج) مباراة عادية بدأت وعلامة تحدي اليوم ما زالت قائمة');
+      const realNow = H.win.Date.now.bind(H.win.Date); H.win.Date.now = () => realNow() + 30_000;   // المباراة دامت نصف دقيقة
+      const G = await H.import('js/ui/gameEnd.js');
+      await G.endGame({ aiMode: 'human', online: false, rows: 4, cols: 4, players: 2, multiPlayers: null,
+        localPlayerNames: { 1: 'أنا', 2: 'سيمو' }, colors: ['#f00', '#00f'] }, { 1: 9, 2: 0 });
+      await H.settle(0, 20);
+      const day = DC.todayStr();
+      r.ok(H.fb.get(`dailyChallenges/${day}/results/me`) == null && Object.keys(H.fb.get('users/me/matchHistory') || {}).length === 1,
+        `(ج) مباراة محلية بعد الخروج من التحدي حُفظت نتيجةً لتحدي اليوم: ${JSON.stringify(H.fb.get(`dailyChallenges/${day}/results/me`))}`);
+      // والمباراة العادية عشوائية: ثلاث لوحات متتالية ليست كلها لوحة التحدي
+      const maps = [m1];
+      for (let i = 0; i < 2; i++) { SS.generateSpecialSquares({ rows: 6, cols: 6 }); maps.push(JSON.stringify(SS.getElementMap())); }
+      r.ok(new Set(maps.slice(1)).size === 2 || maps[1] !== maps[2], `(ج) المباراة العادية ليست عشوائية: ${maps.join(' | ').slice(0, 200)}`);
+      // (مراجعة) بذرة سُلّحت ولم تُستهلك (اللوحة فشلت قبل توزيع الأدوات) يُزيلها إلغاء التحدي — لا تتسرّب لمباراة عادية
+      SS.seedNextElements(12345); SS.generateSpecialSquares({ rows: 6, cols: 6 }); const seeded = JSON.stringify(SS.getElementMap());
+      SS.seedNextElements(12345); DUI.cancelDailyChallenge();
+      const after = []; for (let i = 0; i < 3; i++) { SS.generateSpecialSquares({ rows: 6, cols: 6 }); after.push(JSON.stringify(SS.getElementMap())); }
+      r.ok(after[0] !== seeded, '(ج) بذرة التحدي بقيت بعد إلغائه فأخذت المباراة العادية لوحة التحدي');
+      // والبذرة لمرة واحدة: لوحتان بعد تسليح واحد — الأولى لوحة البذرة والثانية عشوائية
+      SS.seedNextElements(12345); SS.generateSpecialSquares({ rows: 6, cols: 6 }); const once = JSON.stringify(SS.getElementMap());
+      const next = []; for (let i = 0; i < 3; i++) { SS.generateSpecialSquares({ rows: 6, cols: 6 }); next.push(JSON.stringify(SS.getElementMap())); }
+      r.ok(once === seeded && next.some(m => m !== seeded), '(ج) البذرة لم تُستهلك بأول لوحة (اللوحات التالية لوحة التحدي)');
+      r.ok(H.errors.length === 0, '(ب/ج) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(ب/ج) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    try { A && A.H.close(); } catch {} try { B && B.H.close(); } catch {}
+  }
+  // (هـ) مراجعة ج-5أ: تحدي اليوم انتهى والتسجيل ينتظر الشبكة، واللاعب خرج وبدأ مباراة أخرى (يلغي التحدي المتروك) —
+  // نتيجة التحدي المنتهي تُحفظ بخبرتها (رمز التحدي أُخذ لحظة النهاية)، لا تسقط
+  {
+    let D = null;
+    try {
+      D = await dailyMap(0);
+      const { H, DC } = D;
+      const DUI = await H.import('js/ui/dailyChallengeUI.js');
+      const G = await H.import('js/ui/gameEnd.js');
+      const day = DC.todayStr(), cfgD = DC.getDailyConfig(day), sq = DC.boardSquares(cfgD.gridSize);
+      const xp0 = H.fb.get('users/me/xp') || 0;
+      const realNow = H.win.Date.now.bind(H.win.Date); H.win.Date.now = () => realNow() + 40_000;
+      const p = G.endGame({ aiMode: 'ai', online: false, rows: cfgD.gridSize, cols: cfgD.gridSize, players: 2, multiPlayers: null, aiDifficulty: cfgD.difficulty,
+        localPlayerNames: { 1: 'أنا', 2: 'الكمبيوتر' }, colors: ['#f00', '#00f'] }, { 1: sq, 2: 0 });
+      DUI.cancelDailyChallenge();          // كما يفعل launchGame لمباراة جديدة والتسجيل ما زال جارياً
+      await p; await H.settle(0, 20);
+      const v = H.fb.get(`dailyChallenges/${day}/results/me`);
+      r.ok(v?.result === 'win' && v.myScore === sq && (H.fb.get('users/me/xp') || 0) > xp0,
+        `(هـ) نتيجة تحدٍّ منتهٍ ضاعت لأن مباراة جديدة بدأت أثناء تسجيلها: ${JSON.stringify(v)}، الخبرة ${xp0} → ${H.fb.get('users/me/xp')}`);
+      r.ok(H.errors.length === 0, '(هـ) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(هـ) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    try { D && D.H.close(); } catch {}
+  }
+  // (د) طلب صداقة قائم (أُرسل للتوّ): إعادة إرساله ترفضها القواعد (لا طلب فوق طلب أحدث من 10 دقائق) — وهو ليس فشلاً: الطلب
+  // في صندوقه (ردّ ضاع مع انقطاع فأُعيد الإرسال). ولمن لا ملف له: فشل حقيقي يُرمى
+  {
+    const H = await bootApp({ data: { 'users/me': { uid: 'me', name: 'أنا' }, 'users/b': { uid: 'b', name: 'باسل' }, 'users/c': { uid: 'c', name: 'كريم' } } });
+    try {
+      const F = await H.import('js/friends.js');
+      // (مراجعة) اسمي الخاص القديم أطول من الحدّ (كُتب قبل القواعد): الطلب يُرسل باسم مقصوص (كان يُرفض كل مرة)
+      H.fb.set('users/me/name', 'ق'.repeat(300));
+      let e3 = null; try { await F.sendFriendRequest('c'); } catch (e) { e3 = e; } await H.settle(0, 10);
+      r.ok(!e3 && H.fb.get('users/c/friendRequests/me/name') === 'ق'.repeat(128), `(د) طلب باسم قديم طويل: ${e3 && (e3.code || e3.message)} / ${String(H.fb.get('users/c/friendRequests/me/name')).length}`);
+      H.fb.set('users/me/name', 'أنا');
+      await F.sendFriendRequest('b'); await H.settle(0, 10);
+      const at = H.fb.get('users/b/friendRequests/me/sentAt');
+      const d0 = H.fb.denied.length;
+      let err = null; try { await F.sendFriendRequest('b'); } catch (e) { err = e; } await H.settle(0, 10);
+      r.ok(H.fb.denied.length === d0 + 1, `(د) الإعادة لم ترفضها القواعد (الفحص لا يختبر شيئاً): ${H.fb.denied.length - d0}`);
+      r.ok(!err && H.fb.get('users/b/friendRequests/me/sentAt') === at, `(د) طلب قائم عُدّ فشلاً: ${err && (err.code || err.message)}`);
+      let err2 = null; try { await F.sendFriendRequest('nobody'); } catch (e) { err2 = e; }
+      r.ok(!!err2 && err2.code !== 'cooldown', `(د) طلب لمن لا ملف له لم يُرمَ فشله: ${err2 && (err2.code || err2.message)}`);
+      r.ok(H.errors.length === 0, '(د) أخطاء' + errText(H));
+    } catch (e) { r.ok(false, '(د) خطأ: ' + String(e.stack || e).split('\n').slice(0, 3).join(' | ')); }
+    H.close();
+  }
+  return r;
+}
 
 // ── 3.3ج-4: حدود الأرقام كما يكتبها الكود فوق القواعد — الخبرة بمعاملة (صفحتان معاً لا تضيع خبرة إحداهما)، والعامة
 // تطابق الخاصة (وتُصحَّح عند الدخول)، والجواهر، وتحدي اليوم (يوم الخادم، نتيجة واحدة، والمتصدرون يتجاهلون ما لا يطابق) ──

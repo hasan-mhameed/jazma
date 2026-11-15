@@ -66,6 +66,8 @@ export function genAuth(dev, port, uid = 'u' + dev) {
   rep(/const db\s+= getDatabase\(app\);/, `const db = getDatabase(app); connectDatabaseEmulator(db, "localhost", ${port}, { mockUserToken: { sub: ${JSON.stringify(uid)} } });`);
   // v36.1 (1.12): مفتاح الإحصائيات من ملف المشروع نفسه (وحدة نقية بلا استيرادات) — النسخ القديمة بلا هذا الاستيراد
   s = s.replace(/from "\.\/core\/statsKey\.js(\?v=\d+)?"/, `from "${pathToFileURL(path.join(PROJECT, 'js/core/statsKey.js')).href}"`);
+  // 3.3ج-5أ: حدود الاسم والصورة (وحدة نقية) — كمفتاح الإحصائيات
+  s = s.replace(/from "\.\/core\/textLimits\.js(\?v=\d+)?"/, `from "${pathToFileURL(path.join(PROJECT, 'js/core/textLimits.js')).href}"`);
   const dir = path.join(HERE, '.gen');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, `fakeauth_${dev}_${port}.mjs`), `
@@ -110,6 +112,7 @@ export function genFriends(dev, port, { uid = 'u' + dev, src = null } = {}) {
   rep(/const app = getApps\(\)\.length \? getApps\(\)\[0\] : initializeApp\(firebaseConfig\);/,
     `import { connectDatabaseEmulator, goOffline as __gOff, goOnline as __gOn } from "firebase/database";\n` +
     `const app = initializeApp({ ...firebaseConfig, databaseURL: "http://localhost:${port}?ns=jazam" }, "fr_${dev}_${port}");`);
+  s = s.replace(/from "\.\/core\/textLimits\.js(\?v=\d+)?"/, `from "${pathToFileURL(path.join(PROJECT, 'js/core/textLimits.js')).href}"`);   // 3.3ج-5أ
   rep(/const db\s+= getDatabase\(app\);/,
     `const db = getDatabase(app); connectDatabaseEmulator(db, "localhost", ${port}, { mockUserToken: { sub: ${JSON.stringify(uid)} } });\n` +
     `export const __db = db; export const __off = () => __gOff(db); export const __on = () => __gOn(db);`);

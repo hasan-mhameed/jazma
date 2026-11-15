@@ -1,18 +1,32 @@
 // 📄 ui/dailyChallengeUI.js
 import { getDailyConfig, difficultyName, hasPlayedToday,
-         saveDailyResult, getDailyLeaderboard, todayStr } from "../dailyChallenge.js?v=1794502787";
-import { config }      from "../config/config.js?v=1794502787";
-import { AIPlayer }    from "../ai/aiPlayer.js?v=1794502787";
-import { addXP, calcXP } from "../xp.js?v=1794502787";
-import { showXPGain }  from "./xpUI.js?v=1794502787";
-import { getCurrentUser } from "../auth.js?v=1794502787";
-import { esc } from "./safeText.js?v=1794502787";
+         saveDailyResult, getDailyLeaderboard, todayStr } from "../dailyChallenge.js?v=1794697618";
+import { config }      from "../config/config.js?v=1794697618";
+import { AIPlayer }    from "../ai/aiPlayer.js?v=1794697618";
+import { addXP, calcXP } from "../xp.js?v=1794697618";
+import { showXPGain }  from "./xpUI.js?v=1794697618";
+import { getCurrentUser } from "../auth.js?v=1794697618";
+import { esc } from "./safeText.js?v=1794697618";
+import { seedNextElements } from "../core/specialSquares.js?v=1794697618";
 
 let _dailyActive    = false;
 let _dailyStartTime = null;
 let _dailyDate      = null;   // يوم التحدي الذي بدأت به المباراة (بساعة الخادم — 3.3ج-4)
 
 export function isDailyActive() { return _dailyActive; }
+
+// 3.3ج-5أ: مباراة أخرى بدأت والتحدي لم يكتمل (خرج منه اللاعب قبل نهايته) — التحدي أُلغي. كانت علامته تبقى، فتُحفظ نتيجة
+// المباراة التالية (أي نمط، أي صعوبة — حتى محلية ضد نفسه) كأنها نتيجة تحدي اليوم وتدخل متصدريه
+export function cancelDailyChallenge() { _dailyActive = false; _dailyDate = null; seedNextElements(null); }
+
+// 3.3ج-5أ (مراجعة): التحدي الجاري يُؤخذ مرة واحدة لحظة تسجيل نهايته (gameEnd) — رمزٌ بيومه ووقت بدئه. فمباراة جديدة
+// تبدأ والتسجيل ما زال ينتظر الشبكة (نهاية على اتصال بطيء ثم خروج وبدء غيرها — cancelDailyChallenge) لا تُسقط نتيجته
+// ولا خبرته، ولا يُقرأ إعداد يومٍ آخر بعد الانتظار
+export function takeDailyToken() {
+  if (!_dailyActive) return null;
+  _dailyActive = false;
+  return { date: _dailyDate, startTime: _dailyStartTime };
+}
 
 // ── init ──────────────────────────────────────────────────────────
 export function initDailyChallengeUI({ onGameStart, getAiPlayer }) {
@@ -52,18 +66,18 @@ export function initDailyChallengeUI({ onGameStart, getAiPlayer }) {
     _dailyStartTime = Date.now();
 
     modal.classList.add('hidden');
+    seedNextElements(cfg.elementSeed);   // 1.17: أدوات لوحة التحدي من بذرة اليوم (اللوحة التالية فقط)
     onGameStart(window._dailyAiPlayer);
   });
 }
 
 // ── حفظ نتيجة التحدي اليومي (تُستدعى من gameEnd) ────────────────
-export async function finishDailyChallenge(result, myScore, oppScore) {
-  if (!_dailyActive) return;
-  _dailyActive = false;
-  const duration = Math.floor((Date.now() - _dailyStartTime) / 1000);
+export async function finishDailyChallenge(result, myScore, oppScore, token = takeDailyToken()) {
+  if (!token) return;
+  const duration = Math.floor((Date.now() - token.startTime) / 1000);
   const user     = getCurrentUser();
   try {
-    await saveDailyResult(result, myScore, oppScore, duration, user?.displayName, _dailyDate);
+    await saveDailyResult(result, myScore, oppScore, duration, user?.displayName, token.date);
   } catch (e) {
     // 3.3ج-4: نتيجة اليوم مرة واحدة لا تُعدَّل (القواعد) — كُتبت من قبل (صفحة أو جهاز آخر لعب التحدي نفسه): هذه
     // المحاولة لا تُحتسب ولا خبرة لها؛ وإن فشلت لسبب آخر (انقطاع) فلا خبرة بلا نتيجة محفوظة
@@ -74,7 +88,7 @@ export async function finishDailyChallenge(result, myScore, oppScore) {
 
   // XP bonus للتحدي اليومي (بإعداد اليوم الذي لُعب). انقطاعٌ أثناء معاملة الخبرة يُلغيها برفض (الحزمة لا تعيد
   // معاملة أُرسلت) — لا يُسقط ما بعدها (مراجعة ج-4)
-  const cfg     = getDailyConfig(_dailyDate);
+  const cfg     = getDailyConfig(token.date);
   const baseXP  = calcXP({ mode: 'ai', result, aiDifficulty: cfg.difficulty,
                             gridSize: cfg.gridSize, rank: 1, players: 2 });
   const bonus   = result === 'win' ? 20 : result === 'draw' ? 10 : 5;

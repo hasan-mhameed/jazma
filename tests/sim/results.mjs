@@ -114,7 +114,7 @@ const STUBS = {
   'xp.js': `export function calcXP(d) { globalThis.__calls.push(['xp', d.mode, d.result, d.rank, d.players]); return 0; }
     export async function addXP() { return null; }`,
   'xpUI.js': `export function showXPGain() {}`,
-  'dailyChallengeUI.js': `export function isDailyActive() { return false; } export async function finishDailyChallenge() {}`,
+  'dailyChallengeUI.js': `export function isDailyActive() { return false; } export function takeDailyToken() { return null; } export async function finishDailyChallenge() {}`,
   'wallet.js': `export async function commitMatchCoins() { globalThis.__calls.push(['coins']); return { earned: 0, total: 0 }; }
     export function getMatchCoins() { return globalThis.__matchCoins || 0; }`,
 };

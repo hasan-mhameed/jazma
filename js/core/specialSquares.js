@@ -19,8 +19,26 @@ export function setElementMap(map) {
   return _map;
 }
 
+// 3.3ج-5أ (1.17): تحدي اليوم — التوزيع من بذرة اليوم، فكل من يلعبه اليوم يرى اللوحة نفسها (كان عشوائياً لكل لاعب:
+// المتصدرون يقارنون لوحات مختلفة). البذرة لمرة واحدة: تُسلَّح قبل بدء لوحة التحدي ويستهلكها أول توليد بعدها — فالمباراة
+// التالية عشوائية كما كانت. مولّد أعداد صحيحة (mulberry32): النتيجة نفسها على كل جهاز ومتصفح.
+let _nextSeed = null;
+export function seedNextElements(seed) {
+  _nextSeed = (typeof seed === 'number' && isFinite(seed)) ? (seed >>> 0) : null;
+}
+function seededRandom(a) {
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 // توليد توزيع عشوائي متناظر — نسبة ~30%
 export function generateSpecialSquares(cfg) {
+  const rnd = _nextSeed === null ? Math.random : seededRandom(_nextSeed);
+  _nextSeed = null;
   _map = {};
   const rows = cfg.rows - 1;   // عدد المربعات
   const cols = cfg.cols - 1;
@@ -37,14 +55,14 @@ export function generateSpecialSquares(cfg) {
   for (let r=0;r<rows;r++) for (let c=0;c<cols;c++) cells.push([r,c]);
 
   // خلط
-  for (let i=cells.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [cells[i],cells[j]]=[cells[j],cells[i]]; }
+  for (let i=cells.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [cells[i],cells[j]]=[cells[j],cells[i]]; }
 
   let placed = 0;
   for (const [r,c] of cells) {
     if (placed >= target) break;
     const key = `${r},${c}`;
     if (_map[key]) continue;
-    const type = weighted[Math.floor(Math.random()*weighted.length)];
+    const type = weighted[Math.floor(rnd()*weighted.length)];
     _map[key] = type;
     placed++;
 

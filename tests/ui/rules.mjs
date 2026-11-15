@@ -518,10 +518,186 @@ export function rulesMatrix() {
     && RW4('A', [[D, dres({ result: 'loss', myScore: 3, oppScore: 2, duration: 2 })]]) && !RW4('A', [[D, dres({ result: 'loss', myScore: 20, oppScore: 6 })]])
     && RW4('A', [[D, dres({ myScore: 25, oppScore: 0, duration: 60 })]]) && !RW4('A', [['dailyChallenges/2026-11/results/A', dres()]]),
     'تحدي اليوم: فوز بنقاط أقل أو لوحة ناقصة/مدة قصيرة أو تعادل غير متساوٍ أو مجموع فوق 25 أو تاريخ مشوّه قُبل، أو نتيجة حقيقية (تعادل/خسارة بانسحاب) رُفضت');
+  // ── 3.3ج-5أ: الشكل في كل مكان — ملف اللاعب بحقوله وحدودها، والحضور، والمفاتيح بحدّها (والحاويات والقوائم في الفحصين الدائمين) ──
+  const N = (n) => 'ن'.repeat(n);
+  r.ok(RW4('A', [['users/A/uid', 'A']]) && !RW4('A', [['users/A/uid', 'B']]) && RW4('A', [['users/A/name', N(128)]]) && !RW4('A', [['users/A/name', N(129)]])
+    && RW4('A', [['users/A/photo', 'h'.repeat(1024)]]) && !RW4('A', [['users/A/photo', 'h'.repeat(1025)]]) && !RW4('A', [['users/A/joinedAt', 'أمس']]) && !RW4('A', [['users/A/lastSeen', 'الآن']])
+    && RW4('A', [['users/A/lastSeen', T4]]) && !RW4('A', [['users/A/junk', 1]]) && !RW4('A', [['users/A/email', 'a@b.c']]) && RW4('A', [['users/A/email', null]], withU({ email: 'old@x.y' }))
+    && RW4('N', [['users/N/uid', 'N'], ['users/N/name', 'جديد'], ['users/N/photo', ''], ['users/N/joinedAt', T4], ['users/N/stats', { ai: { wins: 0, losses: 0 }, local: { wins: 0, losses: 0 } }]]),
+    'ملف اللاعب: ما يكتبه الكود (إنشاء الملف، مسح الإيميل القديم) رُفض، أو معرّف غيره/اسم أو صورة فوق الحدّ/وقت ليس رقماً/حقل غريب/إيميل قُبل');
+  const pres = (x = {}) => ({ state: 'playing', lastSeen: T4, by: 'abc12345:playing', ...x });
+  r.ok(RW4('A', [['users/A/presence', pres()]]) && RW4('A', [['users/A/presence', pres({ state: 'offline', by: 'b'.repeat(64) })]]) && RW4('A', [['users/A/presence', pres({ state: 'away' })]])
+    && RW4('A', [['users/A/presence', pres({ state: 'online' })]]) && !RW4('A', [['users/A/presence', pres({ state: 'hacked' })]]) && !RW4('A', [['users/A/presence', pres({ by: 'b'.repeat(65) })]])
+    && !RW4('A', [['users/A/presence', pres({ lastSeen: 'الآن' })]]) && !RW4('A', [['users/A/presence', pres({ junk: 1 })]]) && !RW4('B', [['users/A/presence', pres()]]),
+    'الحضور: حالة حقيقية رُفضت، أو حالة مجهولة/وسم طويل/وقت ليس رقماً/حقل غريب قُبل، أو كتبه غير صاحبه');
+  r.ok(RW4('A', [['users/A/learnedPowers/water', true]]) && RW4('A', [['users/A/learnedPowers/' + 'k'.repeat(32), true]]) && !RW4('A', [['users/A/learnedPowers/' + 'k'.repeat(33), true]])
+    && !RW4('A', [['users/A/learnedPowers/water', false]]) && !RW4('A', [['users/A/learnedPowers/water', 'yes']]) && !RW4('A', [['users/A/learnedPowers/water', { a: 1 }]])
+    && RW4('A', [['users/A/lastRead/' + 'k'.repeat(300), T4]]) && !RW4('A', [['users/A/lastRead/' + 'k'.repeat(301), T4]]),
+    'الأدوات المتعلَّمة و"قرأتُ حتى": المكتوب الحقيقي رُفض، أو قيمة غير "نعم" أو مفتاح فوق الحدّ قُبل');
+  // الغرف: رقم الغرفة ومعرّف المقعد والمشاهد بحدّها، والإعدادات بحقليها
+  const U128 = 'u'.repeat(128), U129 = 'u'.repeat(129);
+  const lj = (u) => ({ ...lobby, players: { ...lobby.players, [u]: { name: 'ب', num: 2, active: true } }, playerCount: 2 });
+  r.ok(RW('A', [['rooms/' + '1'.repeat(16), duoWaiting]], rooms0) && !RW('A', [['rooms/' + '1'.repeat(17), duoWaiting]], rooms0)
+    && !RW('A', [['rooms/999999', { ...duoWaiting, cfg: { rows: 4 } }]], rooms0) && !RW('A', [['rooms/999999', { ...duoWaiting, cfg: 'x'.repeat(5000) }]], rooms0)
+    && RW(U128, [['rooms/333333', lj(U128)]], rooms0) && !RW(U129, [['rooms/333333', lj(U129)]], rooms0)
+    && RW(U128, [['rooms/222222/spectators/' + U128, { name: 'م', at: T0 }]], rooms0) && !RW(U129, [['rooms/222222/spectators/' + U129, { name: 'م', at: T0 }]], rooms0),
+    'الغرف: رقم غرفة/مقعد/مشاهد ضمن الحدّ رُفض، أو فوق الحدّ قُبل، أو إعدادات ناقصة/قيمة مفردة قُبلت');
+  // (مراجعة ج-5أ) حدّ معرّف المنشئ عند إنشاء غرفة جديدة — المسح لا يكتب إلا غرفاً قائمة (حيث يرفض ثبات المعرّف أولاً)
+  r.ok(RW('A', [['rooms/444444', { ...lobby, p1uid: 'A' }]], rooms0) && !RW('A', [['rooms/444444', { ...lobby, p1uid: 'A'.repeat(129) }]], rooms0),
+    'إنشاء غرفة: معرّف منشئ عادي رُفض أو فوق 128 قُبل');
   // ولماذا كان لا بدّ منها: القواعد السابقة ترفض الطلب والحذف والقبول
   r.ok(!W(OLD, 'A', [['users/B/friendRequests/A', { name: 'أ' }]]) && !W(OLD, 'A', [['users/B/friends/A', null]])
     && !W(OLD, 'A', [['users/B/friends/A', { name: 'أ' }]], withToken), 'القواعد السابقة كانت تسمح بالأصدقاء (التشخيص خاطئ؟)');
   return r;
 }
 
-export const RULES_ALL = [rulesMatrix];
+// ─── 3.3ج-5أ: الفحص الدائم لشكل القواعد — يمنع عودة صنف "قيمة مفردة مكان الحاوية / مفتاح غريب / نص بلا حدّ" ───
+// (1) بنيوي: يقرأ ملف القواعد نفسه. لكل عقدة يستطيع أحدٌ كتابتها (فيها أو فوقها .write غير false):
+//     ح1 — الحاوية (لها قواعد أبناء) كائن: ‎.validate‏ فيه newData.hasChildren(
+//     ح2 — كل مستوى بقائمة مفاتيحه: له ابن $ (‎$other: false‏ أو متغيّر بقواعده) — فلا مفتاح بلا قاعدة
+//     ح3 — الورقة بنوعها وحدّها: رقم/منطقي/قيمة من قائمة (===)، أو نص معه حدّ طول؛ أو مرفوضة (false)
+//     قاعدة جديدة تخالف واحدة من الثلاث تكسر هذا الفحص قبل أن تُنشر.
+export function lintRules(rulesObj) {
+  const out = { containers: [], levels: [], leaves: [] };
+  const isOff = v => v === false || v === 'false';
+  (function walk(n, ps, writable) {
+    if (!n || typeof n !== 'object') return;
+    const w = writable || (n['.write'] !== undefined && !isOff(n['.write']));
+    const kids = Object.keys(n).filter(k => !k.startsWith('.'));
+    const v = n['.validate'];
+    const at = '/' + ps.join('/');
+    if (w && ps.length) {
+      if (kids.length) {
+        if (typeof v !== 'string' || !v.includes('newData.hasChildren(')) out.containers.push(at);
+        if (!kids.some(k => k.startsWith('$'))) out.levels.push(at);
+      } else if (!isOff(v)) {
+        const t = typeof v === 'string' ? v : '';
+        const typed = /newData\.isNumber\(\)|newData\.isBoolean\(\)|newData\.val\(\) === /.test(t)
+          || (/newData\.isString\(\)/.test(t) && /newData\.val\(\)\.length (<=|===) \d/.test(t));
+        if (!typed) out.leaves.push(at);
+      }
+    }
+    for (const k of kids) walk(n[k], ps.concat(k), w);
+  })(rulesObj && rulesObj.rules !== undefined ? rulesObj.rules : rulesObj, [], false);
+  return out;
+}
+export function rulesLint() {
+  const r = checker('شكل القواعد (فحص بنيوي دائم — 3.3ج-5أ): كل حاوية كائن، وكل مستوى بقائمة مفاتيحه، وكل ورقة بنوعها وحدّها');
+  let NEW;
+  try { NEW = load(RULES_FILE); } catch (e) { r.ok(false, 'database.rules.json: ' + e.message); return r; }
+  const L = lintRules(NEW);
+  r.ok(L.containers.length === 0, `حاوية قابلة للكتابة بلا فحص نوع (hasChildren): ${L.containers.join('، ')}`);
+  r.ok(L.levels.length === 0, `مستوى قابل للكتابة بلا قائمة مفاتيح ($other أو متغيّر): ${L.levels.join('، ')}`);
+  r.ok(L.leaves.length === 0, `ورقة قابلة للكتابة بلا نوع أو بلا حدّ طول: ${L.leaves.join('، ')}`);
+  // والفحص نفسه يلتقط المخالفات (قواعد صغيرة فيها الأصناف الثلاثة — وما لا يُكتب أو يُرفض لا يُعدّ)
+  const bad = lintRules({ rules: {
+    closed: { '.write': false, box: { a: {} } },
+    open: { '$id': { '.write': 'auth !== null', box: { a: { '.validate': 'newData.isNumber()' } },
+      list: { '.validate': 'newData.hasChildren()', '$k': { '.validate': 'newData.isString()' } },
+      ok: { '.validate': "newData.isString() && newData.val().length <= 8" }, no: { '.validate': false }, raw: {},
+      '$other': { '.validate': false } } },
+  } });
+  r.ok(bad.containers.join() === '/open/$id,/open/$id/box' && bad.levels.join() === '/open/$id/box'
+    && bad.leaves.join() === '/open/$id/list/$k,/open/$id/raw',
+    `الفحص البنيوي لا يلتقط المخالفات كما ينبغي: ${JSON.stringify(bad)}`);
+  return r;
+}
+
+// (2) مسح حيّ بمحرّك القواعد: على شجرة بيانات غنية (كل مسار فيها قائم وصاحبه/عضوه معروف)، لكل مسار في ملف القواعد:
+//     قيمة مفردة (نص طويل/رقم/منطقي) مكان كل حاوية، ومفتاح غريب تحت كل مستوى، ونص 5000 حرف في كل ورقة — من صاحب
+//     الحق (أ) ومن الطرف الآخر (ب) ومن ثالث (ج). لا شيء منها يُقبل.
+const SWEEP_T = 1_950_000_000_000, SWEEP_DAY = '2026-11-12';
+const sweepBase = () => {
+  const T = SWEEP_T;
+  return {
+    users: {
+      A: { uid: 'A', name: 'أ', photo: '', xp: 100, coins: 50, joinedAt: T - 1e9, lastSeen: T - 1000,
+        friends: { B: { uid: 'B', name: 'ب', photo: '', since: T - 1e6 } },
+        friendRequests: { C: { uid: 'C', name: 'ج', photo: '', sentAt: T - 1000 } },
+        sentRequests: { D: T - 1000 }, requestCooldown: { B: T - 1e9 }, lastRead: { A_B: T - 1000 }, learnedPowers: { water: true },
+        stats: { ai: { wins: 1, losses: 0, history: { [T - 5000]: { r: 'w' } } },
+          local: { wins: 0, losses: 0, vs_x: { name: 'x', history: { [T - 5000]: { r: 'l' } } } },
+          online: { B: { name: 'ب', history: { [T - 5000]: { r: 'd' } } } },
+          multi: { history: { [T - 5000]: { rank: 1, players: 3, score: 5 } } }, currentStreak: 1 },
+        achievements: { first_win: { unlockedAt: T - 1000 } },
+        matchHistory: { m1: { mode: 'ai', result: 'win', myScore: 5, oppScore: 4, vs: 'الكمبيوتر', grid: '4x4', duration: 60, ts: T - 1000 } },
+        presence: { state: 'online', lastSeen: T - 1000, by: 'abc:online' } },
+      B: { uid: 'B', name: 'ب', friends: { A: { uid: 'A', name: 'أ', photo: '', since: T - 1e6 } }, sentRequests: { A: T - 1e9 } },
+      C: { uid: 'C', name: 'ج', sentRequests: { A: T - 1000 } },
+    },
+    profiles: { A: { name: 'أ', photo: '', xp: 100 }, B: { name: 'ب', photo: '', xp: 0 } },
+    chats: { A_B: { m1: { fromUid: 'A', fromName: 'أ', text: 'هلا', ts: T - 1000, status: 'sent' } } },
+    rooms: {
+      R1: { status: 'playing', cfg: { rows: 4, cols: 4 }, p1uid: 'A', p1name: 'أ', p2uid: 'B', p2name: 'ب', createdAt: T - 1e5, public: false,
+        turn: 1, move: { key: 'h_0_0', by: 1, seq: 1 }, moves: { m1: { key: 'h_0_0', by: 1, seq: 1 } }, elementMap: { '0,0': 'gem' },
+        clock: { banks: { 1: 100, 2: 100 }, currentPlayer: 1, turnStartAt: T - 1000 }, signals: { restart: 1, ts: T - 1000 },
+        bankUpdate: { player: 1, bank: 90, seq: 1, by: 1 }, spectators: { C: { name: 'ج', at: T - 1000 } } },
+      M1: { status: 'lobby', multi: true, hostUid: 'A', hostNum: 1, maxPlayers: 4, playerCount: 2, createdAt: T - 1e5, cfg: { rows: 4, cols: 4 },
+        players: { A: { name: 'أ', num: 1, active: true }, B: { name: 'ب', num: 2, active: true } },
+        approval: { state: 'asking', available: 2, wanted: 2, startedAt: T - 1000, decisions: { 1: 'accepted' } } },
+    },
+    invites: { B: { fromUid: 'A', fromName: 'أ', roomCode: 'R1', cfg: { rows: 4, cols: 4 }, sentAt: T - 1000 } },
+    inviteRejections: { A: { rejectedBy: 'B', name: 'ب', roomCode: 'R1', ts: T - 1000, reason: 'rejected' } },
+    dailyChallenges: { [SWEEP_DAY]: { results: { B: { result: 'win', myScore: 9, oppScore: 0, duration: 50, name: 'ب', ts: T - 1000 } } } },
+  };
+};
+export function rulesShapeSweep() {
+  const r = checker('شكل القواعد (مسح حيّ دائم — 3.3ج-5أ): لا قيمة مفردة مكان حاوية، ولا مفتاح غريب، ولا نص طويل — في أي مسار');
+  let NEW;
+  try { NEW = load(RULES_FILE); } catch (e) { r.ok(false, 'database.rules.json: ' + e.message); return r; }
+  const base = sweepBase();
+  // متغيّرات المسارات ← قيم قائمة في الشجرة (متغيّر جديد بلا قيمة هنا يأخذ X — يُمسح أيضاً)
+  const sub = { $uid: 'A', $fromUid: 'C', $friendUid: 'B', $toUid: 'B', $ts: String(SWEEP_T - 5000), $key: 'vs_x', $opp: 'B', $ach: 'first_win',
+    $mid: 'm1', $code: 'R1', $msgid: 'm1', $date: SWEEP_DAY, $type: 'water', $cell: '0,0', $n: '1' };
+  const conc = ps => ps.map(k => (k.startsWith('$') ? (sub[k] ?? 'X') : k)).join('/');
+  const containers = new Set(), leaves = new Set();
+  (function walk(n, ps) {
+    if (!n || typeof n !== 'object') return;
+    const kids = Object.keys(n).filter(k => !k.startsWith('.'));
+    if (!ps.length) { kids.forEach(k => walk(n[k], [k])); return; }
+    if (kids.length) containers.add(conc(ps)); else leaves.add(conc(ps));
+    for (const k of kids) walk(n[k], ps.concat(k));
+  })(NEW.rules, []);
+  // مسارات قائمة لا يولّدها الاستبدال الواحد (الغرفة الجماعية، مفتاح المحادثة، مدخلي في قائمة غيري…)
+  ['rooms/M1', 'rooms/M1/players', 'rooms/M1/players/A', 'rooms/M1/players/B', 'rooms/M1/approval', 'rooms/M1/approval/decisions', 'rooms/R1/spectators/C',
+    'users/B/friends/A', 'users/A/friendRequests/C', 'users/B', 'users/A/lastRead', 'chats/A_B/m1', 'invites/B', 'inviteRejections/A',
+    'dailyChallenges/' + SWEEP_DAY + '/results/A', 'profiles/A', 'users/A/stats/online/B'].forEach(p => containers.add(p));
+  ['users/A/email', 'users/A/lastRead/A_B', 'users/B/requestCooldown/A', 'users/A/sentRequests/D', 'rooms/R1/status', 'rooms/R1/p2name',
+    'rooms/M1/players/A/name', 'chats/A_B/m1/text', 'chats/A_B/m1/status', 'invites/B/fromName', 'inviteRejections/A/name',
+    'inviteRejections/A/roomCode', 'inviteRejections/A/rejectedBy'].forEach(p => leaves.add(p));   // مراجعة ج-5أ: ردّ قائم (المتغيّر وحده يعطي C بلا ردّ)
+  const who = ['A', 'B', 'C'];
+  const ok = (uid, p, v) => checkWrite(NEW, [[p, v]], { uid, root: base, now: SWEEP_T }).ok;
+  const LONG = 'x'.repeat(5000);
+  const single = [], unknown = [], long = [];
+  for (const p of [...containers].sort()) {
+    for (const uid of who) {
+      if ([LONG, 7, true].some(v => ok(uid, p, v))) { single.push(`${p} ← ${uid}`); break; }
+    }
+    for (const uid of who) {
+      if (ok(uid, p + '/zz_junk', LONG) || ok(uid, p + '/zz_junk', { a: LONG })) { unknown.push(`${p}/zz_junk ← ${uid}`); break; }
+    }
+  }
+  for (const p of [...leaves].sort()) {
+    if (/\$other/.test(p)) continue;
+    for (const uid of who) { if (ok(uid, p, LONG)) { long.push(`${p} ← ${uid}`); break; } }
+  }
+  r.ok(containers.size >= 60 && leaves.size >= 80, `المسح لم يغطِّ ما يكفي (حاويات ${containers.size}، أوراق ${leaves.size})`);
+  r.ok(single.length === 0, `قيمة مفردة قُبلت مكان حاوية: ${single.join('، ')}`);
+  r.ok(unknown.length === 0, `مفتاح غريب قُبل: ${unknown.join('، ')}`);
+  r.ok(long.length === 0, `نص طويل (5000 حرف) قُبل: ${long.join('، ')}`);
+  // والشجرة نفسها صالحة: ما يكتبه الكود فيها يُقبل (وإلا "لا شيء يُقبل" بلا معنى) — عيّنات من كل منطقة
+  const T = SWEEP_T;
+  const legit = [
+    ['A', 'users/A/presence', { state: 'playing', lastSeen: T, by: 'abc:playing' }], ['A', 'users/A/learnedPowers/time_extend', true],
+    ['A', 'users/A/name', 'اسم جديد'], ['A', 'users/A/lastSeen', T], ['A', 'users/A/lastRead/A_B', T],
+    ['A', 'rooms/R1/moves/m2', { key: 'v_1_1', by: 1, seq: 2, bank: 90, nextTurn: 2 }], ['B', 'rooms/R1/clock', { banks: { 1: 90, 2: 100 }, currentPlayer: 2, turnStartAt: T }],
+    ['A', 'rooms/R1/elementMap', { '0,0': 'water', '1,2': 'gem' }], ['B', 'rooms/R1/signals', { restart: 2, ts: T }],
+    ['C', 'rooms/R1/spectators/C', { name: 'ج', at: T }], ['B', 'rooms/M1/players/B/disconnectedAt', T],
+    ['A', 'rooms/M1/approval/decisions/1', 'rejected'], ['B', 'chats/A_B/m1/status', 'read'],
+  ];
+  const refused = legit.filter(([uid, p, v]) => !ok(uid, p, v)).map(([uid, p]) => `${p} ← ${uid}`);
+  r.ok(refused.length === 0, `كتابة مشروعة رُفضت على شجرة المسح: ${refused.join('، ')}`);
+  return r;
+}
+
+export const RULES_ALL = [rulesMatrix, rulesLint, rulesShapeSweep];

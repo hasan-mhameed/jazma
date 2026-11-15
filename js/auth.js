@@ -8,7 +8,10 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getDatabase, ref, get, update, remove }
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { localStatsKey, isSafeKey }   from "./core/statsKey.js?v=1794502787";
+import { localStatsKey, isSafeKey }   from "./core/statsKey.js?v=1794697618";
+// 3.3ج-5أ: الاسم والصورة بحدّ القواعد (اسم حساب أطول من 128 كان سيُفشل إنشاء الملف كله — لا ملف = لا لعب)
+import { clipName, clipPhoto } from "./core/textLimits.js?v=1794697618";
+export { clipName, clipPhoto };
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -24,6 +27,7 @@ const firebaseConfig = {
 const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db   = getDatabase(app);
+
 
 export let currentUser = null;
 export function getCurrentUser() { return currentUser; }
@@ -89,8 +93,8 @@ export async function upgradeGuestWithEmail(name, email, password) {
 async function syncProfileIdentity(user, name = "") {
   try {
     const g = (user.providerData || []).find(p => p && p.providerId === "google.com") || {};
-    const displayName = String(name || user.displayName || g.displayName || "").trim();
-    const photo = user.photoURL || g.photoURL || "";
+    const displayName = clipName(String(name || user.displayName || g.displayName || "").trim());
+    const photo = clipPhoto(user.photoURL || g.photoURL || "");
     if (displayName && !user.displayName) {
       await updateProfile(user, { displayName, ...(photo && !user.photoURL ? { photoURL: photo } : {}) }).catch(() => {});
     }
@@ -121,14 +125,15 @@ async function saveUserProfile(user) {
   const userRef = ref(db, `users/${user.uid}`);
   const snap    = await get(userRef);
   const cur     = snap.exists() ? snap.val() : null;
-  const accName = String(user.displayName || "").trim();
+  const accName  = clipName(String(user.displayName || "").trim());
+  const accPhoto = clipPhoto(user.photoURL || "");
   if (!cur || typeof cur !== "object") {
     // ملف جديد — دمج لا استبدال (v36.0): لا يمحو ما كُتب تحته للتوّ (كحالة الحضور لحظة الاتصال)
     // 3.3أ (الخصوصية): لا نكتب الإيميل في القاعدة — اللعبة لا تستعمله، ويبقى في حساب Firebase
     await update(userRef, {
       uid:      user.uid,
-      name:     user.displayName || "لاعب",
-      photo:    user.photoURL || "",
+      name:     clipName(user.displayName || "") || "لاعب",
+      photo:    accPhoto,
       joinedAt: Date.now(),
       stats:    NEW_STATS(),
     });
@@ -141,7 +146,7 @@ async function saveUserProfile(user) {
     if (!cur.stats) Object.assign(patch, { "stats/ai/wins": 0, "stats/ai/losses": 0, "stats/local/wins": 0, "stats/local/losses": 0 });
     // واسم "لاعب" المؤقت (ضيف ترقّى، أو تسجيل سبق حفظُ ملفه وصولَ الاسم) أو صورة ناقصة تُصحَّح من الحساب
     if (accName && (!cur.name || cur.name === "لاعب")) patch.name = accName;
-    if (user.photoURL && !cur.photo) patch.photo = user.photoURL;
+    if (accPhoto && !cur.photo) patch.photo = accPhoto;
     // 3.3أ: نمسح الإيميل القديم المخزَّن من النسخ السابقة — خارج القاعدة من الآن
     if (cur.email != null) patch.email = null;
     await update(userRef, patch);
@@ -152,7 +157,8 @@ async function saveUserProfile(user) {
   if (accName && (!cur || !cur.name || cur.name === "لاعب")) pubName = accName;
   else if (cur && cur.name) pubName = cur.name;
   else pubName = user.displayName || "لاعب";
-  const pubPhoto = (cur && cur.photo) || user.photoURL || "";
+  pubName = clipName(pubName) || "لاعب";
+  const pubPhoto = clipPhoto((cur && cur.photo) || accPhoto);
   const pubXP    = (cur && typeof cur.xp === "number") ? cur.xp : 0;
   // 3.3ج-4: الخبرة العامة = الخاصة (القواعد) — تُكتب وحدها: لو تغيّرت الخاصة من صفحة أخرى بين قراءتنا وكتابتنا تُرفض
   // هي وحدها (ويكتبها addXP هناك)، ولا يضيع معها الاسم والصورة
@@ -215,7 +221,7 @@ export async function updateStats(won) {
 // ─── تحديث اسم المستخدم ──────────────────────────────────────
 export async function updateDisplayName(newName) {
   if (!currentUser) return;
-  await update(ref(db, `users/${currentUser.uid}`), { name: newName });
+  await update(ref(db, `users/${currentUser.uid}`), { name: clipName(newName) });
 }
 
 // type: 'ai' | 'local' | 'online'

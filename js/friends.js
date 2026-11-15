@@ -5,7 +5,8 @@ import { getDatabase, ref, get, update, onValue, remove, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getApps, initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getCurrentUser } from "./auth.js?v=1794502787";
+import { getCurrentUser } from "./auth.js?v=1794697618";
+import { clipName, clipPhoto } from "./core/textLimits.js?v=1794697618";   // 3.3ج-5أ: حدود القواعد
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -91,18 +92,31 @@ export async function sendFriendRequest(toUid) {
     await update(ref(db), {
       [`users/${toUid}/friendRequests/${fromUid}`]: {
         uid: fromUid,                       // للنسخ القديمة فقط — الجديدة تأخذ المعرّف من المفتاح
-        name: fromData.name ?? "لاعب",
-        photo: fromData.photo || "",
+        name: clipName(fromData.name ?? "لاعب") || "لاعب",
+        photo: clipPhoto(fromData.photo || ""),
         sentAt: at,
       },
       [`users/${fromUid}/sentRequests/${toUid}`]: at,
     });
   } catch (e) {
+    const denied = isDenied(e);
+    // 3.3ج-5أ: رُفض وطلبي قائم في صندوقه بوقت حديث = وصل فعلاً — ردّ الخادم ضاع مع انقطاع فأعادت الحزمة إرساله بعد
+    // العودة، والقواعد لا تقبل طلباً فوق طلب أحدث من 10 دقائق. ليس فشلاً (كان يُقال "تعذّر الإرسال" وطلبه وصل)
+    if (denied && await requestStands(toUid, fromUid)) return;
     // 3.3ج-2: رُفض لأن طلبي رُفض أو سُحب (أو حُذفت صداقتنا) قبل أقل من 10 دقائق؟ — يُقال لصاحبه كم بقي
-    const waitMs = isDenied(e) ? await cooldownLeft(toUid, fromUid) : 0;
+    const waitMs = denied ? await cooldownLeft(toUid, fromUid) : 0;
     if (waitMs > 0) { const err = new Error("cooldown"); err.code = "cooldown"; err.waitMs = waitMs; throw err; }
     throw e;
   }
+}
+
+// طلبي في صندوقه بوقت حديث (ضمن مدة منع الطلب فوق الطلب + دقيقة لفرق الساعات)؟ — أقرأ مدخلي أنا وحده (القاعدة تسمح)
+async function requestStands(toUid, fromUid) {
+  try {
+    watchServerOffset();
+    const v = (await get(ref(db, `users/${toUid}/friendRequests/${fromUid}`))).val();
+    return !!v && typeof v.sentAt === "number" && serverNow() - v.sentAt < REQUEST_COOLDOWN_MS + 60_000;
+  } catch { return false; }
 }
 
 // ─── قبول طلب صداقة ──────────────────────────────────────────
@@ -138,8 +152,8 @@ export async function acceptFriendRequest(fromUid) {
   const since = Date.now();
   try {
     await update(ref(db), {
-      [`users/${myUid}/friends/${fromUid}`]: { uid: fromUid, name: reqEntry?.name ?? "لاعب", photo: reqEntry?.photo || "", since },
-      [`users/${fromUid}/friends/${myUid}`]: { uid: myUid, name: myData.name ?? "لاعب", photo: myData.photo || "", since },
+      [`users/${myUid}/friends/${fromUid}`]: { uid: fromUid, name: clipName(reqEntry?.name ?? "لاعب") || "لاعب", photo: clipPhoto(reqEntry?.photo || ""), since },
+      [`users/${fromUid}/friends/${myUid}`]: { uid: myUid, name: clipName(myData.name ?? "لاعب") || "لاعب", photo: clipPhoto(myData.photo || ""), since },
       [`users/${myUid}/friendRequests/${fromUid}`]: null,
       [`users/${fromUid}/sentRequests/${myUid}`]: null,
     });
