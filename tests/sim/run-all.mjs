@@ -5,6 +5,7 @@ import * as RS from './results.mjs';
 import * as IV from './invites.mjs';
 import * as TS from './textsafety.mjs';
 import * as RM from './rooms.mjs';
+import * as RI from './roomIndex.mjs';
 
 const N = Number(process.argv.find(a => /^\d+$/.test(a)) || 100);
 const verbose = process.argv.includes('-v');
@@ -41,6 +42,8 @@ const sections = [
   ['🟢 الحضور', [() => IV.presenceFollowsMatch(verbose), () => IV.presenceHeals(verbose)]],
   ['🔤 أمان النصوص', [() => TS.namesInSearchAndVote(verbose), () => TS.namesInCodeLobby(verbose), () => TS.roomMaxIsText(verbose)]],
   ['🔐 تحضير قفل الغرف (3.3ب-1)', [() => RM.lobbyLeaveUnderMemberRules(verbose), () => RM.roomCodeCollision(verbose)]],
+  ['🗂️ الغرف لا تُقرأ كلها (3.3ج-5ب)', [() => RI.duoIndexLifecycle(verbose), () => RI.duoIndexBothSidesDrop(verbose), () => RI.ownEntrySkipped(verbose), () => RI.duoIndexCancelClose(verbose), () => RI.restoreReindexes(verbose),
+    () => RI.staleEntries(verbose), () => RI.multiIndex(verbose), () => RI.poisonedBucket(verbose), () => RI.cleanupByAge(verbose)]],
 ];
 
 for (const [title, runs] of sections) {

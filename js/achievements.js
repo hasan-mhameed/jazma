@@ -3,8 +3,8 @@
 
 import { getDatabase, ref, get, set }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { currentUser } from "./auth.js?v=1794697618";
-import { warmTransaction } from "./core/txn.js?v=1794697618";
+import { currentUser } from "./auth.js?v=1795432663";
+import { warmTransaction } from "./core/txn.js?v=1795432663";
 
 const db = getDatabase();
 

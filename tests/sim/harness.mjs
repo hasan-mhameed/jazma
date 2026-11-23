@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import FakeTimers from '@sinonjs/fake-timers';
 import { checkWrite, canRead } from '../shared/rulesEngine.mjs';
+import { applyQuery, queryForRules, Q } from '../shared/queryOps.mjs';
 
 // جذر المشروع: مجلّدان فوق هذا الملف (tests/sim → الجذر)، أو JAZAM_DIR لفحص نسخة أخرى
 export const PROJECT = process.env.JAZAM_DIR || fileURLToPath(new URL('../../', import.meta.url)).replace(/\/$/, '');
@@ -95,9 +96,9 @@ class Server {
     if (!res.ok) { const d = { who: client.name, uid: client.uid, op, path: res.path, at: clock.now }; this.denied.push(d); ALL_DENIED.push(d); client.event('DENIED', `${op} ${res.path}`); }
     return res.ok;
   }
-  allowRead(client, path, op) {
+  allowRead(client, path, op, q = null) {
     if (!this.rules || String(path).startsWith('.info')) return true;
-    const ok = canRead(this.rules, path, { uid: client.uid, root: this.root, now: clock.now });
+    const ok = canRead(this.rules, path, { uid: client.uid, root: this.root, now: clock.now, query: queryForRules(q || []) });
     if (!ok) { const d = { who: client.name, uid: client.uid, op, path, at: clock.now }; this.denied.push(d); ALL_DENIED.push(d); client.event('DENIED', `${op} ${path}`); }
     return ok;
   }
@@ -240,11 +241,15 @@ function makeFdb(server, client) {
     getDatabase: () => ({}),
     ref: (db, p = '') => { const path = cleanPath(p); return { path, key: path.split('/').pop() || null }; },
     serverTimestamp: () => ({ '.sv': 'timestamp' }),
+    // استعلامات القراءة (3.3ج-5ب): القيود تُحمل على المرجع، وget يطبّقها ويفحص القواعد بها
+    ...Q,
     // get() أثناء الانقطاع ينتظر العودة ثم يقرأ من الخادم (كـ Firebase: لا جواب من شبكة غائبة)
     get: (r) => new Promise((res, rej) => {
       const go = () => clock.setTimeout(() => {
-        if (!server.allowRead(client, r.path, 'get')) { clock.setTimeout(() => rej(DENIED()), client.down); return; }
-        const v = toRead(clone(server.getAt(r.path))); clock.setTimeout(() => res(makeSnap(r.key, v)), client.down);
+        if (!server.allowRead(client, r.path, r.q ? 'get-query' : 'get', r.q)) { clock.setTimeout(() => rej(DENIED()), client.down); return; }
+        server.reads = server.reads || [];
+        server.reads.push({ who: client.name, path: r.path, q: r.q || null, at: clock.now });
+        const v = toRead(clone(applyQuery(server.getAt(r.path), r.q || []))); clock.setTimeout(() => res(makeSnap(r.key, v)), client.down);
       }, client.up);
       if (client.connected || client.dead) go(); else (client.waiters ||= []).push(go);
     }),
@@ -387,7 +392,7 @@ const STUBS = {
       globalThis.__onEnd({ kind: 'elim', reason, silent: !!(opts && opts.silent), me: R.me, myRank: R.myRank, count: R.count, ranking: rk(R) });
       return { R, coins: Promise.resolve({ earned: 0, total: null }), recorded: Promise.resolve(null) }; }`,
   'firebase-app.js': `export function initializeApp() { return {}; } export function getApps() { return []; }`,
-  'firebase-database.js': `const F = globalThis.__fdb; export const { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp } = F;`,
+  'firebase-database.js': `const F = globalThis.__fdb; export const { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp, query, orderByChild, orderByValue, limitToFirst, startAt, endAt } = F;`,
 };
 const REAL = { 'firebase.js': '/js/firebase.js', 'onlineGame.js': '/js/ui/onlineGame.js', 'matchResult.js': '/js/core/matchResult.js',
   'turnManager.js': '/js/ui/turnManager.js',    // النص الظاهر فوق اللوحة (فحص v35.7)

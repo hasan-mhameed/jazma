@@ -1415,6 +1415,67 @@ async function twoTabAccept() {
   }
 }
 
+// ── 3.3ج-5ب: الفهرس والأعمار بالحزمة الحقيقية — استعلام الحزمة على السلك كما تفحصه القواعد، والكتابة متعددة المسارات ──
+async function roomIndexReal() {
+  const r = suite('3.3ج-5ب: البحث من فهرس الغرف المفتوحة والتنظيف من الأعمار بالحزمة الحقيقية — لا قراءة لشجرة الغرف كلها');
+  const W = await duoWorld(['A', 'B']);
+  const { S, M, devs, room } = W;
+  try {
+    const host = await M.A.findRandomMatch(CFG, 'أحمد');
+    const code = host.code;
+    const e = S.getAt(`openRooms/d/4/${code}`);
+    r.ok(host.role === 'host' && e && e.u === 'uA' && typeof e.t === 'number' && S.getAt(`roomAge/${code}`) === room(code)?.createdAt,
+      `المنتظر: الغرفة وعمرها ومدخلها في كتابة واحدة (${JSON.stringify(e)})`);
+    const rb = await M.B.findRandomMatch(CFG, 'باسل');
+    await wait(400);
+    r.ok(rb.role === 'guest' && rb.code === code, `الثاني وجده من الفهرس (${rb.role})`);
+    r.ok(S.getAt(`openRooms/d/4/${code}`) == null, 'المدخل مُحي بعد الانضمام');
+    const gets = S.gets || [];
+    const idx = gets.find(g => g.p === 'openRooms/d/4');
+    r.ok(idx && idx.q && idx.q.i === 't' && idx.q.l === 10 && idx.q.vf === 'l', `استعلام الحزمة على السلك: الأقدم أولاً بحدّ 10 (${JSON.stringify(idx && idx.q)})`);
+    r.ok(!gets.some(g => g.p === 'rooms' || g.p === '' || g.p === 'openRooms' || (g.p.startsWith('openRooms') && !g.q)), 'لا قراءة لشجرة الغرف أو للفهرس كاملاً');
+    // التنظيف: غرفة أقدم من ساعة مع عمرها، وعمر بلا غرفة، وغرفة الحديثة باقية
+    const old = Date.now() - 2 * 3600 * 1000;
+    S.setAt('rooms/777777', { cfg: { rows: 4, cols: 4 }, status: 'playing', p1name: 'س', p1uid: 'uX', p2name: 'ص', p2uid: 'uY', createdAt: old, move: { key: '', by: 0, seq: 0 } });
+    S.setAt('roomAge/777777', old); S.setAt('roomAge/888888', old);
+    await devs.A.cleanupOldRooms(); await wait(300);
+    r.ok(S.getAt('rooms/777777') == null && S.getAt('roomAge/777777') == null && S.getAt('roomAge/888888') == null, 'القديم مُسح مع عمره');
+    r.ok(room(code) && S.getAt(`roomAge/${code}`), 'الغرفة الحديثة وعمرها باقيان');
+    const ga = gets.find(g => g.p === 'roomAge');
+    r.ok(ga && ga.q && ga.q.i === '.value' && ga.q.l === 20 && typeof ga.q.ep === 'number' && ga.q.ep <= Date.now() - 3600 * 1000,
+      `استعلام الأعمار على السلك: بقيمتها، بحدّ 20، وما تجاوز الساعة فقط (${JSON.stringify(ga && ga.q)})`);
+    // الرفض الوحيد المتوقَّع: محاولة الانضمام الأولى بذاكرة باردة (txnAsJoiner — قبل الإعادة الدافئة، ترتيب القواعد أولاً)
+    const unexpected = S.denied.filter(d => !(d.a === 'p' && d.p === `/rooms/${code}` && d.uid === 'uB'));
+    r.ok(unexpected.length === 0, 'لا رفض من القواعد للفهرس أو الأعمار أو الإنشاء' + (unexpected[0] ? `: ${JSON.stringify(unexpected[0])}` : ''));
+  } finally { for (const d of Object.values(devs)) { try { d.__off(); } catch {} } S.close(); }
+}
+
+// ── 3.3ج-5ب (مراجعة): التنظيف بوقت الخادم لا بساعة الجهاز — جهاز ساعته متقدّمة ساعتين أو متأخرة ساعتين ──
+// (متقدّمة: استعلامٌ بساعة الجهاز يطلب أعماراً "حديثة" فترفضه القواعد؛ متأخرة: لا يرى ما تجاوز الساعة فعلاً)
+async function roomCleanSkewReal() {
+  const r = suite('3.3ج-5ب: تنظيف الغرف من جهاز ساعته مزاحة ±ساعتين — بوقت الخادم: القديم يُمسح والحديث يبقى، بلا رفض');
+  for (const skew of [2 * 3600 * 1000, -2 * 3600 * 1000]) {
+    const S = new FakeRTDB(); const port = await S.listen();
+    try {
+      const now = Date.now();
+      const room = (t) => ({ cfg: { rows: 4, cols: 4 }, status: 'finished', p1name: 'س', p1uid: 'uX', p2name: 'ص', p2uid: 'uY', createdAt: t, move: { key: '', by: 0, seq: 0 } });
+      S.setAt('rooms/700001', room(now - 90 * 60000)); S.setAt('roomAge/700001', now - 90 * 60000);
+      S.setAt('rooms/700002', room(now - 10 * 60000)); S.setAt('roomAge/700002', now - 10 * 60000);
+      const res = await new Promise(resolve => {
+        const p = spawn(process.execPath, [new URL('./skewclean.mjs', import.meta.url).pathname, pathToFileURL(gen('K' + (skew > 0 ? 'p' : 'm'), port)).href, String(skew)],
+          { cwd: new URL('.', import.meta.url).pathname });
+        let buf = ''; p.stdout.on('data', d => { buf += d; }); p.stderr.on('data', () => {});
+        p.on('close', () => resolve(buf));
+      });
+      const tag = skew > 0 ? 'متقدّمة' : 'متأخرة';
+      r.ok(/"done"/.test(res), `${tag}: التنظيف اكتمل (${res.trim().slice(0, 80)})`);
+      r.ok(S.getAt('rooms/700001') == null && S.getAt('roomAge/700001') == null, `${tag}: الغرفة الأقدم من ساعة (بوقت الخادم) مُسحت مع عمرها`);
+      r.ok(S.getAt('rooms/700002') && S.getAt('roomAge/700002'), `${tag}: الحديثة باقية`);
+      r.ok(S.denied.length === 0, `${tag}: لا رفض من القواعد` + (S.denied[0] ? `: ${JSON.stringify(S.denied[0])}` : ''));
+    } finally { S.close(); }
+  }
+}
+
 const all = [offlineExitThenReconnect, blipDuringWithdraw, onlineExit, creatorStamp, timeoutDuringBlip,
   secondExitClick, dropBeforeStartAcks, quietLeaveDuringDrop, spectatorLeaveDuringDrop,
   duoTwoJoiners, duoHostCancelAlone, duoCancelAfterJoin, duoCancelJoinSimultaneous, duoCancelOffline,
@@ -1422,7 +1483,7 @@ const all = [offlineExitThenReconnect, blipDuringWithdraw, onlineExit, creatorSt
   duoCancelThenClose, duoJoinAckLost, duoCodeJoinAckLost, duoCreateBlip, duoAbortRetried, duoCancelDuringReopen,
   duoHostBlipRestores, duoRestoreKeepsGuestOut, duoEvictedGuestOp, duoOrphanNodeRestores, duoCancelStrayFinished,
   inviteConditionalRemovals, registrationProfile, friendsRealRules, presenceHealsReal, mixedVersions, twoTabAccept,
-  chatRealRules, chatLastReadReal, roomCodeCollisionReal, lobbyRacesReal, friendsCodeFirstReal, friendsClockSkewReal, gameplayWritesReal, numbersRealC4, profileSyncRaceReal, dailyLostAckReal, friendLostAckReal];
+  chatRealRules, chatLastReadReal, roomCodeCollisionReal, lobbyRacesReal, friendsCodeFirstReal, friendsClockSkewReal, gameplayWritesReal, numbersRealC4, profileSyncRaceReal, dailyLostAckReal, friendLostAckReal, roomIndexReal, roomCleanSkewReal];
 // ONLY=اسم1,اسم2 npm test — تشغيل فحوص بعينها (للتطوير وفحص الطفرات)
 const pick = process.env.ONLY ? all.filter(f => process.env.ONLY.split(',').includes(f.name)) : all;
 console.log('\n🔬 firebase.js بحزمة Firebase الحقيقية');

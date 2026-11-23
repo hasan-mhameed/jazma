@@ -8,9 +8,9 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getDatabase, ref, get, update, remove }
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { localStatsKey, isSafeKey }   from "./core/statsKey.js?v=1794697618";
+import { localStatsKey, isSafeKey }   from "./core/statsKey.js?v=1795432663";
 // 3.3ج-5أ: الاسم والصورة بحدّ القواعد (اسم حساب أطول من 128 كان سيُفشل إنشاء الملف كله — لا ملف = لا لعب)
-import { clipName, clipPhoto } from "./core/textLimits.js?v=1794697618";
+import { clipName, clipPhoto } from "./core/textLimits.js?v=1795432663";
 export { clipName, clipPhoto };
 
 const firebaseConfig = {

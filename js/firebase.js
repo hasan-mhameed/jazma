@@ -1,8 +1,9 @@
 // 📄 firebase.js — v11.8
 import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp }
+import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp,
+         query, orderByChild, orderByValue, limitToFirst, startAt, endAt }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1794697618";
+import { getCurrentUser }   from "./auth.js?v=1795432663";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -42,7 +43,7 @@ async function txnAsJoiner(path, update) {
       } catch (e2) {
         // 3.3ب-2: رُفضت الإعادة الدافئة أيضاً = الغرفة لم تعد تقبل انضمامي (سبقني غيري، أو بدأت) — لم يُكتب شيء يقيناً،
         // فهي "لم ننضم" لا "انقطاع" (منضمّان بنفس اللحظة: الخاسر يرى "ممتلئة" لا "تعذّر بسبب انقطاع الاتصال")
-        if (isDenied(e2)) return { committed: false, snapshot: null };
+        if (isDenied(e2)) return { committed: false, snapshot: null, denied: true };
         throw e2;
       }
     } finally { try { unsub && unsub(); } catch {} }
@@ -56,25 +57,104 @@ function isOrphanRoomNode(room) {
   return !!room && typeof room === "object" && !room.cfg && !room.p1uid && !room.multi;
 }
 
-// ── تنظيف الغرف القديمة (أكثر من ساعة) ─────────────────────────
+// ══ 3.3ج-5ب: الغرف لا تُقرأ كلها ══════════════════════════════
+// كانت اللعبة تقرأ شجرة الغرف كاملة مع كل بحث وكل تنظيف — فغرفة يملؤها أحدهم ببيانات ضخمة يُنزّلها كل لاعب. الآن:
+//  • فهرس الغرف المفتوحة: openRooms/<النوع>/<الحجم>/<الرمز> = { t: وقت الخادم، u: المنشئ } — النوع "d" للثنائي و"m<العدد>"
+//    للجماعي. يكتبه منشئ الغرفة العامة المنتظرة وحده ومعها في كتابة واحدة، ويُمحى عند الانضمام والبدء والإلغاء والانقطاع،
+//    وأي أحد يمحو مدخلاً غرفته لم تعد مفتوحة (القواعد). البحث يقرأه باستعلام وحيد تسمح به القواعد: الأقدم أولاً وبحدّ.
+//  • أعمار الغرف: roomAge/<الرمز> = وقت الإنشاء، لكل غرفة في كتابة إنشائها — التنظيف منه، ولا يُظهر إلا ما تجاوز الساعة
+//    (لا تُكشف أرقام الغرف الخاصة). والغرفة نفسها تُقرأ برقمها فقط (انضمام ومشاهدة) — جذر الغرف مقفل عن القراءة.
+const OPEN_LIMIT = 10;                 // حدّ القواعد لقراءة الفهرس
+const JOIN_TRIES = 5;                  // غرف نجرّب دخولها في البحث الواحد
+const ROOM_TTL   = 60 * 60 * 1000;     // عمر الغرفة قبل تنظيفها (كما في القواعد)
+const DUO_KIND   = "d";
+const multiKind  = (max) => "m" + max;
+const openPath   = (kind, rows, code) => `openRooms/${kind}/${rows}/${code}`;
+const openEntry  = (uid) => ({ t: serverTimestamp(), u: uid });
+// وقت الخادم كما يقدّره الجهاز — استعلام التنظيف يُسمح له بما تجاوز الساعة بساعة الخادم لا بساعة الجهاز.
+// المستمع يبدأ عند أول تنظيف لا عند تحميل الوحدة (لا اتصال بالخادم قبل أن تحتاجه الصفحة)
+let _srvOffset = 0, _srvOffsetPromise = null;
+function serverOffsetReady() {
+  if (!_srvOffsetPromise) _srvOffsetPromise = new Promise(res => {
+    try {
+      onValue(ref(db, ".info/serverTimeOffset"), s => {
+        const v = s.val(); _srvOffset = typeof v === "number" ? v : 0; res(true);
+      }, () => res(false));
+    } catch { res(false); }
+  });
+  return _srvOffsetPromise;
+}
+const srvNow = () => Date.now() + _srvOffset;
+
+// رفضٌ لقراءة الفهرس أو الأعمار = القواعد المنشورة تقيّم الاستعلام بغير ما صُمّم له: البحث يصير "كلٌّ ينتظر وحده" بصمت —
+// فنكتب تحذيراً واحداً يكشفه في الـconsole (مراجعة ج-5ب، M3)
+const _warned = new Set();
+function warnOnce(what, e) {
+  if (_warned.has(what) || !isDenied(e)) return;
+  _warned.add(what);
+  try { console.warn(`[3.3ج-5ب] رُفضت قراءة ${what} — هل نُشرت القواعد الجديدة؟`, e && (e.code || e.message)); } catch {}
+}
+// صفحة من مدخلات الفهرس لنوعٍ وحجم، الأقدم أولاً (والتعادل بالرمز كترتيب Firebase). from: آخر مدخل في الصفحة السابقة
+// { t, code } — المؤشر بالوقت والرمز معاً: مدخلات كُتبت في كتابة واحدة لها الوقت نفسه بالضبط (مراجعة ج-5ب R3)
+async function readOpenRooms(kind, rows, from = null) {
+  try {
+    const base = ref(db, `openRooms/${kind}/${rows}`);
+    const q = from == null ? query(base, orderByChild("t"), limitToFirst(OPEN_LIMIT))
+                           : query(base, orderByChild("t"), startAt(from.t, from.code), limitToFirst(OPEN_LIMIT));
+    const snap = await get(q);
+    const out = [];
+    snap.forEach(ch => {
+      const v = ch.val();
+      if (v && typeof v === "object") out.push({ code: ch.key, t: Number(v.t) || 0, u: typeof v.u === "string" ? v.u : "" });
+    });
+    return out.sort((a, b) => (a.t - b.t) || (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
+  } catch (e) { warnOnce("فهرس الغرف المفتوحة", e); return []; }
+}
+// مدخلات الفهرس صفحةً صفحة (حتى OPEN_PAGES): مدخلٌ أقدم من ساعة يُتخطّى ويُمحى (القواعد تسمح لأي أحد) — فمدخلات لا
+// يُدخلها أحد (لوبي ملأه صاحبه بلاعبين وهميين) لا تحجب الحجم كله إلا ساعة، والصفحات التالية تُرى (مراجعة ج-5ب، H1/L1)
+const OPEN_PAGES = 3;
+async function* openRoomPages(kind, rows) {
+  const known = await Promise.race([serverOffsetReady(), new Promise(res => setTimeout(() => res(false), 1500))]);
+  const stale = known ? srvNow() - ROOM_TTL - 120000 : -Infinity;   // بلا وقت الخادم لا نحكم بالقِدم (قد نمحو حديثاً)
+  const seen = new Set();
+  let from = null;
+  for (let p = 0; p < OPEN_PAGES; p++) {
+    const page = await readOpenRooms(kind, rows, from);
+    const fresh = page.filter(e => !seen.has(e.code));
+    fresh.forEach(e => seen.add(e.code));
+    const live = [];
+    for (const e of fresh) { if (e.t < stale) dropOpenEntry(kind, rows, e.code); else live.push(e); }
+    if (live.length) yield live;
+    if (page.length < OPEN_LIMIT || !fresh.length) return;
+    from = page[page.length - 1];
+  }
+}
+// مدخلٌ غرفته لم تعد مفتوحة (اختفت/بدأت/أُلغيت/لوبي فارغ): يمحوه من صادفه — القواعد تسمح لأي أحد حينها
+function dropOpenEntry(kind, rows, code) {
+  try { remove(ref(db, openPath(kind, rows, code))).catch(() => {}); } catch {}
+}
+
+// ── تنظيف الغرف القديمة (أكثر من ساعة) — من أعمار الغرف لا من شجرتها (3.3ج-5ب) ──
+// الغرفة وعمرها يُمحيان معاً (القواعد: الغرفة أقدم من ساعة، والعمر لا يُمحى وغرفته باقية). كان المسح الكامل يمسح أيضاً
+// المنتهية واللوبي الفارغ فوراً: اللوبي الفارغ يمسحه الآن من يصادفه في البحث، والمنتهية تُمسح بعد ساعة.
+const CLEAN_PAGE = 20, CLEAN_PAGES = 5;
 export async function cleanupOldRooms() {
   try {
-    const snap = await get(ref(db, "rooms"));
-    if (!snap.exists()) return;
-    const now     = Date.now();
-    const oneHour = 60 * 60 * 1000;
-    const tasks   = [];
-    snap.forEach(child => {
-      const room = child.val();
-      const age  = now - (room.createdAt || 0);
-      // غرفة لوبي بلا لاعبين: بقايا انقطاع آخر من كان فيها — تُمسح فوراً
-      const emptyLobby = room && room.multi === true && room.status === "lobby"
-        && !Object.keys(room.players || {}).length;
-      if (age > oneHour || room.status === "finished" || emptyLobby) {
-        tasks.push(remove(ref(db, `rooms/${child.key}`)));
-      }
-    });
-    await Promise.all(tasks);
+    const known = await Promise.race([serverOffsetReady(), new Promise(res => setTimeout(() => res(false), 10000))]);
+    if (!known) return;                      // بلا وقت الخادم قد يتجاوز الاستعلام حدّه فيُرفض — المرة القادمة
+    // صفحات متتالية ما دامت ممتلئة وكلها مُسحت (مراجعة ج-5ب، L2): كل غرفة تترك عمراً، فلا يتراكم ما لا يُمسح
+    for (let p = 0; p < CLEAN_PAGES; p++) {
+      let snap;
+      try {
+        snap = await get(query(ref(db, "roomAge"), orderByValue(), endAt(srvNow() - ROOM_TTL - 120000), limitToFirst(CLEAN_PAGE)));
+      } catch (e) { warnOnce("أعمار الغرف", e); return; }
+      if (!snap.exists()) return;
+      const keys = [];
+      snap.forEach(ch => { keys.push(ch.key); });
+      const done = await Promise.all(keys.map(k =>
+        update(ref(db), { [`rooms/${k}`]: null, [`roomAge/${k}`]: null }).then(() => true, () => false)));
+      if (keys.length < CLEAN_PAGE || done.some(ok => !ok)) return;
+    }
   } catch { /* صامت */ }
 }
 
@@ -133,15 +213,19 @@ export class OnlineManager {
         p1uid:     getCurrentUser()?.uid || "",
       };
       try {
-        await set(ref(db, `rooms/${code}`), {
-          cfg:       { rows: cfg.rows, cols: cfg.cols },
-          status:    "waiting",
-          p1name:    name,
-          p1uid:     getCurrentUser()?.uid || "",
-          p2name:    "",
-          p2uid:     "",
-          createdAt: serverTimestamp(),
-          move:      { key: "", by: 0, seq: 0 },
+        // 3.3ج-5ب: الغرفة وعمرها (للتنظيف) في كتابة واحدة
+        await update(ref(db), {
+          [`rooms/${code}`]: {
+            cfg:       { rows: cfg.rows, cols: cfg.cols },
+            status:    "waiting",
+            p1name:    name,
+            p1uid:     getCurrentUser()?.uid || "",
+            p2name:    "",
+            p2uid:     "",
+            createdAt: serverTimestamp(),
+            move:      { key: "", by: 0, seq: 0 },
+          },
+          [`roomAge/${code}`]: serverTimestamp(),
         });
         break;
       } catch (e) {
@@ -212,27 +296,26 @@ export class OnlineManager {
     const seq = ++this._duoSearchSeq;
     const alive = () => seq === this._duoSearchSeq;
     const myUid = getCurrentUser()?.uid || "";
-    // الغرف العامة المنتظرة بنفس الحجم، الأقدم أولاً (أطولهم انتظاراً أحقّهم)
-    let candidates = [];
-    try {
-      const snap = await get(ref(db, "rooms"));
-      if (snap.exists()) {
-        candidates = Object.entries(snap.val() || {})
-          .filter(([, room]) => this._duoJoinable(room, myUid, cfg.rows, true))
-          .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0))
-          .map(([code]) => code);
-      }
-    } catch {}
+    // الغرف العامة المنتظرة بنفس الحجم، الأقدم أولاً (أطولهم انتظاراً أحقّهم) — من فهرس الغرف المفتوحة (3.3ج-5ب)
+    const candidates = [];
+    for await (const page of openRoomPages(DUO_KIND, cfg.rows)) {
+      for (const e of page) if (e.u !== myUid && candidates.length < JOIN_TRIES) candidates.push(e.code);
+      if (candidates.length >= JOIN_TRIES || !alive()) break;
+    }
     if (!alive()) return { role: "cancelled" };
 
-    for (const joinCode of candidates.slice(0, 5)) {
-      const joined = await this._joinDuoAtomic(joinCode, name, myUid, cfg.rows, true);
+    for (const joinCode of candidates) {
+      const info = {};
+      const joined = await this._joinDuoAtomic(joinCode, name, myUid, cfg.rows, true, info);
       if (!alive()) {
         // ألغينا البحث والمعاملة في الطريق فاعتُمد انضمامنا: نلغي المباراة قبل بدئها (لا تُحسب لأحد) —
         // لا نتركه يلعب وحده أمام خصم ألغى (المنتظر يعيد فتح غرفته إن لم يكن بدأ)
         if (joined) this._abortDuoMatch(joinCode, 2, myUid);
         return { role: "cancelled" };
       }
+      // مدخلٌ غرفته لم تعد مفتوحة (اختفت أو بدأت أو أُلغيت) — أو دخلناها نحن الآن: يُمحى من الفهرس
+      // (لا تصلح لهذا الحجم أيضاً: القواعد تعدّ الحجم من شروط "مفتوحة" — مراجعة ج-5ب H1)
+      if (joined || ("room" in info && !this._duoJoinable(info.room, "", cfg.rows, true))) dropOpenEntry(DUO_KIND, cfg.rows, joinCode);
       if (!joined) continue;          // سبقنا غيرنا إليها، أو أُلغيت، أو تغيّرت — التالية
       this.roomCode  = joinCode;
       this.playerNum = 2;
@@ -265,22 +348,33 @@ export class OnlineManager {
       // أمر المسح عند الانقطاع **قبل** إنشاء الغرفة (v35.8): الخادم ينفّذ طلبات الاتصال بترتيبها — فلو أُغلقت الصفحة
       // بعد وصول الإنشاء لا تبقى غرفة منتظرة بلا صاحب (كان يُسجَّل بعده، فتضيع لحظة بينهما يدخلها باحث ويعلق)
       try { onDisconnect(ref(db, `rooms/${code}`)).remove().catch(() => {}); } catch {}
+      // ومدخل الفهرس معها (3.3ج-5ب): صفحة أُغلقت وهي تنتظر لا تترك مدخلاً يدلّ الباحثين على غرفة ممسوحة
+      const openP = openPath(DUO_KIND, cfg.rows, code);
+      try { onDisconnect(ref(db, openP)).remove().catch(() => {}); } catch {}
       this._duoHostData = { cfg: { rows: cfg.rows, cols: cfg.cols }, public: true, p1name: name, p1uid: myUid };
+      this._openEntry = { kind: DUO_KIND, rows: cfg.rows, code };
       try {
-        await set(ref(db, `rooms/${code}`), {
-          cfg:       { rows: cfg.rows, cols: cfg.cols },
-          status:    "waiting",
-          public:    true,           // غرفة مطابقة عشوائية
-          p1name:    name,
-          p1uid:     myUid,
-          p2name:    "", p2uid: "",
-          createdAt: serverTimestamp(),
-          move:      { key: "", by: 0, seq: 0 },
+        // الغرفة وعمرها ومدخلها في الفهرس في كتابة واحدة (3.3ج-5ب) — لا غرفة عامة لا يجدها أحد، ولا مدخل بلا غرفة
+        await update(ref(db), {
+          [`rooms/${code}`]: {
+            cfg:       { rows: cfg.rows, cols: cfg.cols },
+            status:    "waiting",
+            public:    true,           // غرفة مطابقة عشوائية
+            p1name:    name,
+            p1uid:     myUid,
+            p2name:    "", p2uid: "",
+            createdAt: serverTimestamp(),
+            move:      { key: "", by: 0, seq: 0 },
+          },
+          [`roomAge/${code}`]: serverTimestamp(),
+          [openP]: openEntry(myUid),
         });
         break;
       } catch (e) {
         // رقم مأخوذ (3.3ب-1) — كما في createRoom
         try { onDisconnect(ref(db, `rooms/${code}`)).cancel().catch(() => {}); } catch {}
+        try { onDisconnect(ref(db, openP)).cancel().catch(() => {}); } catch {}
+        if (this._openEntry && this._openEntry.code === code) this._openEntry = null;
         if (!isDenied(e)) throw e;
         if (this.roomCode !== code || !alive()) return { role: "cancelled" };   // أُلغي البحث في الأثناء
         if (attempt >= CODE_TRIES) throw new Error("تعذّر إنشاء الغرفة — حاول مجدداً");
@@ -292,6 +386,7 @@ export class OnlineManager {
     // ونسلّح أمر المسح مرة ثانية بعد الإنشاء (مراجعة v35.8): انقطاع لحظي والإنشاء في الطريق يستهلك الأمر الأول
     // عند الخادم، ثم يُعاد إرسال الإنشاء بعد العودة فتبقى غرفة بلا أمر مسح. التكرار لا يضر.
     try { onDisconnect(ref(db, `rooms/${code}`)).remove().catch(() => {}); } catch {}
+    try { onDisconnect(ref(db, openPath(DUO_KIND, cfg.rows, code))).remove().catch(() => {}); } catch {}
     this._listenForPlayer2(code);
     this._listenForMoves(code);
     this._listenBankUpdate(code);
@@ -318,6 +413,7 @@ export class OnlineManager {
     if (this._gameStarted || this.playerNum === 2 || this._isMulti) return;
     const code = this.roomCode, wasHost = this.playerNum === 1;
     if (code && wasHost) this._cancelDuoHosting(code);
+    this._dropMyOpen();   // 3.3ج-5ب: مدخل غرفتي في الفهرس (صاحبه يمحوه دائماً)
     this._unsubs.forEach(u => u());
     this._unsubs = [];
     this._lastRoom = null;
@@ -331,6 +427,8 @@ export class OnlineManager {
   _duoJoinable(room, myUid, rows, publicOnly) {
     if (!room || typeof room !== "object" || room.multi === true) return false;
     if (room.status !== "waiting" || room.p2uid || !room.cfg || room.p1name == null) return false;
+    // ما ترفضه قاعدة الانضمام (3.3ب-2) ولا يُدخل: علامات نهاية أو مقاعد جماعية في غرفة "تنتظر" (مراجعة ج-5ب R1)
+    if (room.players || room.abortedBy != null || room.leftBy != null || room.dropped1 != null || room.dropped2 != null) return false;
     if (rows != null && Number(room.cfg.rows) !== Number(rows)) return false;
     if (publicOnly && (room.public !== true || room.p1uid === myUid)) return false;
     return true;
@@ -351,6 +449,10 @@ export class OnlineManager {
         return { ...room, p2name: name, p2uid: myUid, status: "playing", public: false };
       });
       const v = res && res.committed && res.snapshot ? res.snapshot.val() : null;
+      // الغرفة كما هي عند الخادم بعد المحاولة (3.3ج-5ب): مدخل فهرسٍ غرفته لم تعد مفتوحة يُمحى. ورفضُ القواعد للمحاولتين
+      // (الدافئة على قيمة الخادم) = لا يُدخلها أحد — وشرط "مفتوحة" في الفهرس أشدّ من شرط الانضمام، فمحو مدخلها مسموح (مراجعة R2)
+      if (res && (res.snapshot || res.committed)) info.room = res.snapshot ? res.snapshot.val() : null;
+      if (res && res.denied) info.room = null;
       return (v && v.status === "playing" && v.p2uid === myUid) ? v : null;
     } catch {
       info.unknown = true;
@@ -424,11 +526,32 @@ export class OnlineManager {
       // نمسح كل علامات نهاية لم تبدأ عندنا (كي لا تقرأها مباراة لاحقة في الغرفة كخروج خصم)
       const { abortedBy, dropped1, dropped2, leftBy, vanished, ...rest } = room;
       return { ...rest, status: "waiting", p2name: "", p2uid: "", ...(pub ? { public: true } : {}) };
+    }).then(res => {
+      // 3.3ج-5ب: غرفتي العامة عادت تنتظر — مدخلها في الفهرس من جديد (مُحي حين دخلها المنضمّ الذي ألغى)
+      const v = res && res.committed && res.snapshot ? res.snapshot.val() : null;
+      if (pub && v && v.status === "waiting" && this._stillHostingDuo(code)) this._putMyOpen(DUO_KIND, v.cfg && v.cfg.rows, code);
     }).catch(() => {}).finally(() => { if (this._reopeningCode === code) this._reopeningCode = null; });
   }
   // ما زلت أنتظر في غرفتي الثنائية هذه (لم تبدأ مباراة، ولم ألغِ)
   _stillHostingDuo(code) {
     return this.roomCode === code && this.playerNum === 1 && !this._gameStarted && !this._isMulti && !this.isSpectator;
+  }
+  // ── مدخل غرفتي في فهرس الغرف المفتوحة (3.3ج-5ب) ──
+  // كتابته (بعد إعادة فتح غرفتي أو إعادتها) مع أمر محوه عند الانقطاع — الأمر أولاً كالإنشاء
+  _putMyOpen(kind, rows, code) {
+    if (rows == null) return;
+    const p = openPath(kind, rows, code);
+    this._openEntry = { kind, rows, code };
+    try { onDisconnect(ref(db, p)).remove().catch(() => {}); } catch {}
+    try { set(ref(db, p), openEntry(getCurrentUser()?.uid || "")).catch(() => {}); } catch {}
+  }
+  // محوه (بدأت المباراة، أو ألغيت): المحو ثم إلغاء أمر الانقطاع — بالترتيب على الاتصال نفسه، فصفحة أُغلقت بينهما يمحوه أمرها
+  _dropMyOpen() {
+    const e = this._openEntry; this._openEntry = null;
+    if (!e) return;
+    const p = openPath(e.kind, e.rows, e.code);
+    try { remove(ref(db, p)).catch(() => {}); } catch {}
+    try { onDisconnect(ref(db, p)).cancel().catch(() => {}); } catch {}
   }
   // غرفتي اختفت وأنا أنتظر فيها: نعيدها كما كانت بعد عودة الاتصال (مراجعة v35.8).
   // السبب الأشيع: انقطاع لحظي (الجوال) — الخادم ينفّذ أمر "امسح الغرفة" المسجّل لإغلاق الصفحة، والصفحة ما زالت
@@ -443,7 +566,7 @@ export class OnlineManager {
       await this._waitOnline();
       if (!this._stillHostingDuo(code)) return;
       try { onDisconnect(ref(db, `rooms/${code}`)).remove().catch(() => {}); } catch {}
-      await this._roomTxnReliably(code, (room) => {
+      const res = await this._roomTxnReliably(code, (room) => {
         if (!this._stillHostingDuo(code)) return;          // ألغينا أو بدأت مباراة في الأثناء
         // موجودة (ذاكرتنا متأخرة): لا نلمسها — إلا عقدة بلا صاحب: بقايا أمر انقطاع شارد كتبه منضمّ سابق بعد مسحها
         // (سقط بصمت فلم يُلغِ أمره)، فنعيد غرفتنا فوقها. كانت "موجودة" فلا نعيدها وننتظر للأبد (مراجعة v35.8 الرابعة)
@@ -451,6 +574,11 @@ export class OnlineManager {
         return { ...data, status: "waiting", p2name: "", p2uid: "", createdAt: serverTimestamp(),
                  move: { key: "", by: 0, seq: 0 } };
       });
+      // 3.3ج-5ب: أُعيدت غرفتي — عمرها الجديد (للتنظيف)، ومدخلها في الفهرس إن كانت عامة
+      const v = res && res.committed && res.snapshot ? res.snapshot.val() : null;
+      // العمر لكل إعادة اعتُمدت (مراجعة ج-5ب M1): تنظيفٌ مسح عمرها القديم في الأثناء كان يتركها بلا عمر للأبد
+      if (v && v.p1uid === data.p1uid) { try { set(ref(db, `roomAge/${code}`), serverTimestamp()).catch(() => {}); } catch {} }
+      if (v && v.status === "waiting" && this._stillHostingDuo(code) && data.public) this._putMyOpen(DUO_KIND, data.cfg.rows, code);
     } catch {} finally { if (this._restoringCode === code) this._restoringCode = null; }
   }
 
@@ -530,6 +658,7 @@ export class OnlineManager {
       }
       if (room.status === "playing" && !this._gameStarted && room.p2name) {
         this._gameStarted = true;
+        this._dropMyOpen();   // 3.3ج-5ب: غرفتي لم تعد مفتوحة — مدخلها من الفهرس
         // بدأ اللعب: نغيّر سلوك الانقطاع من "مسح" إلى "إنهاء" (ليصل إشعار للخصم)
         // + تسجيل من انقطع (droppedN) في نفس الكتابة الذرّية (v35.6)
         try { onDisconnect(ref(db, `rooms/${code}`)).cancel().catch(() => {}); } catch {}
@@ -678,17 +807,21 @@ export class OnlineManager {
       this._myUid = myUid;
 
       try {
-        await set(ref(db, `rooms/${code}`), {
-          cfg:        { rows: cfg.rows, cols: cfg.cols },
-          status:     "lobby",
-          multi:      true,
-          maxPlayers: Math.min(Math.max(maxPlayers, 2), 4),
-          hostUid:    myUid,
-          players:    { [myUid]: { name, num: 1, active: true } },
-          playerCount: 1,
-          turn:       1,
-          move:       { key: "", by: 0, seq: 0 },
-          createdAt:  serverTimestamp(),
+        // 3.3ج-5ب: الغرفة وعمرها (للتنظيف) في كتابة واحدة
+        await update(ref(db), {
+          [`rooms/${code}`]: {
+            cfg:        { rows: cfg.rows, cols: cfg.cols },
+            status:     "lobby",
+            multi:      true,
+            maxPlayers: Math.min(Math.max(maxPlayers, 2), 4),
+            hostUid:    myUid,
+            players:    { [myUid]: { name, num: 1, active: true } },
+            playerCount: 1,
+            turn:       1,
+            move:       { key: "", by: 0, seq: 0 },
+            createdAt:  serverTimestamp(),
+          },
+          [`roomAge/${code}`]: serverTimestamp(),
         });
         break;
       } catch (e) {
@@ -848,6 +981,9 @@ export class OnlineManager {
       // بدء المباراة
       if (room.status === "playing" && !this._gameStarted) {
         this._gameStarted = true;
+        // 3.3ج-5ب: الغرفة العامة بدأت — مدخلها في الفهرس يُمحى (أي لاعب: لم تعد مفتوحة)
+        if (room.public === true && room.cfg) dropOpenEntry(multiKind(room.maxPlayers), room.cfg.rows, code);
+        if (this._openEntry && this._openEntry.code === code) this._openEntry = null;
         // عند بدء اللعب: نبدّل سلوك الانقطاع من "إزالة فورية" (المناسب للوبي)
         // إلى "ختم انقطاع" (مهلة السماح) — لكل اللاعبين، لا المضيف وحده.
         // الترتيب مهم (مراجعة v35.7): إلغاء أوامر مسار يلغي معها كل ما تحته — فالإلغاءات أولاً ثم الختم.
@@ -898,35 +1034,48 @@ export class OnlineManager {
     // ملاحظة: أثناء التصويت (approval.state === "asking") لا نمنع الانضمام،
     // بل ندخل بحالة "منتظر" (waiting) خارج التصويت — فلا تشتيت في غرف متوازية
     let foundCode = null;
-    try {
-      const snap = await get(ref(db, "rooms"));
-      if (snap.exists()) {
-        for (const [code, room] of Object.entries(snap.val())) {
-          // ملاحظة: لا نمنع العودة للغرفة التي غادرناها — المنع كان يشتّت
-          // لاعبَين متاحين في غرفتين منفصلتين. الحماية الحقيقية: الرافض لا يُحبس
-          // في جولته (أدناه + في الواجهة)، وقراره القديم يُزال عند عودته.
-          if (room && room.multi === true && room.public === true
-              && room.status === "lobby"
-              && Number(room.maxPlayers) === Number(wantedPlayers)
-              && room.cfg && Number(room.cfg.rows) === Number(cfg.rows)
-              && !(room.players && room.players[myUid])) {
-            // العدد الفعلي من القائمة لا من playerCount: قد يتقادم حين يُزال لاعب
-            // بانقطاعه (onDisconnect يزيل عقدته فقط) فتبدو الغرفة ممتلئة وهي ليست كذلك
-            const present = Object.keys(room.players || {}).length;
-            if (!present) continue;                    // غرفة مهجورة — يمسحها التنظيف
-            const voting = room.approval && room.approval.state === "asking";
-            // أثناء التصويت: ندخل كمنتظرين ما لم يكتمل عدد المنتظرين لتجمّع مستقل
-            if (voting) {
-              const waitingCount = Object.values(room.players || {})
-                .filter(p => p && p.waiting === true).length;
-              if (waitingCount >= Number(wantedPlayers)) continue; // يكفون لتجمّع خاص → غرفة جديدة
-              foundCode = code; break;
-            }
-            if (present < room.maxPlayers) { foundCode = code; break; }
-          }
-        }
+    // 3.3ج-5ب: المرشّحون من فهرس الغرف المفتوحة (الأقدم أولاً)، وكل غرفة تُقرأ برقمها — لا شجرة الغرف كلها
+    const kind = multiKind(wantedPlayers);
+    pages: for await (const page of openRoomPages(kind, cfg.rows)) {
+    // دفعات من 3 غرف تُقرأ معاً، ونتوقف عند أول غرفة مناسبة — لا كل غرف الصفحة (مراجعة ج-5ب)
+    for (let b = 0; b < page.length; b += 3) {
+    const entries = page.slice(b, b + 3);
+    const rooms = await Promise.all(entries.map(e =>
+      get(ref(db, `rooms/${e.code}`)).then(s => ({ ok: true, room: s.exists() ? s.val() : null })).catch(() => ({ ok: false }))));
+    for (let i = 0; i < entries.length; i++) {
+      const code = entries[i].code, got = rooms[i];
+      if (!got.ok) continue;
+      const room = got.room;
+      // مدخلٌ غرفته لم تعد لوبي عاماً بهذا العدد والحجم (اختفت أو بدأت أو لا تطابق): يُمحى من الفهرس (القواعد تسمح لأي أحد)
+      if (!room || room.multi !== true || room.public !== true || room.status !== "lobby"
+          || Number(room.maxPlayers) !== Number(wantedPlayers) || !room.cfg || Number(room.cfg.rows) !== Number(cfg.rows)) {
+        dropOpenEntry(kind, cfg.rows, code); continue;
       }
-    } catch {}
+      // العدد الفعلي من القائمة لا من playerCount: قد يتقادم حين يُزال لاعب
+      // بانقطاعه (onDisconnect يزيل عقدته فقط) فتبدو الغرفة ممتلئة وهي ليست كذلك
+      const present = Object.keys(room.players || {}).length;
+      if (!present) {
+        // غرفة مهجورة (لوبي بلا لاعبين — كان يمسحها المسح الكامل): تُمسح هي وعمرها ومدخلها معاً (القواعد تسمح لأي أحد)
+        try { update(ref(db), { [`rooms/${code}`]: null, [`roomAge/${code}`]: null, [openPath(kind, cfg.rows, code)]: null }).catch(() => {}); } catch {}
+        continue;
+      }
+      // ملاحظة: لا نمنع العودة للغرفة التي غادرناها — المنع كان يشتّت
+      // لاعبَين متاحين في غرفتين منفصلتين. الحماية الحقيقية: الرافض لا يُحبس
+      // في جولته (أدناه + في الواجهة)، وقراره القديم يُزال عند عودته.
+      if (Number(room.maxPlayers) !== Number(wantedPlayers) || !room.cfg || Number(room.cfg.rows) !== Number(cfg.rows)
+          || (room.players && room.players[myUid])) continue;
+      const voting = room.approval && room.approval.state === "asking";
+      // أثناء التصويت: ندخل كمنتظرين ما لم يكتمل عدد المنتظرين لتجمّع مستقل
+      if (voting) {
+        const waitingCount = Object.values(room.players || {})
+          .filter(p => p && p.waiting === true).length;
+        if (waitingCount >= Number(wantedPlayers)) continue; // يكفون لتجمّع خاص → غرفة جديدة
+        foundCode = code; break pages;
+      }
+      if (present < room.maxPlayers) { foundCode = code; break pages; }
+    }
+    }
+    }
 
     if (foundCode) {
       try {
@@ -939,7 +1088,9 @@ export class OnlineManager {
     // تُركت أثناء إنشائها (ألغى البحث): لا نكتب "عامة" على غرفة تركناها — كانت تُنشئ عقدة بقايا {public:true} بعد
     // مسحها، وبعد قفل الغرف تُرفض ممن لم يعد لاعباً فيها (مراجعة 3.3ب-1)
     if (left) return { role: "cancelled", code };
-    await update(ref(db, `rooms/${code}`), { public: true });
+    // "عامة" ومدخلها في فهرس الغرف المفتوحة في كتابة واحدة (3.3ج-5ب). لا أمر محو عند الانقطاع: انقطاع المنشئ في اللوبي
+    // يُزيله هو وحده والغرفة تستمر للباقين (مفتوحة) — ولوبي فرغ يمسحه هو ومدخله من يصادفه في البحث
+    await update(ref(db), { [`rooms/${code}/public`]: true, [openPath(kind, cfg.rows, code)]: openEntry(myUid) });
     return { role: "creator", code };
   }
 
@@ -1398,6 +1549,7 @@ export class OnlineManager {
     // المستمعين (ذاكرة دافئة = رحلة واحدة)، وأمر المسح عند الانقطاع يبقى مسلّحاً حتى تُحسم (مراجعة v35.8)
     const duoHostCancel = !!this.roomCode && !this._isMulti && this.playerNum === 1 && !this._gameStarted;
     if (duoHostCancel) this._cancelDuoHosting(this.roomCode);
+    this._dropMyOpen();   // 3.3ج-5ب: مدخل غرفتي الثنائية العامة في الفهرس (إن بقي) — صاحبه يمحوه دائماً
     this._unsubs.forEach(u => u());
     this._unsubs = [];
     this._lastRoom = null;

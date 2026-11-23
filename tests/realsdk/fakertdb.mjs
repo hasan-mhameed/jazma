@@ -8,6 +8,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkWrite, canRead } from '../shared/rulesEngine.mjs';
+import { applyQuery, queryForRules } from '../shared/queryOps.mjs';
+// استعلام الحزمة الحقيقية على السلك (q في طلب الاستماع/القراءة — 3.3ج-5ب) ← قيود: i الفهرس ('.value'/'.key'/اسم الابن)،
+// l الحدّ وvf جهته ('l' الأولى، 'r' الأخيرة)، sp/ep قيمتا البداية والنهاية
+function wireQuery(q) {
+  if (!q || typeof q !== 'object') return [];
+  const out = [];
+  if (q.i === '.value') out.push({ type: 'orderByValue' });
+  else if (q.i === '.key') out.push({ type: 'orderByKey' });
+  else if (typeof q.i === 'string' && q.i !== '.priority') out.push({ type: 'orderByChild', child: q.i });
+  if (q.sp !== undefined) out.push({ type: 'startAt', v: q.sp, ...(q.sn != null && q.sn !== '[MIN_NAME]' ? { k: q.sn } : {}) });
+  if (q.ep !== undefined) out.push({ type: 'endAt', v: q.ep });
+  if (typeof q.l === 'number') out.push({ type: q.vf === 'r' ? 'limitToLast' : 'limitToFirst', n: q.l });
+  return out;
+}
 
 // قواعد الأمان المنشورة (v36.1 — الخطوة 1.13): الخادم الوهمي يطبّقها على كل طلب كما يفعل Firebase — بهوية الجهاز
 // من رمز المصادقة الوهمي (mockUserToken في connectDatabaseEmulator). المشروع المفحوص: JAZAM_DIR أو جذر المشروع.
@@ -109,7 +123,7 @@ export class FakeRTDB {
     }
     if (this.rules) {
       const deny = () => { this.denied.push({ conn: conn.id, uid: conn.uid, a, p: b && b.p }); this.log.push(`DENIED ${a} ${b && b.p} (${conn.uid})`); return this.reply(conn, r, 'permission_denied', 'Permission denied', rd); };
-      if ((a === 'q' || a === 'g') && !canRead(this.rules, b.p, { uid: conn.uid, root: this.root, now })) return deny();
+      if ((a === 'q' || a === 'g') && !canRead(this.rules, b.p, { uid: conn.uid, root: this.root, now, query: queryForRules(wireQuery(b.q)) })) return deny();
       if (a === 'p' || a === 'o') {
         if (!checkWrite(this.rules, [[b.p, resolveSV(b.d, now)]], { uid: conn.uid, root: this.root, now }).ok) return deny();
       }
@@ -132,7 +146,11 @@ export class FakeRTDB {
     }
     if (a === 'o' || a === 'om') { conn.ondisc.push({ a, p: b.p, d: b.d }); return this.reply(conn, r, 'ok', {}, rd); }
     if (a === 'oc') { const p = parts(b.p).join('/'); conn.ondisc = conn.ondisc.filter(o => { const op = parts(o.p).join('/'); return !(op === p || op.startsWith(p + '/')); }); this.log.push(`oncancel ${p}`); return this.reply(conn, r, 'ok', {}, rd); }
-    if (a === 'g') return this.reply(conn, r, 'ok', clone(this.getAt(b.p)), rd);
+    if (a === 'g') {
+      const qc = wireQuery(b.q);
+      (this.gets = this.gets || []).push({ p: parts(b.p).join('/'), q: b.q || null, uid: conn.uid });   // 3.3ج-5ب: كل قراءة (لفحص "لا قراءة كاملة")
+      return this.reply(conn, r, 'ok', clone(applyQuery(this.getAt(b.p), qc)), rd);
+    }
     return this.reply(conn, r, 'ok', {}, rd);   // s (stats), auth, unauth, appcheck ...
   }
 }

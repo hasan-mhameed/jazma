@@ -64,13 +64,14 @@ function forceNextCode(c, code) {
     Math.random = () => { if (once) { once = false; return ${r}; } return orig(); }; })()`, c.ctx);
 }
 // غرفة قائمة لغيري برقم ستصادفه — وكتابة إنشائها فوقها مرفوضة (كما ستفعل قواعد 3.3ب-2 بغرفة ليست لي).
-// الرفض للإنشاء (set) وحده عمداً: أمر "امسح الغرفة عند الانقطاع" المسلّح قبل الإنشاء يُقبل تسجيله — فإن لم يُلغِه
+// الرفض للإنشاء (set، ومنذ 3.3ج-5ب كتابة متعددة المسارات update: الغرفة وعمرها ومدخلها معاً) وحده عمداً: أمر "امسح الغرفة عند الانقطاع" المسلّح قبل الإنشاء يُقبل تسجيله — فإن لم يُلغِه
 // الكود بعد الرفض، يمسح إغلاقُ الصفحة غرفةَ الغريب (يُفحص أدناه — مراجعة 3.3ب-1)
 function foreignRoom(w, code, owner) {
   const room = { cfg: { rows: 4, cols: 4 }, status: 'playing', p1name: 'غريب', p1uid: owner, p2name: 'آخر', p2uid: 'uid_آخر',
     createdAt: clock.now, move: { key: 'h1', by: 1, seq: 1 } };
   w.server.setAt('rooms/' + code, room);
-  w.server.denyIf = (client, writes, op) => op === 'set' && client.uid !== owner && writes.some(([p]) => p === 'rooms/' + code || String(p).startsWith('rooms/' + code + '/'));
+  w.server.denyIf = (client, writes, op) => (op === 'set' || op === 'update') && client.uid !== owner
+    && writes.some(([p]) => { const q = String(p).replace(/^\/+/, ''); return q === 'rooms/' + code || q.startsWith('rooms/' + code + '/'); });
   return JSON.stringify(room);
 }
 
@@ -88,7 +89,7 @@ export async function roomCodeCollision(verbose = false) {
     const code = A.duoCodeShown();
     r.ok(/^\d{6}$/.test(code) && code !== TAKEN, `(أ) رقم آخر ظهر للمنشئ (${code})`);
     r.ok(JSON.stringify(w.server.getAt('rooms/' + TAKEN)) === before, '(أ) غرفة الغريب لم تُمسّ');
-    r.ok(w.server.denied.some(d => d.injected && d.op === 'set'), '(أ) محاولة الكتابة فوقها رُفضت فعلاً (السيناريو اختبر شيئاً)');
+    r.ok(w.server.denied.some(d => d.injected && (d.op === 'set' || d.op === 'update')), '(أ) محاولة الكتابة فوقها رُفضت فعلاً (السيناريو اختبر شيئاً)');
     B.joinCode(code);
     r.ok(await waitFor(w, () => A.matches.length && B.matches.length, 8000), '(أ) باسل انضم بالرقم الظاهر وبدأت المباراة');
     r.ok(A.matches[0]?.room === code && B.matches[0]?.room === code, `(أ) في الغرفة الجديدة (${A.matches[0]?.room})`);

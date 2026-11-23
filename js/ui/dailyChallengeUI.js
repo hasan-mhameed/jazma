@@ -1,13 +1,13 @@
 // 📄 ui/dailyChallengeUI.js
 import { getDailyConfig, difficultyName, hasPlayedToday,
-         saveDailyResult, getDailyLeaderboard, todayStr } from "../dailyChallenge.js?v=1794697618";
-import { config }      from "../config/config.js?v=1794697618";
-import { AIPlayer }    from "../ai/aiPlayer.js?v=1794697618";
-import { addXP, calcXP } from "../xp.js?v=1794697618";
-import { showXPGain }  from "./xpUI.js?v=1794697618";
-import { getCurrentUser } from "../auth.js?v=1794697618";
-import { esc } from "./safeText.js?v=1794697618";
-import { seedNextElements } from "../core/specialSquares.js?v=1794697618";
+         saveDailyResult, getDailyLeaderboard, todayStr } from "../dailyChallenge.js?v=1795432663";
+import { config }      from "../config/config.js?v=1795432663";
+import { AIPlayer }    from "../ai/aiPlayer.js?v=1795432663";
+import { addXP, calcXP } from "../xp.js?v=1795432663";
+import { showXPGain }  from "./xpUI.js?v=1795432663";
+import { getCurrentUser } from "../auth.js?v=1795432663";
+import { esc } from "./safeText.js?v=1795432663";
+import { seedNextElements } from "../core/specialSquares.js?v=1795432663";
 
 let _dailyActive    = false;
 let _dailyStartTime = null;

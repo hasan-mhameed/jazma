@@ -108,8 +108,9 @@ export function rulesMatrix() {
   const withRooms = (rooms) => { const b = JSON.parse(JSON.stringify(base)); b.rooms = JSON.parse(JSON.stringify(rooms)); return b; };
   const RW = (uid, writes, root, now = T0 + 60_000) => checkWrite(NEW, writes, { uid, root, now }).ok;
   const rooms0 = withRooms({ '111111': duoWaiting, '222222': duoPlaying, '333333': lobby });
-  // القراءة: مفتوحة لكل مسجّل (البحث العشوائي يقرأ الغرف كلها، والمشاهدة بالكود والدعوات) — لا للزائر
-  r.ok(canRead(NEW, 'rooms', { uid: 'V', root: rooms0 }) && canRead(NEW, 'rooms/222222', { uid: 'V', root: rooms0 }), 'الغرف لم تعد مقروءة لكل مسجّل (البحث العشوائي يحتاجها)');
+  // القراءة (3.3ج-5ب): الغرفة برقمها لكل مسجّل (الانضمام والمشاهدة بالكود والدعوات) — وشجرة الغرف كلها لا أحد
+  r.ok(!canRead(NEW, 'rooms', { uid: 'V', root: rooms0 }) && canRead(NEW, 'rooms/222222', { uid: 'V', root: rooms0 }),
+    'شجرة الغرف كلها مقروءة (غرفة يملؤها أحدهم يُنزّلها الجميع)، أو الغرفة برقمها غير مقروءة لمسجّل');
   r.ok(!canRead(NEW, 'rooms', { uid: null, root: rooms0 }) && !RW(null, [['rooms/999999', duoWaiting]], rooms0), 'زائر بلا دخول يقرأ أو ينشئ غرفة');
   // الإنشاء: غرفتي أنا فقط (منشئها = أنا، تنتظر، بلا خصم) — لا فوق غرفة قائمة لغيري، ولا باسم غيري
   r.ok(RW('A', [['rooms/444444', duoWaiting]], rooms0) && RW('A', [['rooms/444444', { ...duoWaiting, public: true }]], rooms0), 'إنشاء غرفة ثنائية (بالكود/عامة) مرفوض');
@@ -545,6 +546,93 @@ export function rulesMatrix() {
   // (مراجعة ج-5أ) حدّ معرّف المنشئ عند إنشاء غرفة جديدة — المسح لا يكتب إلا غرفاً قائمة (حيث يرفض ثبات المعرّف أولاً)
   r.ok(RW('A', [['rooms/444444', { ...lobby, p1uid: 'A' }]], rooms0) && !RW('A', [['rooms/444444', { ...lobby, p1uid: 'A'.repeat(129) }]], rooms0),
     'إنشاء غرفة: معرّف منشئ عادي رُفض أو فوق 128 قُبل');
+  // ── 3.3ج-5ب: فهرس الغرف المفتوحة وأعمار الغرف — قراءة باستعلام محدود فقط، وكتابة منشئ غرفته المفتوحة وحده ──
+  {
+    const NOWX = T0 + 60_000, HOUR = 3_600_000;
+    const pubDuo = { ...duoWaiting, public: true };
+    const pubLobby = { ...lobby, public: true };
+    const lobbyAB = { ...pubLobby, players: { A: { name: 'أ', num: 1, active: true }, B: { name: 'ب', num: 2, active: true } }, playerCount: 2 };
+    const ix = withRooms({ '111111': pubDuo, '222222': duoPlaying, '333333': pubLobby, '666666': duoWaiting,
+      '121212': pubDuo, '131313': { ...duoPlaying, createdAt: T0 - HOUR - 120_000 }, '141414': lobbyAB, '151515': pubDuo, '161616': pubLobby,
+      '474747': { ...pubLobby, maxPlayers: 4 }, '484848': { ...duoPlaying, createdAt: NOWX } });
+    ix.openRooms = { d: { 4: { '111111': { t: T0, u: 'A' }, '222222': { t: T0, u: 'A' }, '999999': { t: T0, u: 'A' },
+      '121212': { t: NOWX - HOUR - 1000, u: 'A' } }, 5: { '111111': { t: T0, u: 'A' } } },
+      m3: { 4: { '333333': { t: T0, u: 'A' }, '141414': { t: T0, u: 'A' }, '474747': { t: T0, u: 'A' } } } };
+    ix.roomAge = { '111111': T0, '222222': T0, '333333': T0, '999999': T0, '131313': T0 - HOUR - 120_000, '484848': T0 - HOUR - 120_000 };
+    const X = (uid, writes) => checkWrite(NEW, writes, { uid, root: ix, now: NOWX }).ok;
+    const QR = (uid, p, query) => canRead(NEW, p, { uid, root: ix, now: NOWX, query });
+    const E = (u = 'A', extra = {}) => ({ t: SV, u, ...extra });
+    // القراءة: الفهرس باستعلام الأقدم أولاً وبحدّ 10 فقط؛ الأعمار بما تجاوز الساعة وبحدّ 20 فقط
+    r.ok(QR('V', 'openRooms/d/4', { orderByChild: 't', limitToFirst: 10 }) && QR('V', 'openRooms/m3/4', { orderByChild: 't', limitToFirst: 5 }),
+      '5ب: قراءة الفهرس باستعلامه المسموح رُفضت');
+    r.ok(!QR('V', 'openRooms', null) && !QR('V', 'openRooms/d', null) && !QR('V', 'openRooms/d/4', null)
+      && !QR('V', 'openRooms/d/4', { orderByChild: 't', limitToFirst: 11 }) && !QR('V', 'openRooms/d/4', { orderByChild: 'u', limitToFirst: 10 })
+      && !QR('V', 'openRooms/d/4', { orderByChild: 't', limitToLast: 10 }) && !QR('V', 'openRooms/d/4', { orderByChild: 't' })
+      && !QR(null, 'openRooms/d/4', { orderByChild: 't', limitToFirst: 10 }),
+      '5ب: الفهرس يُقرأ كاملاً أو بلا حدّ أو بحدّ أكبر أو بترتيب آخر أو لزائر');
+    r.ok(QR('V', 'roomAge', { orderByValue: true, limitToFirst: 20, endAt: NOWX - HOUR - 1 }), '5ب: قراءة الأعمار القديمة باستعلامها رُفضت');
+    r.ok(!QR('V', 'roomAge', null) && !QR('V', 'roomAge', { orderByValue: true, limitToFirst: 20, endAt: NOWX - 1000 })
+      && !QR('V', 'roomAge', { orderByValue: true, limitToFirst: 21, endAt: NOWX - HOUR - 1 }) && !QR('V', 'roomAge', { orderByValue: true, limitToFirst: 20 })
+      && !QR('V', 'roomAge', { orderByChild: 't', limitToFirst: 20, endAt: NOWX - HOUR - 1 }) && !QR('V', 'roomAge/111111', null),
+      '5ب: الأعمار تُقرأ كاملة أو بغرف حديثة (تكشف أرقام الغرف الخاصة) أو بلا حدّ');
+    // الكتابة: الغرفة وعمرها ومدخلها معاً من منشئها
+    r.ok(X('A', [['rooms/444444', pubDuo], ['roomAge/444444', SV], ['openRooms/d/4/444444', E()]])
+      && X('A', [['rooms/444444', duoWaiting], ['roomAge/444444', SV]]) && X('A', [['rooms/444444', lobby], ['roomAge/444444', SV]]),
+      '5ب: إنشاء الغرفة مع عمرها (ومدخلها إن كانت عامة) رُفض');
+    r.ok(X('A', [['rooms/333333/public', true], ['openRooms/m3/4/333333', E()]]) && X('A', [['openRooms/d/4/111111', E()]]),
+      '5ب: مدخل غرفتي المفتوحة (أو تحديثه) رُفض');
+    r.ok(!X('A', [['rooms/444444', pubDuo], ['openRooms/d/4/444444', E('V')]]) && !X('A', [['rooms/444444', pubDuo], ['openRooms/d/4/444444', E('A', { t: 5 })]])
+      && !X('A', [['rooms/444444', pubDuo], ['openRooms/d/4/444444', E('A', { x: 1 })]]) && !X('A', [['rooms/444444', pubDuo], ['openRooms/d/4/444444', 'x']])
+      && !X('A', [['rooms/444444', pubDuo], ['openRooms/x/4/444444', E()]]) && !X('A', [['rooms/444444', pubDuo], ['openRooms/d/100/444444', E()]])
+      && !X('A', [['rooms/' + '4'.repeat(17), pubDuo], ['openRooms/d/4/' + '4'.repeat(17), E()]]),
+      '5ب: مدخل باسم غيري، أو بوقت ليس وقت الخادم، أو بحقل غريب، أو قيمة مفردة، أو نوع/حجم/رمز خارج الحدّ — قُبل');
+    r.ok(!X('A', [['openRooms/d/4/666666', E()]]) && !X('V', [['openRooms/d/4/111111', E('V')]]) && !X('A', [['openRooms/d/4/222222', E()]])
+      && !X('A', [['openRooms/d/4/555555', E()]]) && !X('V', [['openRooms/m3/4/333333', E('V')]]) && !X('A', [['openRooms/m3/4/111111', E()]])
+      && !X('A', [['openRooms/d/4/333333', E()]]) && !X('A', [['openRooms/zz/4/333333', E()]]),
+      '5ب: مدخل لغرفة خاصة أو لغيري أو جارية أو غير موجودة أو لوبي لست فيه أو بنوع لا يطابقها أو خارج قائمة الأنواع — قُبل');
+    // (طفرات) مدخل جديد لغرفة غيري المفتوحة بلا مدخل (ثنائية ولوبي)، وعضو لوبي يكتب فوق مدخل منشئه
+    r.ok(!X('V', [['openRooms/d/4/151515', E('V')]]) && !X('V', [['openRooms/m3/4/161616', E('V')]]) && !X('B', [['openRooms/m3/4/141414', E('B')]])
+      && X('A', [['openRooms/m3/4/161616', E()]]),
+      '5ب: غريب يفهرس غرفة غيري المفتوحة باسمه، أو عضو لوبي يكتب فوق مدخل منشئه — قُبل');
+    // المحو: صاحبه دائماً؛ وغيره حين لا تكون مفتوحة (اختفت/بدأت) أو المدخل أقدم من ساعة
+    r.ok(X('A', [['openRooms/d/4/111111', null]]) && X('V', [['openRooms/d/4/222222', null]]) && X('V', [['openRooms/d/4/999999', null]])
+      && X('V', [['openRooms/d/4/121212', null]]) && X('V', [['openRooms/d/4/777777', null]]),
+      '5ب: محو المدخل من صاحبه، أو مدخل غرفته بدأت/اختفت، أو أقدم من ساعة — رُفض');
+    r.ok(!X('V', [['openRooms/d/4/111111', null]]) && !X('V', [['openRooms/m3/4/333333', null]]),
+      '5ب: غريب يمحو مدخل غرفة ما زالت مفتوحة (يخفيها عن الباحثين)');
+    // (مراجعة ج-5ب H1) "مفتوحة" في القواعد = يدخلها الباحث فعلاً: الحجم يطابق المسار، والعدد يطابق النوع، وللثنائية اسم منشئ —
+    // فلا مدخل لا يُدخل ولا يُمحى (يحجب الحجم كله)، ومدخلٌ لا يطابق (من قبل) يمحوه أي أحد
+    const noName = { ...pubDuo }; delete noName.p1name;
+    r.ok(!X('A', [['rooms/444444', pubDuo], ['roomAge/444444', SV], ['openRooms/d/5/444444', E()]])
+      && !X('A', [['rooms/444444', noName], ['roomAge/444444', SV], ['openRooms/d/4/444444', E()]])
+      && !X('A', [['rooms/444444', { ...pubLobby, maxPlayers: 4 }], ['roomAge/444444', SV], ['openRooms/m3/4/444444', E()]])
+      && X('A', [['rooms/444444', { ...pubLobby, maxPlayers: 4 }], ['roomAge/444444', SV], ['openRooms/m4/4/444444', E()]]),
+      '5ب: مدخل بحجم لا يطابق غرفته، أو لثنائية بلا اسم منشئ، أو لوبي 4 تحت نوع 3 — قُبل (أو المطابق رُفض)');
+    // (مراجعة R1) غرفة "تنتظر" بعلامة نهاية أو مقاعد جماعية لا يدخلها أحد (قاعدة الانضمام) — فلا مدخل لها، ومدخلها القديم يمحوه أي أحد
+    const marked = ['leftBy', 'abortedBy', 'dropped1', 'dropped2'].map(f => ({ ...pubDuo, [f]: f === 'leftBy' || f === 'abortedBy' ? 1 : true }))
+      .concat([{ ...pubDuo, players: { A: { name: 'أ', num: 1, active: true } } }]);
+    r.ok(marked.every(rm => !X('A', [['rooms/444444', rm], ['roomAge/444444', SV], ['openRooms/d/4/444444', E()]])),
+      '5ب: مدخل لغرفة "تنتظر" بعلامة نهاية أو مقاعد جماعية (لا يدخلها أحد) قُبل');
+    r.ok(marked.every(rm => { const b = JSON.parse(JSON.stringify(ix)); b.rooms['454545'] = rm; b.openRooms.d[4]['454545'] = { t: T0, u: 'A' };
+      return checkWrite(NEW, [['openRooms/d/4/454545', null]], { uid: 'V', root: b, now: NOWX }).ok; }),
+      '5ب: محو مدخل غرفة بعلامة نهاية رُفض لغير صاحبه');
+    r.ok(X('V', [['openRooms/d/5/111111', null]]) && X('V', [['openRooms/m3/4/474747', null]]),
+      '5ب: محو مدخل لا يطابق غرفته (حجماً أو عدداً) رُفض لغير صاحبه');
+    // (مراجعة M1) غرفة دفع أحدٌ وقت إنشائها للأمام وعمرها أقدم من ساعة: تُمحى مع عمرها (لا يتعطّل التنظيف)
+    r.ok(X('V', [['rooms/484848', null], ['roomAge/484848', null]]), '5ب: غرفة عمرها أقدم من ساعة لا تُمحى لأن وقت إنشائها دُفع للأمام');
+    // (مراجعة L3) المنضمّ للوبي عام لا يخفيه (لا يغيّر "عامة")
+    const withV = (pub) => ({ ...pubLobby, ...(pub === undefined ? {} : { public: pub }), players: { ...pubLobby.players, V: { name: 'ض', num: 2, active: true } }, playerCount: 2 });
+    r.ok(X('V', [['rooms/333333', withV()]]) && !X('V', [['rooms/333333', withV(false)]]),
+      '5ب: الانضمام للوبي عام رُفض، أو قُبل مع إخفائه (public:false)');
+    // الأعمار: يكتبها لاعب في الغرفة بوقت الخادم؛ وتُمحى فقط مع غرفتها أو بعدها
+    r.ok(X('A', [['roomAge/111111', SV]]) && X('B', [['roomAge/222222', SV]]) && X('V', [['roomAge/999999', null]])
+      && X('V', [['rooms/131313', null], ['roomAge/131313', null]]),
+      '5ب: عمر يكتبه لاعب الغرفة، أو محو عمر بلا غرفة، أو غرفة قديمة مع عمرها — رُفض');
+    r.ok(!X('V', [['roomAge/111111', SV]]) && !X('A', [['roomAge/111111', 5]]) && !X('A', [['roomAge/555555', SV]])
+      && !X('A', [['roomAge/111111', null]]) && !X('V', [['roomAge/222222', null]]) && !X('V', [['rooms/222222', null], ['roomAge/222222', null]])
+      && !X('A', [['roomAge/111111', { t: SV }]]),
+      '5ب: عمر من غريب، أو بوقت مصطنع، أو لغرفة غير موجودة، أو محو عمر غرفة باقية، أو غرفة حديثة مع عمرها، أو كائن — قُبل');
+  }
   // ولماذا كان لا بدّ منها: القواعد السابقة ترفض الطلب والحذف والقبول
   r.ok(!W(OLD, 'A', [['users/B/friendRequests/A', { name: 'أ' }]]) && !W(OLD, 'A', [['users/B/friends/A', null]])
     && !W(OLD, 'A', [['users/B/friends/A', { name: 'أ' }]], withToken), 'القواعد السابقة كانت تسمح بالأصدقاء (التشخيص خاطئ؟)');
@@ -635,7 +723,12 @@ const sweepBase = () => {
       M1: { status: 'lobby', multi: true, hostUid: 'A', hostNum: 1, maxPlayers: 4, playerCount: 2, createdAt: T - 1e5, cfg: { rows: 4, cols: 4 },
         players: { A: { name: 'أ', num: 1, active: true }, B: { name: 'ب', num: 2, active: true } },
         approval: { state: 'asking', available: 2, wanted: 2, startedAt: T - 1000, decisions: { 1: 'accepted' } } },
+      // 3.3ج-5ب: غرفة ثنائية عامة تنتظر (لها مدخل في الفهرس)
+      R2: { status: 'waiting', public: true, cfg: { rows: 4, cols: 4 }, p1uid: 'A', p1name: 'أ', p2uid: '', p2name: '', createdAt: T - 1e5,
+        move: { key: '', by: 0, seq: 0 } },
     },
+    openRooms: { d: { 4: { R2: { t: T - 1e5, u: 'A' } } } },
+    roomAge: { R1: T - 1e5, R2: T - 1e5, M1: T - 1e5 },
     invites: { B: { fromUid: 'A', fromName: 'أ', roomCode: 'R1', cfg: { rows: 4, cols: 4 }, sentAt: T - 1000 } },
     inviteRejections: { A: { rejectedBy: 'B', name: 'ب', roomCode: 'R1', ts: T - 1000, reason: 'rejected' } },
     dailyChallenges: { [SWEEP_DAY]: { results: { B: { result: 'win', myScore: 9, oppScore: 0, duration: 50, name: 'ب', ts: T - 1000 } } } },
@@ -648,7 +741,7 @@ export function rulesShapeSweep() {
   const base = sweepBase();
   // متغيّرات المسارات ← قيم قائمة في الشجرة (متغيّر جديد بلا قيمة هنا يأخذ X — يُمسح أيضاً)
   const sub = { $uid: 'A', $fromUid: 'C', $friendUid: 'B', $toUid: 'B', $ts: String(SWEEP_T - 5000), $key: 'vs_x', $opp: 'B', $ach: 'first_win',
-    $mid: 'm1', $code: 'R1', $msgid: 'm1', $date: SWEEP_DAY, $type: 'water', $cell: '0,0', $n: '1' };
+    $mid: 'm1', $code: 'R1', $msgid: 'm1', $date: SWEEP_DAY, $type: 'water', $cell: '0,0', $n: '1', $kind: 'd', $rows: '4' };
   const conc = ps => ps.map(k => (k.startsWith('$') ? (sub[k] ?? 'X') : k)).join('/');
   const containers = new Set(), leaves = new Set();
   (function walk(n, ps) {
@@ -661,10 +754,12 @@ export function rulesShapeSweep() {
   // مسارات قائمة لا يولّدها الاستبدال الواحد (الغرفة الجماعية، مفتاح المحادثة، مدخلي في قائمة غيري…)
   ['rooms/M1', 'rooms/M1/players', 'rooms/M1/players/A', 'rooms/M1/players/B', 'rooms/M1/approval', 'rooms/M1/approval/decisions', 'rooms/R1/spectators/C',
     'users/B/friends/A', 'users/A/friendRequests/C', 'users/B', 'users/A/lastRead', 'chats/A_B/m1', 'invites/B', 'inviteRejections/A',
-    'dailyChallenges/' + SWEEP_DAY + '/results/A', 'profiles/A', 'users/A/stats/online/B'].forEach(p => containers.add(p));
+    'dailyChallenges/' + SWEEP_DAY + '/results/A', 'profiles/A', 'users/A/stats/online/B',
+    'openRooms/d/4/R2', 'openRooms/d/4', 'openRooms/d'].forEach(p => containers.add(p));   // 3.3ج-5ب: مدخل قائم لغرفة مفتوحة
   ['users/A/email', 'users/A/lastRead/A_B', 'users/B/requestCooldown/A', 'users/A/sentRequests/D', 'rooms/R1/status', 'rooms/R1/p2name',
     'rooms/M1/players/A/name', 'chats/A_B/m1/text', 'chats/A_B/m1/status', 'invites/B/fromName', 'inviteRejections/A/name',
-    'inviteRejections/A/roomCode', 'inviteRejections/A/rejectedBy'].forEach(p => leaves.add(p));   // مراجعة ج-5أ: ردّ قائم (المتغيّر وحده يعطي C بلا ردّ)
+    'inviteRejections/A/roomCode', 'inviteRejections/A/rejectedBy',
+    'openRooms/d/4/R2/u', 'openRooms/d/4/R2/t', 'roomAge/R2', 'roomAge/M1'].forEach(p => leaves.add(p));   // مراجعة ج-5أ: ردّ قائم (المتغيّر وحده يعطي C بلا ردّ)
   const who = ['A', 'B', 'C'];
   const ok = (uid, p, v) => checkWrite(NEW, [[p, v]], { uid, root: base, now: SWEEP_T }).ok;
   const LONG = 'x'.repeat(5000);
@@ -694,6 +789,7 @@ export function rulesShapeSweep() {
     ['A', 'rooms/R1/elementMap', { '0,0': 'water', '1,2': 'gem' }], ['B', 'rooms/R1/signals', { restart: 2, ts: T }],
     ['C', 'rooms/R1/spectators/C', { name: 'ج', at: T }], ['B', 'rooms/M1/players/B/disconnectedAt', T],
     ['A', 'rooms/M1/approval/decisions/1', 'rejected'], ['B', 'chats/A_B/m1/status', 'read'],
+    ['A', 'openRooms/d/4/R2', { t: T, u: 'A' }], ['B', 'roomAge/R1', T], ['A', 'roomAge/M1', T],   // 3.3ج-5ب
   ];
   const refused = legit.filter(([uid, p, v]) => !ok(uid, p, v)).map(([uid, p]) => `${p} ← ${uid}`);
   r.ok(refused.length === 0, `كتابة مشروعة رُفضت على شجرة المسح: ${refused.join('، ')}`);

@@ -11,7 +11,11 @@
 //  • خطأ أثناء التقييم (مثل auth.uid وauth فارغ) = رفض، والنتيجة يجب أن تكون true بالضبط.
 //  • دوال النصوص التي تستعملها قواعدنا (3.3أ-3 — مفتاح المحادثة): beginsWith وendsWith وcontains وreplace (كل التكرارات،
 //    كما في توثيق Firebase) وtoLowerCase/toUpperCase وlength والجمع بـ+ — تُترجم لما يقابلها في JS.
-// غير مغطّى (لا تستعمله قواعدنا): الاستعلامات المشروطة (query.*)، الأولويات، matches (التعابير النمطية).
+//  • 3.3ج-5ب: القراءة باستعلام (query.*) — canRead(..., { query }) بأسماء Firebase: orderByKey/orderByValue/orderByPriority
+//    (منطقي) وorderByChild وstartAt وendAt وequalTo وlimitToFirst وlimitToLast (null حين لا تُضبط). قراءة بلا استعلام = كلها
+//    null/false. ومقارنة null برقم في Firebase ليست true (أنواع مختلفة) بينما JS يجعل null <= 10 صحيحاً — فقواعدنا تكتب
+//    "!= null &&" قبل كل مقارنة حدّ، والمحرّك يرفض قاعدة قراءة تقارن query.* بلا هذا الفحص (حارس أدناه).
+// غير مغطّى (لا تستعمله قواعدنا): الأولويات، matches (التعابير النمطية).
 
 const parts = p => String(p ?? '').split('/').filter(Boolean);
 const clone = v => (v == null ? null : JSON.parse(JSON.stringify(v)));
@@ -83,6 +87,17 @@ function toJS(expr) {
 }
 
 const compiled = new Map();
+// استعلام فارغ (قراءة عادية) كما يراه Firebase
+export const NO_QUERY = Object.freeze({ orderByKey: false, orderByValue: false, orderByPriority: false, orderByChild: null,
+  startAt: null, endAt: null, equalTo: null, limitToFirst: null, limitToLast: null });
+// حارس: مقارنة حدّ على query.* بلا فحص null قبلها تمرّ هنا (JS: null <= 10) وتُرفض في Firebase — نرفض القاعدة نفسها
+function assertQueryGuards(expr) {
+  const re = /query\.(limitToFirst|limitToLast|startAt|endAt|equalTo)\s*(<=|>=|<|>)/g;
+  let m;
+  while ((m = re.exec(expr))) {
+    if (!expr.includes(`query.${m[1]} != null`)) throw new Error(`rulesEngine: query.${m[1]} يُقارن بلا "query.${m[1]} != null" قبله`);
+  }
+}
 function evalRule(expr, ctx, vars) {
   if (expr === true || expr === 'true') return true;
   if (expr === false || expr === 'false') return false;
@@ -90,10 +105,11 @@ function evalRule(expr, ctx, vars) {
   const key = names.join(',') + '|' + expr;
   let fn = compiled.get(key);
   if (!fn) {
-    fn = new Function('auth', 'now', 'root', 'data', 'newData', ...names, `"use strict"; return (${toJS(expr)});`);
+    if (/query\./.test(expr)) assertQueryGuards(expr);
+    fn = new Function('auth', 'now', 'root', 'data', 'newData', 'query', ...names, `"use strict"; return (${toJS(expr)});`);
     compiled.set(key, fn);
   }
-  try { return fn(ctx.auth, ctx.now, ctx.root, ctx.data, ctx.newData, ...names.map(n => vars[n])) === true; }
+  try { return fn(ctx.auth, ctx.now, ctx.root, ctx.data, ctx.newData, ctx.query || NO_QUERY, ...names.map(n => vars[n])) === true; }
   catch { return false; }
 }
 
@@ -120,11 +136,11 @@ function walk(rules, ps) {
 
 const authOf = uid => (uid ? { uid, provider: 'custom', token: { sub: uid } } : null);
 
-/** هل يقرأ هذا المستخدم هذا المسار؟ */
-export function canRead(rules, path, { uid = null, root = null, now = Date.now() } = {}) {
+/** هل يقرأ هذا المستخدم هذا المسار؟ query: استعلام القراءة (3.3ج-5ب) بأسماء Firebase — انظر NO_QUERY */
+export function canRead(rules, path, { uid = null, root = null, now = Date.now(), query = null } = {}) {
   const ps = parts(path);
   if (ps[0] === '.info') return true;
-  const ctxBase = { auth: authOf(uid), now, root: new RuleSnap(root, []) };
+  const ctxBase = { auth: authOf(uid), now, root: new RuleSnap(root, []), query: { ...NO_QUERY, ...(query || {}) } };
   for (const lvl of walk(rules, ps)) {
     const r = lvl.node && typeof lvl.node === 'object' ? lvl.node['.read'] : undefined;
     if (r !== undefined && evalRule(r, { ...ctxBase, data: new RuleSnap(root, lvl.ps), newData: null }, lvl.vars)) return true;

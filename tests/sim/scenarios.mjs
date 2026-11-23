@@ -490,8 +490,13 @@ export async function duoJoinerCancels(verbose = false) {
     let staleCalled = false; A.om.onOpponentLeft(() => { staleCalled = true; });
     const room = w.server.getAt('rooms/' + code);
     w.server.setAt('rooms/' + code, { ...room, status: 'finished', abortedBy: 2, p2uid: 'uid_زائر', p2name: 'زائر', public: false });
+    // 3.3ج-5ب: والمنضمّ محا مدخلها من الفهرس حين دخلها (كما يفعل الكود) — إعادة الفتح يجب أن تعيده
+    const openKey = Object.entries(w.server.getAt('openRooms/d') || {}).find(([, byCode]) => byCode && byCode[code])?.[0];
+    r.ok(!!openKey, '3.3ج-5ب: للمنتظر مدخل في الفهرس قبل الانضمام');
+    w.server.setAt(`openRooms/d/${openKey}/${code}`, null);
     w.server.notify();
     await w.run(2000);
+    r.ok(w.server.getAt(`openRooms/d/${openKey}/${code}`)?.u === A.uid, '3.3ج-5ب: إعادة الفتح أعادت مدخلها في الفهرس');
     r.ok(!staleCalled, 'المنتظر لا يعامل نهاية لم يبدأها كخروج خصم (معالج قديم لا يُستدعى)');
     const rm = w.server.getAt('rooms/' + code) || {};
     r.ok(rm.status === 'waiting' && rm.public === true && !rm.p2uid && rm.abortedBy == null, `أعاد فتح غرفته كما كانت (${rm.status}، عامة=${rm.public})`);
@@ -554,6 +559,9 @@ export async function duoHostClosesAtCreate(verbose = false) {
   A.closeTab(150);
   await w.run(2000);
   r.ok(hit && !Object.values(w.server.getAt('rooms') || {}).some(rm => rm && rm.p1uid === A.uid), 'الخادم مسح غرفته بأمر انقطاعها (سُجّل قبل الإنشاء)');
+  // 3.3ج-5ب: ومدخلها في الفهرس بأمر انقطاعه المسجّل قبل الإنشاء (لا مدخل يدلّ الباحثين على غرفة ممسوحة)
+  const myEntries = Object.values(w.server.getAt('openRooms/d') || {}).flatMap(byCode => Object.values(byCode || {})).filter(e => e && e.u === A.uid);
+  r.ok(myEntries.length === 0, '3.3ج-5ب: ومدخلها في الفهرس مُحي معها');
   await B.startSearch(2); await w.run(6000);
   r.ok(B.matches.length === 0 && hostingAlone(w, B), 'والقادم بعده لا يدخل غرفة بلا صاحب — يكمل البحث في غرفته');
   noErr(r, w); w.dispose();

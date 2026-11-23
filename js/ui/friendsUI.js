@@ -1,13 +1,13 @@
 // 📄 ui/friendsUI.js
 // قائمة الأصدقاء + البحث + الإجراءات
-import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1794697618";
+import { watchPresence, PRESENCE_META, lastSeenText, displayState } from "../presence.js?v=1795432663";
 import { searchUsers, sendFriendRequest, acceptFriendRequest,
          rejectFriendRequest, removeFriend,
-         listenFriendRequests, listenFriends, listenSentRequests, isMutualFriend, isRequestPending } from "../friends.js?v=1794697618";
-import { outgoingInvite, onInviteStateChange } from "./inviteUI.js?v=1794697618";
-import { asText, firstInitial, safeImageSrc } from "./safeText.js?v=1794697618";
-import { getCurrentUser } from "../auth.js?v=1794697618";
-import { showNotificationCard } from "./chatUI.js?v=1794697618";
+         listenFriendRequests, listenFriends, listenSentRequests, isMutualFriend, isRequestPending } from "../friends.js?v=1795432663";
+import { outgoingInvite, onInviteStateChange } from "./inviteUI.js?v=1795432663";
+import { asText, firstInitial, safeImageSrc } from "./safeText.js?v=1795432663";
+import { getCurrentUser } from "../auth.js?v=1795432663";
+import { showNotificationCard } from "./chatUI.js?v=1795432663";
 
 // زر "دعوة" يعكس حالة الدعوة الصادرة (v35.9): ⏳ للصديق المدعوّ ما دامت دعوته قائمة، ويرجع مع أي نهاية لها
 // (قبول ثم مباراة، رفض، "في مباراة"، انتهاء المهلة، إلغاء، فشل) — كان لا يرجع إلا عند الرفض

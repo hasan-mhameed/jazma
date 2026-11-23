@@ -6,6 +6,7 @@
 // تأكّدنا من كود الحزمة 1.7.3: lastNotifiedUid) — فالربط (ترقية الضيف) لا يطلقه.
 
 import { checkWrite, canRead, PERMISSION_DENIED } from '../shared/rulesEngine.mjs';
+import { applyQuery as applyQueryShared, queryForRules } from '../shared/queryOps.mjs';
 
 const BASE = 'https://www.gstatic.com/firebasejs/10.12.0/';
 const clone = v => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
@@ -153,7 +154,8 @@ export function createFirebase({ win, users = {}, cold = false, rules = null } =
     if (!res.ok) fb.denied.push({ op, path: res.path });
     return res.ok;
   };
-  const allowRead = (path) => !fb.rules || canRead(fb.rules, path, { uid: uidNow(), root: fb.root, now: now() });
+  // 3.3ج-5ب: القراءة باستعلام تُفحص بقيوده (query.* في القواعد)
+  const allowRead = (path, q = null) => !fb.rules || canRead(fb.rules, path, { uid: uidNow(), root: fb.root, now: now(), query: queryForRules(q || []) });
   const BAD_PATH = /[\[\].#$\u0000-\u001F\u007F]/;
   const BAD_KEY = /[\[\].#$\/\u0000-\u001F\u007F]/;
   function assertPath(p, fnName) {
@@ -186,17 +188,8 @@ export function createFirebase({ win, users = {}, cold = false, rules = null } =
     if (ra.length > 1 && ra[1] !== rb[1]) return ra[1] < rb[1] ? -1 : 1;
     return keyCmp(a, b);
   };
-  const applyQuery = (value, q) => {
-    if (!q || !q.length || !value || typeof value !== 'object') return value;
-    const ob = q.find(c => c.type === 'orderByChild');
-    let keys = Object.keys(value).sort(ob ? cmpChild(ob.child)(value) : keyCmp);
-    for (const c of q) {
-      if (c.type === 'limitToLast') keys = keys.slice(-c.n);
-      if (c.type === 'limitToFirst') keys = keys.slice(0, c.n);
-    }
-    const o = {}; keys.forEach(k => { o[k] = value[k]; });
-    return Object.keys(o).length ? o : null;
-  };
+  // ترتيب Firebase وحدوده (startAt/endAt وlimitToFirst — 3.3ج-5ب) من الوحدة المشتركة مع المحاكي
+  const applyQuery = (value, q) => applyQueryShared(value, q);
   const readAt = (r) => {
     if (r._path === '.info/connected') return fb.connected;
     if (r._path === '.info/serverTimeOffset') return fb.serverSkew || 0;
@@ -235,14 +228,18 @@ export function createFirebase({ win, users = {}, cold = false, rules = null } =
     query: (r, ...constraints) => mkRef(r._path, [...(r._q || []), ...constraints]),
     orderByKey: () => ({ type: 'orderByKey' }),
     orderByChild: (child) => ({ type: 'orderByChild', child }),
+    orderByValue: () => ({ type: 'orderByValue' }),
     limitToLast: (n) => ({ type: 'limitToLast', n }),
+    limitToFirst: (n) => ({ type: 'limitToFirst', n }),
+    endAt: (v) => ({ type: 'endAt', v }),
+    startAt: (v, k) => ({ type: 'startAt', v, ...(k != null ? { k } : {}) }),
     serverTimestamp: () => ({ '.sv': 'timestamp' }),
     onValue(r, cb, errCb) {
       const L = { ref: r, path: r._path, cb, dead: false, ready: false, lastSer: undefined };
       fb.listeners.add(L);
       const first = () => later(() => {
         if (L.dead) return;
-        if (!allowRead(r._path)) {            // القواعد ترفض القراءة: يُلغى المستمع بخطأ (كالحقيقي)
+        if (!allowRead(r._path, r._q)) {      // القواعد ترفض القراءة: يُلغى المستمع بخطأ (كالحقيقي)
           L.dead = true; fb.listeners.delete(L); fb.denied.push({ op: 'listen', path: r._path });
           if (typeof errCb === 'function') errCb(PERMISSION_DENIED());
           return;
@@ -267,7 +264,7 @@ export function createFirebase({ win, users = {}, cold = false, rules = null } =
       fb.gets.push(r._path);
       const answer = () => later(() => {
         if (fb.failNextGet === r._path) { fb.failNextGet = null; reject(Object.assign(new Error('permission_denied'), { code: 'PERMISSION_DENIED' })); return; }
-        if (!allowRead(r._path)) { fb.denied.push({ op: 'get', path: r._path }); reject(PERMISSION_DENIED()); return; }
+        if (!allowRead(r._path, r._q)) { fb.denied.push({ op: 'get', path: r._path }); reject(PERMISSION_DENIED()); return; }
         resolve(snap(r.key, clone(readAt(r)), r));
       });
       const delay = (typeof fb.getDelay === 'function' && fb.getDelay(r._path)) || 0;
