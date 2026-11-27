@@ -1,6 +1,7 @@
 // 3.3ج-5ب: الغرف لا تُقرأ كلها — فهرس الغرف المفتوحة وأعمار الغرف، بالكود الحقيقي (firebase.js + onlineGame.js) فوق القواعد
 // كل دالة ترجع { pass, fail, notes[] }
 import { World, clock } from './harness.mjs';
+import { canRead } from '../shared/rulesEngine.mjs';
 
 const waitFor = async (w, cond, ms = 40000) => { for (let t = 0; t < ms && !cond(); t += 100) await w.run(100); return cond(); };
 function suite(title) {
@@ -18,12 +19,19 @@ const entries = w => {
     for (const [code, v] of Object.entries(byCode || {})) out.push({ kind, rows, code, v });
   return out;
 };
-const age = (w, code) => w.server.getAt('roomAge/' + code);
-// لا قراءة لشجرة الغرف كلها ولا لجذر الفهرس، وكل قراءة للفهرس أو الأعمار باستعلام
+// 3.3ج-5ج: العمر { t، k: التذكرة } — age يعطي وقته، وageBound يتأكد أن تذكرته في ageList بالوقت نفسه وفي ageCode برقمها
+const age = (w, code) => { const a = w.server.getAt('roomAge/' + code); return a && typeof a === 'object' ? a.t : a; };
+const ageTok = (w, code) => w.server.getAt(`roomAge/${code}/k`);
+const ageBound = (w, code) => { const k = ageTok(w, code); return typeof k === 'string' && typeof age(w, code) === 'number'
+  && w.server.getAt('ageList/' + k) === age(w, code) && w.server.getAt('ageCode/' + k) === code; };
+// غرفة قديمة بعمرها وتذكرتها كما يكتبها الكود (للبذور)
+const seedAge = (w, code, t, tok = 'seed' + code) => {
+  w.server.setAt('roomAge/' + code, { t, k: tok }); w.server.setAt('ageList/' + tok, t); w.server.setAt('ageCode/' + tok, code); return tok; };
+// لا قراءة لشجرة الغرف كلها ولا لجذر الفهرس، وكل قراءة للفهرس أو قائمة الأعمار باستعلام، ولا قراءة للعمر (بأرقام الغرف)
 const noWholeReads = (r, w) => {
   const reads = w.server.reads || [];
-  const bad = reads.filter(x => x.path === 'rooms' || x.path === '' || x.path === 'openRooms' || x.path === 'roomAge' && !x.q
-    || (String(x.path).startsWith('openRooms/') && !x.q));
+  const bad = reads.filter(x => x.path === 'rooms' || x.path === '' || x.path === 'openRooms' || String(x.path).startsWith('roomAge')
+    || x.path === 'ageList' && !x.q || x.path === 'ageCode' || (String(x.path).startsWith('openRooms/') && !x.q));
   r.ok(bad.length === 0, 'لا قراءة لشجرة الغرف أو الفهرس كاملين' + (bad[0] ? `: ${bad[0].who} ${bad[0].path}` : ''));
   return reads;
 };
@@ -38,7 +46,7 @@ export async function duoIndexLifecycle(verbose = false) {
   const code = A.om.roomCode;
   r.ok(es.length === 1 && es[0].kind === 'd' && es[0].code === code, `مدخل واحد للمنتظر في الفهرس (${es.map(e => e.kind + '/' + e.rows + '/' + e.code)})`);
   r.ok(es[0]?.v?.u === A.uid && typeof es[0]?.v?.t === 'number', 'المدخل باسم منشئه ووقت الخادم');
-  r.ok(typeof age(w, code) === 'number' && age(w, code) === w.server.getAt(`rooms/${code}/createdAt`), 'عمر الغرفة = وقت إنشائها');
+  r.ok(age(w, code) === w.server.getAt(`rooms/${code}/createdAt`) && ageBound(w, code), 'عمر الغرفة = وقت إنشائها، بتذكرتها (5ج)');
   await B.startSearch(2);
   r.ok(await waitFor(w, () => A.matches.length && B.matches.length, 8000), 'وجده الباحث الثاني من الفهرس وبدأت المباراة');
   await w.run(1000);
@@ -100,8 +108,11 @@ export async function duoIndexCancelClose(verbose = false) {
   const A = await w.client('أحمد');
   await A.startSearch(2); await w.run(1500);
   r.ok(entries(w).length === 1, 'مدخل للمنتظر');
+  const c1 = A.om.roomCode, k1 = ageTok(w, c1);
   A.cancelSearch(); await w.run(1500);
   r.ok(entries(w).length === 0 && !Object.keys(w.server.getAt('rooms') || {}).length, 'الإلغاء: لا مدخل ولا غرفة');
+  r.ok(k1 && w.server.getAt('roomAge/' + c1) === null && w.server.getAt('ageList/' + k1) === null && w.server.getAt('ageCode/' + k1) === null,
+    '(5ج) الإلغاء محا العمر والتذكرة أيضاً (لا تبقى ساعة)');
   await A.startSearch(2); await w.run(1500);
   r.ok(entries(w).length === 1, 'بحث ثانٍ: مدخل جديد');
   A.closeTab(); await w.run(1500);
@@ -116,7 +127,7 @@ export async function restoreReindexes(verbose = false) {
   const w = new World(); w.quiet = true; w.startSampler(100);
   const A = await w.client('أحمد');
   await A.startSearch(2); await w.run(1500);
-  const code = A.om.roomCode, c0 = w.server.getAt(`rooms/${code}/createdAt`);
+  const code = A.om.roomCode, c0 = w.server.getAt(`rooms/${code}/createdAt`), k0 = ageTok(w, code);
   await w.run(1000);
   A.blip(150);
   let gone = false;
@@ -126,6 +137,9 @@ export async function restoreReindexes(verbose = false) {
   r.ok(gone && rm.status === 'waiting' && rm.createdAt > c0, `اختفت ثم أُعيدت (${rm.status})`);
   r.ok(entries(w).some(e => e.code === code && e.v.u === A.uid), 'مدخلها عاد إلى الفهرس');
   r.ok(age(w, code) >= rm.createdAt, `عمرها بوقت إعادتها (${age(w, code) - c0}ms بعد الأول)`);
+  r.ok(ageBound(w, code) && ageTok(w, code) !== k0, '(5ج) بتذكرة جديدة مربوطة بها (القديمة لم تعد تذكرتها)');
+  r.ok(w.server.getAt('ageList/' + k0) === null && w.server.getAt('ageCode/' + k0) === null,
+    '(مراجعة ج-5ج L1) التذكرة القديمة مُحيت مع الإعادة — لا يُقرأ رقم الغرفة المُعادة بعد ساعة من إنشائها الأول');
   noDenied(r, w); noErr(r, w);
   w.dispose(); return r;
 }
@@ -171,7 +185,7 @@ export async function multiIndex(verbose = false) {
   // لوبي مهجور (آخر من فيه انقطع) أقدم من أي غرفة
   w.server.setAt('rooms/555555', { cfg: { rows: 4, cols: 4 }, status: 'lobby', multi: true, public: true, maxPlayers: 3, hostUid: 'uid_ك',
     playerCount: 1, turn: 1, move: { key: '', by: 0, seq: 0 }, createdAt: clock.now - 9000 });
-  w.server.setAt('roomAge/555555', clock.now - 9000);
+  seedAge(w, '555555', clock.now - 9000);
   w.server.setAt('openRooms/m3/4/555555', { t: clock.now - 9000, u: 'uid_ك' });
   // ومدخل جماعي غرفته اختفت (بلا غرفة)
   w.server.setAt('openRooms/m3/4/565656', { t: clock.now - 8000, u: 'uid_ك' });
@@ -186,7 +200,7 @@ export async function multiIndex(verbose = false) {
   r.ok(!entries(w).some(e => e.code === '565656' || e.code === '575757'), 'المدخل الجماعي الذي اختفت غرفته أو لا يطابق عدده مُحي');
   const code = A.om.roomCode;
   r.ok(entries(w).some(e => e.kind === 'm3' && e.code === code && e.v.u === A.uid), 'أنشأ غرفة عامة ومدخلها (m3)');
-  r.ok(typeof age(w, code) === 'number', 'وعمرها');
+  r.ok(ageBound(w, code), 'وعمرها بتذكرتها');
   await B.startSearch(3); await w.run(1200); await C.startSearch(3);
   r.ok(await waitFor(w, () => A.matches.length && B.matches.length && C.matches.length, 30000), 'الثلاثة وجدوا الغرفة نفسها وبدأت المباراة');
   r.ok(new Set([A, B, C].map(c => c.matches[0]?.room)).size === 1, 'غرفة واحدة');
@@ -221,35 +235,84 @@ export async function poisonedBucket(verbose = false) {
   w.dispose(); return r;
 }
 
-// ── 5) التنظيف من الأعمار: القديم يُمسح مع عمره، والحديث لا يُمسّ ──
+// ── 5) التنظيف من الأعمار: القديم يُمسح مع عمره وتذكرته، والحديث لا يُمسّ ولا يُكشف رقمه (3.3ج-5ج) ──
 export async function cleanupByAge(verbose = false) {
-  const r = suite('3.3ج-5ب: التنظيف من أعمار الغرف — ما تجاوز الساعة يُمسح مع عمره، والحديث لا يُمسّ ولا يُكشف'); r.verbose = verbose;
+  const r = suite('3.3ج-5ج: التنظيف بالتذاكر — ما تجاوز الساعة يُمسح مع عمره وتذكرته، والتذكرة التي لم تعد لغرفتها تُمحى وحدها، والحديث لا يُمسّ ولا يُقرأ رقمه'); r.verbose = verbose;
   const w = new World(); w.quiet = true; w.startSampler(100);
   const A = await w.client('أحمد'), B = await w.client('باسل');
   A.createDuoRoom(); await w.run(1200);
   const fresh = A.duoCodeShown();
-  r.ok(/^\d{6}$/.test(fresh) && typeof age(w, fresh) === 'number', `غرفة خاصة حديثة بعمرها (${fresh})`);
+  r.ok(/^\d{6}$/.test(fresh) && ageBound(w, fresh), `غرفة خاصة حديثة بعمرها وتذكرتها (${fresh})`);
+  const freshTok = ageTok(w, fresh);
   const old = clock.now - 2 * 3600 * 1000;
   w.server.setAt('rooms/777777', { cfg: { rows: 4, cols: 4 }, status: 'playing', p1name: 'س', p1uid: 'uid_س', p2name: 'ص', p2uid: 'uid_ص',
     createdAt: old, move: { key: '', by: 0, seq: 0 } });
-  w.server.setAt('roomAge/777777', old);
-  w.server.setAt('roomAge/888888', old);   // عمر بلا غرفة (مُسحت بأمر انقطاع)
+  seedAge(w, '777777', old);
+  seedAge(w, '888888', old);               // عمر وتذكرة بلا غرفة (مُسحت بأمر انقطاع أو ألغاها صاحبها)
+  w.server.setAt('ageList/orphanTok', old - 1);   // وقت بلا رقم (بقايا يدوية): يُمحى، وإلا بقي أول القائمة للأبد
+  // غرفة حيّة أُعيدت بتذكرة جديدة، وبقيت تذكرتها القديمة: تُمحى القديمة وحدها والغرفة لا تُمسّ
+  w.server.setAt('rooms/767676', { cfg: { rows: 4, cols: 4 }, status: 'waiting', p1name: 'ع', p1uid: 'uid_ع', p2name: '', p2uid: '',
+    createdAt: clock.now - 5000, move: { key: '', by: 0, seq: 0 } });
+  w.server.setAt('ageList/staleTok', old); w.server.setAt('ageCode/staleTok', '767676');
+  seedAge(w, '767676', clock.now - 5000, 'liveTok');
+  // (مراجعة M1) غرفة قديمة دفع أحد أعضائها وقت إنشائها للأمام: تُمسح بعمرها (المحاولة الأولى "تذكرة وحدها" تُرفض، والثانية تمرّ)
+  w.server.setAt('rooms/757575', { cfg: { rows: 4, cols: 4 }, status: 'playing', p1name: 'س', p1uid: 'uid_س', p2name: 'ص', p2uid: 'uid_ص',
+    createdAt: clock.now, move: { key: '', by: 0, seq: 0 } });
+  seedAge(w, '757575', old);
   // (مراجعة L2) أكثر من صفحة: 25 غرفة قديمة أخرى
   for (let i = 0; i < 25; i++) {
     const c = String(700100 + i);
     w.server.setAt('rooms/' + c, { cfg: { rows: 4, cols: 4 }, status: 'finished', p1name: 'س', p1uid: 'uid_س', p2name: 'ص', p2uid: 'uid_ص',
       createdAt: old + i, move: { key: '', by: 0, seq: 0 } });
-    w.server.setAt('roomAge/' + c, old + i);
+    seedAge(w, c, old + i);
   }
   w.server.reads = [];
   B.safe(() => B.mods.fb.cleanupOldRooms()); await w.run(1500);   // لا ننتظره: يكمل مع تقدّم الساعة
-  r.ok(w.server.getAt('rooms/777777') === null && age(w, '777777') === null, 'الغرفة القديمة وعمرها مُسحا معاً');
-  r.ok(age(w, '888888') === null, 'العمر بلا غرفة مُسح');
-  r.ok(Array.from({ length: 25 }, (_, i) => String(700100 + i)).every(c => w.server.getAt('rooms/' + c) === null && age(w, c) === null),
-    'وأكثر من صفحة (27 غرفة قديمة) مُسحت في تشغيل واحد');
-  r.ok(w.server.getAt('rooms/' + fresh) !== null && typeof age(w, fresh) === 'number', 'الغرفة الحديثة وعمرها باقيان');
-  const q = (w.server.reads || []).find(x => x.path === 'roomAge');
-  r.ok(!!q && q.q && q.q.some(c => c.type === 'endAt'), 'قراءة الأعمار باستعلام محدود بما تجاوز الساعة');
-  noWholeReads(r, w); noDenied(r, w); noErr(r, w);
+  const gone = (c) => w.server.getAt('rooms/' + c) === null && w.server.getAt('roomAge/' + c) === null
+    && w.server.getAt('ageList/seed' + c) === null && w.server.getAt('ageCode/seed' + c) === null;
+  r.ok(gone('777777'), 'الغرفة القديمة وعمرها وتذكرتها مُسحت معاً');
+  r.ok(gone('757575'), 'وغرفة قديمة دُفع وقت إنشائها للأمام (بعمرها)');
+  r.ok(gone('888888'), 'العمر والتذكرة بلا غرفة مُسحا');
+  r.ok(w.server.getAt('ageList/orphanTok') === null, 'ووقتٌ في القائمة بلا رقم (بقايا) مُحي');
+  r.ok(Array.from({ length: 25 }, (_, i) => String(700100 + i)).every(gone), 'وأكثر من صفحة (27 غرفة قديمة) مُسحت في تشغيل واحد');
+  r.ok(w.server.getAt('ageList/staleTok') === null && w.server.getAt('ageCode/staleTok') === null, 'التذكرة التي لم تعد لغرفتها مُحيت وحدها');
+  r.ok(w.server.getAt('rooms/767676/status') === 'waiting' && ageBound(w, '767676') && ageTok(w, '767676') === 'liveTok',
+    'وغرفتها الحيّة وتذكرتها الحالية لم تُمسّ');
+  r.ok(w.server.getAt('rooms/' + fresh) !== null && ageBound(w, fresh), 'الغرفة الحديثة وعمرها وتذكرتها باقية');
+  const reads = w.server.reads || [];
+  const q = reads.find(x => x.path === 'ageList');
+  r.ok(!!q && q.q && q.q.some(c => c.type === 'endAt'), 'قراءة قائمة الأعمار باستعلام محدود بما تجاوز الساعة');
+  r.ok(!reads.some(x => x.path === 'ageCode/' + freshTok) && !reads.some(x => x.path === 'ageCode/liveTok'),
+    'رقم الغرفة الحديثة (الخاصة) لم يُطلب أصلاً');
+  const ageReads = reads.filter(x => String(x.path).startsWith('ageCode/'));
+  r.ok(ageReads.length >= 29, `رقم كل غرفة قديمة قُرئ من تذكرتها (${ageReads.length})`);
+  r.ok(!reads.some(x => /^rooms\/[^/]+$/.test(String(x.path))), 'لم تُنزَّل غرفة كاملة (وقت إنشائها وحده)');
+  noWholeReads(r, w);
+  const other = w.server.denied.filter(d => d.path !== 'ageList/seed757575');
+  r.ok(other.length === 0 && w.server.denied.length <= 1, 'لا رفض من القواعد إلا محاولة "التذكرة وحدها" للغرفة المدفوعة'
+    + (other[0] ? `: ${other[0].op} ${other[0].path}` : ''));
+  noErr(r, w);
+  w.dispose(); return r;
+}
+
+// ── 5ب) 3.3ج-5ج: لا يُعرف رقم غرفة خاصة حديثة من الأعمار — ولو قرأ أحدهم القائمة المسموحة كلها وطلب رقم كل تذكرة ──
+export async function privateCodeHidden(verbose = false) {
+  const r = suite('3.3ج-5ج: رقم الغرفة الخاصة الحديثة لا يُكشف — القائمة بلا أرقام، وطلب رقم تذكرة حديثة يُرفض، وبعد ساعة يُقرأ'); r.verbose = verbose;
+  const w = new World(); w.quiet = true; w.startSampler(100);
+  const A = await w.client('أحمد');
+  A.createDuoRoom(); await w.run(1200);
+  const code = A.duoCodeShown();
+  r.ok(/^\d{6}$/.test(code) && ageBound(w, code), `غرفة خاصة بتذكرتها (${code})`);
+  // ما يراه فضولي بالقواعد نفسها على حالة الخادم: القائمة باستعلامها المسموح، ثم رقم كل تذكرة فيها
+  const HOUR = 3600 * 1000;
+  const R = (path, query = null, now = clock.now) => canRead(w.server.rules, path, { uid: 'uid_فضولي', root: w.server.root, now, query });
+  const list = w.server.getAt('ageList') || {};
+  r.ok(R('ageList', { orderByValue: true, limitToFirst: 20 }) && !Object.keys(list).includes(code) && !Object.values(list).includes(code),
+    'القائمة تُقرأ باستعلامها، وفيها تذاكر وأوقات لا أرقام غرف');
+  const k = ageTok(w, code);
+  r.ok(!R('ageCode/' + k) && !R('roomAge') && !R('roomAge/' + code) && !R('roomAge', { orderByValue: true, limitToFirst: 20 }),
+    'رقم التذكرة الحديثة والعمر (بأرقام الغرف) لا يُقرآن');
+  r.ok(R('ageCode/' + k, null, clock.now + HOUR + 60_000), 'وبعد ساعة يُقرأ (الغرفة جاهزة للتنظيف حينها)');
+  noDenied(r, w); noErr(r, w);
   w.dispose(); return r;
 }

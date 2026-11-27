@@ -377,6 +377,10 @@ async function duoCancelAfterJoin() {
   r.ok(!joinedCalled && M.A._gameStarted === false, 'المُلغي لم تبدأ له مباراة (لا "انضمّ خصم" بعد الإلغاء)');
   r.ok(rm.status === 'finished' && rm.abortedBy === 1, `الغرفة: أُلغيت قبل البدء بيد المنشئ (${rm.status}/${rm.abortedBy})`);
   r.ok(M.B.lastRoom() && M.B.lastRoom().abortedBy === 1, 'والمنضمّ يعرف ذلك من لقطته (تُبلغه الواجهة: لم تُحسب)');
+  // 3.3ج-5ج: الغرفة باقية (ملغاة) — عمرها وتذكرتها يبقيان للتنظيف، ولا محاولة مرفوضة لمحوهما (تحذير في الـconsole)
+  r.ok(ageBoundReal(S, code), '(5ج) الغرفة الملغاة باقية بعمرها وتذكرتها (يجدها التنظيف)');
+  const aDenied = S.denied.filter(d => d.uid === 'uA' && d.a === 'm');
+  r.ok(aDenied.length === 0, '(5ج) لا كتابة مرفوضة من المُلغي' + (aDenied[0] ? `: ${JSON.stringify(aDenied[0])}` : ''));
   W.S.close();
 }
 
@@ -1415,6 +1419,11 @@ async function twoTabAccept() {
   }
 }
 
+// 3.3ج-5ج: العمر بتذكرته — بذرة كما يكتبها الكود، والتحقق من الربط
+const seedAgeReal = (S, code, t, tok = 'seed' + code) => { S.setAt('roomAge/' + code, { t, k: tok }); S.setAt('ageList/' + tok, t); S.setAt('ageCode/' + tok, code); };
+const ageBoundReal = (S, code) => { const a = S.getAt('roomAge/' + code); return !!a && typeof a.k === 'string' && typeof a.t === 'number'
+  && S.getAt('ageList/' + a.k) === a.t && S.getAt('ageCode/' + a.k) === code; };
+const ageGoneReal = (S, code, tok = 'seed' + code) => S.getAt('roomAge/' + code) == null && S.getAt('ageList/' + tok) == null && S.getAt('ageCode/' + tok) == null;
 // ── 3.3ج-5ب: الفهرس والأعمار بالحزمة الحقيقية — استعلام الحزمة على السلك كما تفحصه القواعد، والكتابة متعددة المسارات ──
 async function roomIndexReal() {
   const r = suite('3.3ج-5ب: البحث من فهرس الغرف المفتوحة والتنظيف من الأعمار بالحزمة الحقيقية — لا قراءة لشجرة الغرف كلها');
@@ -1424,7 +1433,7 @@ async function roomIndexReal() {
     const host = await M.A.findRandomMatch(CFG, 'أحمد');
     const code = host.code;
     const e = S.getAt(`openRooms/d/4/${code}`);
-    r.ok(host.role === 'host' && e && e.u === 'uA' && typeof e.t === 'number' && S.getAt(`roomAge/${code}`) === room(code)?.createdAt,
+    r.ok(host.role === 'host' && e && e.u === 'uA' && typeof e.t === 'number' && S.getAt(`roomAge/${code}/t`) === room(code)?.createdAt && ageBoundReal(S, code),
       `المنتظر: الغرفة وعمرها ومدخلها في كتابة واحدة (${JSON.stringify(e)})`);
     const rb = await M.B.findRandomMatch(CFG, 'باسل');
     await wait(400);
@@ -1437,13 +1446,16 @@ async function roomIndexReal() {
     // التنظيف: غرفة أقدم من ساعة مع عمرها، وعمر بلا غرفة، وغرفة الحديثة باقية
     const old = Date.now() - 2 * 3600 * 1000;
     S.setAt('rooms/777777', { cfg: { rows: 4, cols: 4 }, status: 'playing', p1name: 'س', p1uid: 'uX', p2name: 'ص', p2uid: 'uY', createdAt: old, move: { key: '', by: 0, seq: 0 } });
-    S.setAt('roomAge/777777', old); S.setAt('roomAge/888888', old);
+    seedAgeReal(S, '777777', old); seedAgeReal(S, '888888', old);
+    const liveTok = S.getAt(`roomAge/${code}/k`);
     await devs.A.cleanupOldRooms(); await wait(300);
-    r.ok(S.getAt('rooms/777777') == null && S.getAt('roomAge/777777') == null && S.getAt('roomAge/888888') == null, 'القديم مُسح مع عمره');
-    r.ok(room(code) && S.getAt(`roomAge/${code}`), 'الغرفة الحديثة وعمرها باقيان');
-    const ga = gets.find(g => g.p === 'roomAge');
+    r.ok(S.getAt('rooms/777777') == null && ageGoneReal(S, '777777') && ageGoneReal(S, '888888'), 'القديم مُسح مع عمره وتذكرته (5ج)');
+    r.ok(room(code) && ageBoundReal(S, code), 'الغرفة الحديثة وعمرها وتذكرتها باقية');
+    const ga = gets.find(g => g.p === 'ageList');
     r.ok(ga && ga.q && ga.q.i === '.value' && ga.q.l === 20 && typeof ga.q.ep === 'number' && ga.q.ep <= Date.now() - 3600 * 1000,
-      `استعلام الأعمار على السلك: بقيمتها، بحدّ 20، وما تجاوز الساعة فقط (${JSON.stringify(ga && ga.q)})`);
+      `استعلام قائمة الأعمار على السلك: بقيمتها، بحدّ 20، وما تجاوز الساعة فقط (${JSON.stringify(ga && ga.q)})`);
+    r.ok(gets.some(g => g.p === 'ageCode/seed777777') && !gets.some(g => g.p === 'ageCode/' + liveTok) && !gets.some(g => g.p.startsWith('roomAge')),
+      '(5ج) رقم القديمة قُرئ من تذكرتها، ورقم الحديثة لم يُطلب، والعمر (بالأرقام) لم يُقرأ');
     // الرفض الوحيد المتوقَّع: محاولة الانضمام الأولى بذاكرة باردة (txnAsJoiner — قبل الإعادة الدافئة، ترتيب القواعد أولاً)
     const unexpected = S.denied.filter(d => !(d.a === 'p' && d.p === `/rooms/${code}` && d.uid === 'uB'));
     r.ok(unexpected.length === 0, 'لا رفض من القواعد للفهرس أو الأعمار أو الإنشاء' + (unexpected[0] ? `: ${JSON.stringify(unexpected[0])}` : ''));
@@ -1459,8 +1471,8 @@ async function roomCleanSkewReal() {
     try {
       const now = Date.now();
       const room = (t) => ({ cfg: { rows: 4, cols: 4 }, status: 'finished', p1name: 'س', p1uid: 'uX', p2name: 'ص', p2uid: 'uY', createdAt: t, move: { key: '', by: 0, seq: 0 } });
-      S.setAt('rooms/700001', room(now - 90 * 60000)); S.setAt('roomAge/700001', now - 90 * 60000);
-      S.setAt('rooms/700002', room(now - 10 * 60000)); S.setAt('roomAge/700002', now - 10 * 60000);
+      S.setAt('rooms/700001', room(now - 90 * 60000)); seedAgeReal(S, '700001', now - 90 * 60000);
+      S.setAt('rooms/700002', room(now - 10 * 60000)); seedAgeReal(S, '700002', now - 10 * 60000);
       const res = await new Promise(resolve => {
         const p = spawn(process.execPath, [new URL('./skewclean.mjs', import.meta.url).pathname, pathToFileURL(gen('K' + (skew > 0 ? 'p' : 'm'), port)).href, String(skew)],
           { cwd: new URL('.', import.meta.url).pathname });
@@ -1469,8 +1481,8 @@ async function roomCleanSkewReal() {
       });
       const tag = skew > 0 ? 'متقدّمة' : 'متأخرة';
       r.ok(/"done"/.test(res), `${tag}: التنظيف اكتمل (${res.trim().slice(0, 80)})`);
-      r.ok(S.getAt('rooms/700001') == null && S.getAt('roomAge/700001') == null, `${tag}: الغرفة الأقدم من ساعة (بوقت الخادم) مُسحت مع عمرها`);
-      r.ok(S.getAt('rooms/700002') && S.getAt('roomAge/700002'), `${tag}: الحديثة باقية`);
+      r.ok(S.getAt('rooms/700001') == null && ageGoneReal(S, '700001'), `${tag}: الغرفة الأقدم من ساعة (بوقت الخادم) مُسحت مع عمرها وتذكرتها`);
+      r.ok(S.getAt('rooms/700002') && ageBoundReal(S, '700002'), `${tag}: الحديثة باقية بتذكرتها`);
       r.ok(S.denied.length === 0, `${tag}: لا رفض من القواعد` + (S.denied[0] ? `: ${JSON.stringify(S.denied[0])}` : ''));
     } finally { S.close(); }
   }

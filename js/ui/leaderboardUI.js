@@ -1,7 +1,7 @@
 // 📄 ui/leaderboardUI.js
 // لوحة المتصدرين
-import { getLeaderboard } from "../leaderboard.js?v=1795432663";
-import { asText, firstInitial, safeImageSrc } from "./safeText.js?v=1795432663";
+import { getLeaderboard } from "../leaderboard.js?v=1795741688";
+import { asText, firstInitial, safeImageSrc } from "./safeText.js?v=1795741688";
 
 export function initLeaderboardUI() {
   const leaderboardBtn      = document.getElementById("leaderboard-btn");

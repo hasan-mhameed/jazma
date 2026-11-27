@@ -15,6 +15,7 @@
 //    (منطقي) وorderByChild وstartAt وendAt وequalTo وlimitToFirst وlimitToLast (null حين لا تُضبط). قراءة بلا استعلام = كلها
 //    null/false. ومقارنة null برقم في Firebase ليست true (أنواع مختلفة) بينما JS يجعل null <= 10 صحيحاً — فقواعدنا تكتب
 //    "!= null &&" قبل كل مقارنة حدّ، والمحرّك يرفض قاعدة قراءة تقارن query.* بلا هذا الفحص (حارس أدناه).
+//  • 3.3ج-5ج: child() بمسار من البيانات — غير النص الصالح خطأ (= رفض) كما في Firebase.
 // غير مغطّى (لا تستعمله قواعدنا): الأولويات، matches (التعابير النمطية).
 
 const parts = p => String(p ?? '').split('/').filter(Boolean);
@@ -60,7 +61,12 @@ export function applyWrite(root, path, value, now = Date.now()) {
 
 class RuleSnap {
   constructor(root, ps) { this._root = root; this._ps = ps; }
-  child(p) { return new RuleSnap(this._root, this._ps.concat(parts(String(p)))); }
+  // 3.3ج-5ج: child() بقيمة من البيانات (رقم الغرفة من ageCode، والتذكرة من roomAge): Firebase يخطئ (= رفض) حين لا تكون نصاً
+  // صالحاً — null أو رقم أو نص فارغ أو فيه . $ # [ ] — بينما String(null) هنا كان يعطي "null" فيمرّ ما يُرفض في الإنتاج
+  child(p) {
+    if (typeof p !== 'string' || !p || /[.$#\[\]\u0000-\u001f\u007f]/.test(p)) throw new Error('rulesEngine: child() بمسار غير صالح: ' + JSON.stringify(p));
+    return new RuleSnap(this._root, this._ps.concat(parts(p)));
+  }
   parent() { return new RuleSnap(this._root, this._ps.slice(0, -1)); }
   exists() { return getAt(this._root, this._ps) !== null; }
   val() { return clone(getAt(this._root, this._ps)); }
@@ -92,6 +98,18 @@ export const NO_QUERY = Object.freeze({ orderByKey: false, orderByValue: false, 
   startAt: null, endAt: null, equalTo: null, limitToFirst: null, limitToLast: null });
 // حارس: مقارنة حدّ على query.* بلا فحص null قبلها تمرّ هنا (JS: null <= 10) وتُرفض في Firebase — نرفض القاعدة نفسها
 function assertQueryGuards(expr) {
+  // فحص النشر الحقيقي (3.3ج-5ب، 2026-11-25): خادم Firebase يرفض وقت التنفيذ كل مقارنة ترتيب على حدود الاستعلام — حتى
+  // "query.endAt <= 99999999999999" (رقم ثابت) تُرفض، بينما "query.endAt != null" تُقبل. المحرّك هنا كان يقبلها (JS) فمرّت الفحوص
+  // ورُفضت القراءة في الإنتاج: نرفض القاعدة نفسها هنا
+  const rel = /query\.(startAt|endAt|equalTo)\s*(<=|>=|<|>)|(<=|>=|<|>)\s*query\.(startAt|endAt|equalTo)/;
+  if (rel.test(expr)) throw new Error(`rulesEngine: مقارنة ترتيب على حدّ استعلام (${expr.match(rel)[0]}) — يرفضها خادم Firebase الحقيقي دائماً`);
+  // Firebase يرفض حفظ القواعد إن قورن query.orderByChild بنصّ ليس مسار ابن صالحاً ("Invalid == expression: right operand must be
+  // an ordering or string literal" — كشفه النشر الحقيقي لـ'.value'، 3.3ج-5ب): نرفضه هنا قبل أن يصل الكونسول
+  const ob = /query\.orderByChild\s*={2,3}\s*'([^']*)'/g;
+  let o;
+  while ((o = ob.exec(expr))) {
+    if (!o[1] || /^[.$]|[.#$\[\]]/.test(o[1])) throw new Error(`rulesEngine: query.orderByChild يُقارن بمسار غير صالح '${o[1]}' — Firebase يرفض حفظ القواعد`);
+  }
   const re = /query\.(limitToFirst|limitToLast|startAt|endAt|equalTo)\s*(<=|>=|<|>)/g;
   let m;
   while ((m = re.exec(expr))) {

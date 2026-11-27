@@ -3,7 +3,7 @@ import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/fir
 import { getDatabase, ref, set, get, onValue, update, onDisconnect, remove, off, runTransaction, onChildAdded, push, serverTimestamp,
          query, orderByChild, orderByValue, limitToFirst, startAt, endAt }
                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getCurrentUser }   from "./auth.js?v=1795432663";
+import { getCurrentUser }   from "./auth.js?v=1795741688";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDnPrPobXSL8vc7Cr_AAVO6K03sc7gAgWA",
@@ -62,8 +62,9 @@ function isOrphanRoomNode(room) {
 //  • فهرس الغرف المفتوحة: openRooms/<النوع>/<الحجم>/<الرمز> = { t: وقت الخادم، u: المنشئ } — النوع "d" للثنائي و"m<العدد>"
 //    للجماعي. يكتبه منشئ الغرفة العامة المنتظرة وحده ومعها في كتابة واحدة، ويُمحى عند الانضمام والبدء والإلغاء والانقطاع،
 //    وأي أحد يمحو مدخلاً غرفته لم تعد مفتوحة (القواعد). البحث يقرأه باستعلام وحيد تسمح به القواعد: الأقدم أولاً وبحدّ.
-//  • أعمار الغرف: roomAge/<الرمز> = وقت الإنشاء، لكل غرفة في كتابة إنشائها — التنظيف منه، ولا يُظهر إلا ما تجاوز الساعة
-//    (لا تُكشف أرقام الغرف الخاصة). والغرفة نفسها تُقرأ برقمها فقط (انضمام ومشاهدة) — جذر الغرف مقفل عن القراءة.
+//  • أعمار الغرف (3.3ج-5ج): لكل غرفة في كتابة إنشائها "تذكرة" عشوائية — ageList/<التذكرة> = وقت الإنشاء (يقرؤه التنظيف،
+//    بلا أرقام غرف)، وageCode/<التذكرة> = رقم الغرفة (لا يُقرأ إلا وعمرها فوق ساعة)، وroomAge/<الرمز> = { t، k: التذكرة } يربط
+//    الغرفة بتذكرتها ولا يُقرأ — فلا تُكشف أرقام الغرف الخاصة. والغرفة نفسها تُقرأ برقمها فقط (انضمام ومشاهدة).
 const OPEN_LIMIT = 10;                 // حدّ القواعد لقراءة الفهرس
 const JOIN_TRIES = 5;                  // غرف نجرّب دخولها في البحث الواحد
 const ROOM_TTL   = 60 * 60 * 1000;     // عمر الغرفة قبل تنظيفها (كما في القواعد)
@@ -71,6 +72,17 @@ const DUO_KIND   = "d";
 const multiKind  = (max) => "m" + max;
 const openPath   = (kind, rows, code) => `openRooms/${kind}/${rows}/${code}`;
 const openEntry  = (uid) => ({ t: serverTimestamp(), u: uid });
+// 3.3ج-5ج: التذكرة 30 حرفاً ست عشرية عشوائية (لا تُخمَّن — فلا يحجز غريبٌ تذكرة غيره مسبقاً)، جديدة لكل إنشاء أو إعادة
+function newAgeTok() {
+  try { const b = new Uint8Array(15); crypto.getRandomValues(b); return Array.from(b, x => x.toString(16).padStart(2, "0")).join(""); }
+  catch { let t = ""; while (t.length < 30) t += Math.random().toString(16).slice(2); return t.slice(0, 30); }
+}
+// مسارات العمر الثلاثة لغرفة — تُكتب مع الغرفة نفسها في كتابة واحدة (القواعد تربطها: التذكرة جديدة ووقتها وقت الخادم بالضبط)
+function ageWrites(code, tok = newAgeTok()) {
+  return { [`roomAge/${code}`]: { t: serverTimestamp(), k: tok }, [`ageList/${tok}`]: serverTimestamp(), [`ageCode/${tok}`]: code };
+}
+// محو تذكرة (نصفاها معاً — القواعد لا تسمح بغير ذلك، ولا بمحوها ما دامت تذكرة غرفتها)
+const agePairNull = (tok) => (tok ? { [`ageList/${tok}`]: null, [`ageCode/${tok}`]: null } : {});
 // وقت الخادم كما يقدّره الجهاز — استعلام التنظيف يُسمح له بما تجاوز الساعة بساعة الخادم لا بساعة الجهاز.
 // المستمع يبدأ عند أول تنظيف لا عند تحميل الوحدة (لا اتصال بالخادم قبل أن تحتاجه الصفحة)
 let _srvOffset = 0, _srvOffsetPromise = null;
@@ -134,28 +146,44 @@ function dropOpenEntry(kind, rows, code) {
   try { remove(ref(db, openPath(kind, rows, code))).catch(() => {}); } catch {}
 }
 
-// ── تنظيف الغرف القديمة (أكثر من ساعة) — من أعمار الغرف لا من شجرتها (3.3ج-5ب) ──
-// الغرفة وعمرها يُمحيان معاً (القواعد: الغرفة أقدم من ساعة، والعمر لا يُمحى وغرفته باقية). كان المسح الكامل يمسح أيضاً
-// المنتهية واللوبي الفارغ فوراً: اللوبي الفارغ يمسحه الآن من يصادفه في البحث، والمنتهية تُمسح بعد ساعة.
+// ── تنظيف الغرف القديمة (أكثر من ساعة) — من أعمار الغرف لا من شجرتها (3.3ج-5ب)، بالتذاكر (3.3ج-5ج) ──
+// الأقدم أولاً من ageList (تذاكر وأوقات فقط)، ثم رقم الغرفة من ageCode (القواعد لا تسمح به إلا بعد ساعة)، ثم الغرفة وعمرها
+// وتذكرتها تُمحى معاً. كان المسح الكامل يمسح أيضاً المنتهية واللوبي الفارغ فوراً: اللوبي الفارغ يمسحه الآن من يصادفه في
+// البحث، والمنتهية تُمسح بعد ساعة.
 const CLEAN_PAGE = 20, CLEAN_PAGES = 5;
 export async function cleanupOldRooms() {
   try {
     const known = await Promise.race([serverOffsetReady(), new Promise(res => setTimeout(() => res(false), 10000))]);
-    if (!known) return;                      // بلا وقت الخادم قد يتجاوز الاستعلام حدّه فيُرفض — المرة القادمة
-    // صفحات متتالية ما دامت ممتلئة وكلها مُسحت (مراجعة ج-5ب، L2): كل غرفة تترك عمراً، فلا يتراكم ما لا يُمسح
+    if (!known) return;                      // بلا وقت الخادم قد نطلب رقم غرفة قبل ساعتها فيُرفض — المرة القادمة
+    // صفحات متتالية ما دامت ممتلئة وكلها مُسحت (مراجعة ج-5ب، L2): كل غرفة تترك تذكرة، فلا يتراكم ما لا يُمسح
     for (let p = 0; p < CLEAN_PAGES; p++) {
       let snap;
       try {
-        snap = await get(query(ref(db, "roomAge"), orderByValue(), endAt(srvNow() - ROOM_TTL - 120000), limitToFirst(CLEAN_PAGE)));
+        snap = await get(query(ref(db, "ageList"), orderByValue(), endAt(srvNow() - ROOM_TTL - 120000), limitToFirst(CLEAN_PAGE)));
       } catch (e) { warnOnce("أعمار الغرف", e); return; }
       if (!snap.exists()) return;
-      const keys = [];
-      snap.forEach(ch => { keys.push(ch.key); });
-      const done = await Promise.all(keys.map(k =>
-        update(ref(db), { [`rooms/${k}`]: null, [`roomAge/${k}`]: null }).then(() => true, () => false)));
-      if (keys.length < CLEAN_PAGE || done.some(ok => !ok)) return;
+      const toks = [];
+      snap.forEach(ch => { toks.push({ tok: ch.key, t: Number(ch.val()) || 0 }); });
+      const done = await Promise.all(toks.map(cleanAgeTok));
+      if (toks.length < CLEAN_PAGE || done.some(ok => !ok)) return;
     }
   } catch { /* صامت */ }
+}
+// تذكرة قديمة: تُمحى مع غرفتها وعمرها — أو وحدها إن لم تعد تذكرة غرفتها (الغرفة أُعيدت بتذكرة جديدة، أو رقمها أُعيد
+// استعماله؛ القواعد لا تسمح بمحو تذكرة ما زالت تذكرة غرفتها، ولا بمحو غرفة حديثة). أيّهما أولاً من وقت إنشاء الغرفة الحالية
+// (ورقة واحدة — لا تُنزَّل الغرفة): أحدث من التذكرة = ليست تذكرتها. فلا رفض في المعتاد، والثانية احتياط (وقت إنشاء دُفع للأمام)
+async function cleanAgeTok({ tok, t }) {
+  let code;
+  try { code = (await get(ref(db, `ageCode/${tok}`))).val(); } catch { return false; }
+  const pair = { [`ageList/${tok}`]: null, [`ageCode/${tok}`]: null };
+  if (typeof code !== "string" || !code) return update(ref(db), pair).then(() => true, () => false);   // بقايا بلا رقم
+  let born = null;
+  try { born = (await get(ref(db, `rooms/${code}/createdAt`))).val(); } catch {}
+  const full = { [`rooms/${code}`]: null, [`roomAge/${code}`]: null, ...pair };
+  for (const w of (typeof born === "number" && born > t ? [pair, full] : [full, pair])) {
+    try { await update(ref(db), w); return true; } catch (e) { if (!isDenied(e)) return false; }
+  }
+  return false;
 }
 
 export class OnlineManager {
@@ -191,6 +219,7 @@ export class OnlineManager {
     this._reopeningCode = null; // إعادة فتح غرفتي جارية (منضمّ ألغى بحثه بلحظة انضمامه)
     this._duoHostData = null;   // بيانات إنشاء غرفتي المنتظرة — لإعادتها إن اختفت وأنا أنتظر فيها
     this._restoringCode = null; // إعادة غرفتي المختفية جارية
+    this._ageTok = null;        // 3.3ج-5ج: تذكرة عمر غرفتي الثنائية المنتظرة { code, tok } — تُمحى مع الإعادة والإلغاء
   }
 
   // ══ إنشاء غرفة ══════════════════════════════════════════════
@@ -212,6 +241,8 @@ export class OnlineManager {
         p1name:    name,
         p1uid:     getCurrentUser()?.uid || "",
       };
+      const ageTok = newAgeTok();
+      this._ageTok = { code, tok: ageTok };
       try {
         // 3.3ج-5ب: الغرفة وعمرها (للتنظيف) في كتابة واحدة
         await update(ref(db), {
@@ -225,7 +256,7 @@ export class OnlineManager {
             createdAt: serverTimestamp(),
             move:      { key: "", by: 0, seq: 0 },
           },
-          [`roomAge/${code}`]: serverTimestamp(),
+          ...ageWrites(code, ageTok),
         });
         break;
       } catch (e) {
@@ -353,6 +384,8 @@ export class OnlineManager {
       try { onDisconnect(ref(db, openP)).remove().catch(() => {}); } catch {}
       this._duoHostData = { cfg: { rows: cfg.rows, cols: cfg.cols }, public: true, p1name: name, p1uid: myUid };
       this._openEntry = { kind: DUO_KIND, rows: cfg.rows, code };
+      const ageTok = newAgeTok();
+      this._ageTok = { code, tok: ageTok };
       try {
         // الغرفة وعمرها ومدخلها في الفهرس في كتابة واحدة (3.3ج-5ب) — لا غرفة عامة لا يجدها أحد، ولا مدخل بلا غرفة
         await update(ref(db), {
@@ -366,7 +399,7 @@ export class OnlineManager {
             createdAt: serverTimestamp(),
             move:      { key: "", by: 0, seq: 0 },
           },
-          [`roomAge/${code}`]: serverTimestamp(),
+          ...ageWrites(code, ageTok),
           [openP]: openEntry(myUid),
         });
         break;
@@ -498,6 +531,11 @@ export class OnlineManager {
     });
     task.then(res => {
       if (res) { try { onDisconnect(ref(db, `rooms/${code}`)).cancel().catch(() => {}); } catch {} }
+      // 3.3ج-5ج: غرفتي حُذفت فعلاً — عمرها وتذكرتها معها (كانت تبقى ساعة حتى ينظّفها غيري)
+      if (res && res.committed && res.snapshot && res.snapshot.val() === null && this._ageTok && this._ageTok.code === code) {
+        const tok = this._ageTok.tok; this._ageTok = null;
+        try { update(ref(db), { [`roomAge/${code}`]: null, ...agePairNull(tok) }).catch(() => {}); } catch {}
+      }
     }).catch(() => {});
     return task;
   }
@@ -577,7 +615,16 @@ export class OnlineManager {
       // 3.3ج-5ب: أُعيدت غرفتي — عمرها الجديد (للتنظيف)، ومدخلها في الفهرس إن كانت عامة
       const v = res && res.committed && res.snapshot ? res.snapshot.val() : null;
       // العمر لكل إعادة اعتُمدت (مراجعة ج-5ب M1): تنظيفٌ مسح عمرها القديم في الأثناء كان يتركها بلا عمر للأبد
-      if (v && v.p1uid === data.p1uid) { try { set(ref(db, `roomAge/${code}`), serverTimestamp()).catch(() => {}); } catch {} }
+      // 3.3ج-5ج: بتذكرة جديدة، والقديمة تُمحى في الكتابة نفسها (مراجعة ج-5ج L1): كانت تبقى فيُقرأ رقمها بعد ساعة من
+      // الإنشاء الأول — والغرفة المُعادة "حديثة" لا تُنظَّف بعد، فيسبق غريبٌ صديقك إليها
+      if (v && v.p1uid === data.p1uid) {
+        const prev = this._ageTok && this._ageTok.code === code ? this._ageTok.tok : null;
+        const tok = newAgeTok();
+        try {
+          update(ref(db), { ...ageWrites(code, tok), ...agePairNull(prev !== tok ? prev : null) })
+            .then(() => { if (!this._ageTok || this._ageTok.code === code) this._ageTok = { code, tok }; }, () => {});
+        } catch {}
+      }
       if (v && v.status === "waiting" && this._stillHostingDuo(code) && data.public) this._putMyOpen(DUO_KIND, data.cfg.rows, code);
     } catch {} finally { if (this._restoringCode === code) this._restoringCode = null; }
   }
@@ -821,7 +868,7 @@ export class OnlineManager {
             move:       { key: "", by: 0, seq: 0 },
             createdAt:  serverTimestamp(),
           },
-          [`roomAge/${code}`]: serverTimestamp(),
+          ...ageWrites(code),
         });
         break;
       } catch (e) {

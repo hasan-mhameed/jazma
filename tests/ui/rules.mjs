@@ -558,11 +558,15 @@ export function rulesMatrix() {
     ix.openRooms = { d: { 4: { '111111': { t: T0, u: 'A' }, '222222': { t: T0, u: 'A' }, '999999': { t: T0, u: 'A' },
       '121212': { t: NOWX - HOUR - 1000, u: 'A' } }, 5: { '111111': { t: T0, u: 'A' } } },
       m3: { 4: { '333333': { t: T0, u: 'A' }, '141414': { t: T0, u: 'A' }, '474747': { t: T0, u: 'A' } } } };
-    ix.roomAge = { '111111': T0, '222222': T0, '333333': T0, '999999': T0, '131313': T0 - HOUR - 120_000, '484848': T0 - HOUR - 120_000 };
+    // 3.3ج-5ج: العمر { t، k: التذكرة } مع تذكرته في ageList وageCode
+    const ages = { '111111': T0, '222222': T0, '333333': T0, '999999': T0, '131313': T0 - HOUR - 120_000, '484848': T0 - HOUR - 120_000 };
+    ix.roomAge = {}; ix.ageList = {}; ix.ageCode = {};
+    for (const [c, t] of Object.entries(ages)) { ix.roomAge[c] = { t, k: 'old' + c }; ix.ageList['old' + c] = t; ix.ageCode['old' + c] = c; }
     const X = (uid, writes) => checkWrite(NEW, writes, { uid, root: ix, now: NOWX }).ok;
     const QR = (uid, p, query) => canRead(NEW, p, { uid, root: ix, now: NOWX, query });
     const E = (u = 'A', extra = {}) => ({ t: SV, u, ...extra });
-    // القراءة: الفهرس باستعلام الأقدم أولاً وبحدّ 10 فقط؛ الأعمار بما تجاوز الساعة وبحدّ 20 فقط
+    const AG = (code, tok = 'tk' + code) => [['roomAge/' + code, { t: SV, k: tok }], ['ageList/' + tok, SV], ['ageCode/' + tok, code]];   // 3.3ج-5ج
+    // القراءة: الفهرس باستعلام الأقدم أولاً وبحدّ 10 فقط (الأعمار: قسم 5ج أدناه)
     r.ok(QR('V', 'openRooms/d/4', { orderByChild: 't', limitToFirst: 10 }) && QR('V', 'openRooms/m3/4', { orderByChild: 't', limitToFirst: 5 }),
       '5ب: قراءة الفهرس باستعلامه المسموح رُفضت');
     r.ok(!QR('V', 'openRooms', null) && !QR('V', 'openRooms/d', null) && !QR('V', 'openRooms/d/4', null)
@@ -570,14 +574,9 @@ export function rulesMatrix() {
       && !QR('V', 'openRooms/d/4', { orderByChild: 't', limitToLast: 10 }) && !QR('V', 'openRooms/d/4', { orderByChild: 't' })
       && !QR(null, 'openRooms/d/4', { orderByChild: 't', limitToFirst: 10 }),
       '5ب: الفهرس يُقرأ كاملاً أو بلا حدّ أو بحدّ أكبر أو بترتيب آخر أو لزائر');
-    r.ok(QR('V', 'roomAge', { orderByValue: true, limitToFirst: 20, endAt: NOWX - HOUR - 1 }), '5ب: قراءة الأعمار القديمة باستعلامها رُفضت');
-    r.ok(!QR('V', 'roomAge', null) && !QR('V', 'roomAge', { orderByValue: true, limitToFirst: 20, endAt: NOWX - 1000 })
-      && !QR('V', 'roomAge', { orderByValue: true, limitToFirst: 21, endAt: NOWX - HOUR - 1 }) && !QR('V', 'roomAge', { orderByValue: true, limitToFirst: 20 })
-      && !QR('V', 'roomAge', { orderByChild: 't', limitToFirst: 20, endAt: NOWX - HOUR - 1 }) && !QR('V', 'roomAge/111111', null),
-      '5ب: الأعمار تُقرأ كاملة أو بغرف حديثة (تكشف أرقام الغرف الخاصة) أو بلا حدّ');
     // الكتابة: الغرفة وعمرها ومدخلها معاً من منشئها
-    r.ok(X('A', [['rooms/444444', pubDuo], ['roomAge/444444', SV], ['openRooms/d/4/444444', E()]])
-      && X('A', [['rooms/444444', duoWaiting], ['roomAge/444444', SV]]) && X('A', [['rooms/444444', lobby], ['roomAge/444444', SV]]),
+    r.ok(X('A', [['rooms/444444', pubDuo], ...AG('444444'), ['openRooms/d/4/444444', E()]])
+      && X('A', [['rooms/444444', duoWaiting], ...AG('444444')]) && X('A', [['rooms/444444', lobby], ...AG('444444')]),
       '5ب: إنشاء الغرفة مع عمرها (ومدخلها إن كانت عامة) رُفض');
     r.ok(X('A', [['rooms/333333/public', true], ['openRooms/m3/4/333333', E()]]) && X('A', [['openRooms/d/4/111111', E()]]),
       '5ب: مدخل غرفتي المفتوحة (أو تحديثه) رُفض');
@@ -603,15 +602,15 @@ export function rulesMatrix() {
     // (مراجعة ج-5ب H1) "مفتوحة" في القواعد = يدخلها الباحث فعلاً: الحجم يطابق المسار، والعدد يطابق النوع، وللثنائية اسم منشئ —
     // فلا مدخل لا يُدخل ولا يُمحى (يحجب الحجم كله)، ومدخلٌ لا يطابق (من قبل) يمحوه أي أحد
     const noName = { ...pubDuo }; delete noName.p1name;
-    r.ok(!X('A', [['rooms/444444', pubDuo], ['roomAge/444444', SV], ['openRooms/d/5/444444', E()]])
-      && !X('A', [['rooms/444444', noName], ['roomAge/444444', SV], ['openRooms/d/4/444444', E()]])
-      && !X('A', [['rooms/444444', { ...pubLobby, maxPlayers: 4 }], ['roomAge/444444', SV], ['openRooms/m3/4/444444', E()]])
-      && X('A', [['rooms/444444', { ...pubLobby, maxPlayers: 4 }], ['roomAge/444444', SV], ['openRooms/m4/4/444444', E()]]),
+    r.ok(!X('A', [['rooms/444444', pubDuo], ...AG('444444'), ['openRooms/d/5/444444', E()]])
+      && !X('A', [['rooms/444444', noName], ...AG('444444'), ['openRooms/d/4/444444', E()]])
+      && !X('A', [['rooms/444444', { ...pubLobby, maxPlayers: 4 }], ...AG('444444'), ['openRooms/m3/4/444444', E()]])
+      && X('A', [['rooms/444444', { ...pubLobby, maxPlayers: 4 }], ...AG('444444'), ['openRooms/m4/4/444444', E()]]),
       '5ب: مدخل بحجم لا يطابق غرفته، أو لثنائية بلا اسم منشئ، أو لوبي 4 تحت نوع 3 — قُبل (أو المطابق رُفض)');
     // (مراجعة R1) غرفة "تنتظر" بعلامة نهاية أو مقاعد جماعية لا يدخلها أحد (قاعدة الانضمام) — فلا مدخل لها، ومدخلها القديم يمحوه أي أحد
     const marked = ['leftBy', 'abortedBy', 'dropped1', 'dropped2'].map(f => ({ ...pubDuo, [f]: f === 'leftBy' || f === 'abortedBy' ? 1 : true }))
       .concat([{ ...pubDuo, players: { A: { name: 'أ', num: 1, active: true } } }]);
-    r.ok(marked.every(rm => !X('A', [['rooms/444444', rm], ['roomAge/444444', SV], ['openRooms/d/4/444444', E()]])),
+    r.ok(marked.every(rm => !X('A', [['rooms/444444', rm], ...AG('444444'), ['openRooms/d/4/444444', E()]])),
       '5ب: مدخل لغرفة "تنتظر" بعلامة نهاية أو مقاعد جماعية (لا يدخلها أحد) قُبل');
     r.ok(marked.every(rm => { const b = JSON.parse(JSON.stringify(ix)); b.rooms['454545'] = rm; b.openRooms.d[4]['454545'] = { t: T0, u: 'A' };
       return checkWrite(NEW, [['openRooms/d/4/454545', null]], { uid: 'V', root: b, now: NOWX }).ok; }),
@@ -619,19 +618,101 @@ export function rulesMatrix() {
     r.ok(X('V', [['openRooms/d/5/111111', null]]) && X('V', [['openRooms/m3/4/474747', null]]),
       '5ب: محو مدخل لا يطابق غرفته (حجماً أو عدداً) رُفض لغير صاحبه');
     // (مراجعة M1) غرفة دفع أحدٌ وقت إنشائها للأمام وعمرها أقدم من ساعة: تُمحى مع عمرها (لا يتعطّل التنظيف)
-    r.ok(X('V', [['rooms/484848', null], ['roomAge/484848', null]]), '5ب: غرفة عمرها أقدم من ساعة لا تُمحى لأن وقت إنشائها دُفع للأمام');
+    r.ok(X('V', [['rooms/484848', null], ['roomAge/484848', null]]) && X('V', [['rooms/484848', null], ['roomAge/484848', null], ['ageList/old484848', null], ['ageCode/old484848', null]]),
+      '5ب: غرفة عمرها أقدم من ساعة لا تُمحى لأن وقت إنشائها دُفع للأمام');
     // (مراجعة L3) المنضمّ للوبي عام لا يخفيه (لا يغيّر "عامة")
     const withV = (pub) => ({ ...pubLobby, ...(pub === undefined ? {} : { public: pub }), players: { ...pubLobby.players, V: { name: 'ض', num: 2, active: true } }, playerCount: 2 });
     r.ok(X('V', [['rooms/333333', withV()]]) && !X('V', [['rooms/333333', withV(false)]]),
       '5ب: الانضمام للوبي عام رُفض، أو قُبل مع إخفائه (public:false)');
     // الأعمار: يكتبها لاعب في الغرفة بوقت الخادم؛ وتُمحى فقط مع غرفتها أو بعدها
-    r.ok(X('A', [['roomAge/111111', SV]]) && X('B', [['roomAge/222222', SV]]) && X('V', [['roomAge/999999', null]])
+    r.ok(X('A', AG('111111')) && X('B', AG('222222')) && X('V', [['roomAge/999999', null]])
       && X('V', [['rooms/131313', null], ['roomAge/131313', null]]),
       '5ب: عمر يكتبه لاعب الغرفة، أو محو عمر بلا غرفة، أو غرفة قديمة مع عمرها — رُفض');
-    r.ok(!X('V', [['roomAge/111111', SV]]) && !X('A', [['roomAge/111111', 5]]) && !X('A', [['roomAge/555555', SV]])
+    r.ok(!X('V', AG('111111')) && !X('A', [['roomAge/111111', 5]]) && !X('A', AG('555555'))
       && !X('A', [['roomAge/111111', null]]) && !X('V', [['roomAge/222222', null]]) && !X('V', [['rooms/222222', null], ['roomAge/222222', null]])
       && !X('A', [['roomAge/111111', { t: SV }]]),
       '5ب: عمر من غريب، أو بوقت مصطنع، أو لغرفة غير موجودة، أو محو عمر غرفة باقية، أو غرفة حديثة مع عمرها، أو كائن — قُبل');
+  }
+  // ── 3.3ج-5ج: أعمار الغرف بتذاكر — القائمة بلا أرقام غرف، والرقم لا يُقرأ إلا بعد ساعة، والتذكرة مربوطة بغرفتها واحداً لواحد ──
+  {
+    const NOWX = T0 + 60_000, HOUR = 3_600_000, OLD = NOWX - HOUR - 120_000;
+    const g = withRooms({ '111111': duoWaiting, '222222': duoPlaying, '333333': lobby, '444444': duoWaiting,
+      '555555': { ...duoPlaying, createdAt: OLD }, '666666': { ...duoPlaying, createdAt: NOWX }, '121212': duoWaiting });
+    // 111111 حديثة بتذكرتها tA؛ 555555 قديمة (tOld)؛ 444444 أُعيدت بتذكرة جديدة tNew وبقيت القديمة tStale؛ 666666 دُفع وقت
+    // إنشائها للأمام وعمرها قديم (tPush)؛ 777777 مُسحت وبقي عمرها وتذكرتها (tGone)؛ tOrphan في القائمة بلا رقم؛ tEdge على حدّ الساعة
+    g.roomAge = { '111111': { t: T0, k: 'tA' }, '555555': { t: OLD, k: 'tOld' }, '444444': { t: T0, k: 'tNew' },
+      '666666': { t: OLD, k: 'tPush' }, '777777': { t: OLD, k: 'tGone' }, '121212': { t: OLD, k: 'tLost' } };   // tLost: حالة لا تُبلغ (دفاع)
+    g.ageList = { tA: T0, tOld: OLD, tNew: T0, tStale: OLD, tPush: OLD, tGone: OLD, tOrphan: OLD, tEdge: NOWX - HOUR, tEdge1: NOWX - HOUR - 1 };
+    g.ageCode = { tA: '111111', tOld: '555555', tNew: '444444', tStale: '444444', tPush: '666666', tGone: '777777', tEdge: '111111', tEdge1: '111111',
+      tOrphC: '111111' };   // tOrphC: رقم بلا وقت (حالة لا تُبلغ — دفاع)
+    const X = (uid, writes, root = g) => checkWrite(NEW, writes, { uid, root, now: NOWX }).ok;
+    const QR = (uid, p, query = null) => canRead(NEW, p, { uid, root: g, now: NOWX, query });
+    const AGE = (code, tok) => [['roomAge/' + code, { t: SV, k: tok }], ['ageList/' + tok, SV], ['ageCode/' + tok, code]];
+    const PAIR = (tok) => [['ageList/' + tok, null], ['ageCode/' + tok, null]];
+    const GONE = (code, tok) => [['rooms/' + code, null], ['roomAge/' + code, null], ...PAIR(tok)];
+    // القراءة: القائمة باستعلام الأقدم أولاً وبحدّ 20 فقط (تذاكر وأوقات)؛ العمر نفسه لا يُقرأ؛ الرقم بعد ساعة فقط
+    r.ok(QR('V', 'ageList', { orderByValue: true, limitToFirst: 20, endAt: NOWX - HOUR }) && QR('V', 'ageList', { orderByValue: true, limitToFirst: 5 }),
+      '5ج: قراءة قائمة الأعمار باستعلامها رُفضت');
+    r.ok(!QR('V', 'ageList') && !QR('V', 'ageList', { orderByValue: true, limitToFirst: 21 }) && !QR('V', 'ageList', { orderByValue: true })
+      && !QR('V', 'ageList', { orderByKey: true, limitToFirst: 20 }) && !QR('V', 'ageList', { orderByChild: 't', limitToFirst: 20 })
+      && !QR(null, 'ageList', { orderByValue: true, limitToFirst: 20 }) && !QR('V', 'ageList/tA'),
+      '5ج: قائمة الأعمار تُقرأ كاملة أو بلا حدّ أو بحدّ أكبر أو بترتيب آخر أو لزائر');
+    r.ok(!QR('V', 'roomAge') && !QR('V', 'roomAge', { orderByValue: true, limitToFirst: 20 }) && !QR('A', 'roomAge/111111')
+      && !QR('V', 'roomAge/555555') && !QR('V', 'ageCode'),
+      '5ج: العمر (بأرقام الغرف) أو شجرة الأرقام تُقرأ');
+    r.ok(QR('V', 'ageCode/tOld') && QR('V', 'ageCode/tStale') && QR('V', 'ageCode/tEdge1') && QR('V', 'ageCode/tOrphan'),
+      '5ج: رقم غرفة تذكرتها أقدم من ساعة لا يُقرأ (التنظيف يتعطّل)');
+    r.ok(!QR('V', 'ageCode/tA') && !QR('A', 'ageCode/tA') && !QR('V', 'ageCode/tNew') && !QR('V', 'ageCode/tEdge')
+      && !QR('V', 'ageCode/tMissing') && !QR(null, 'ageCode/tOld'),
+      '5ج: رقم غرفة حديثة (أقل من ساعة) يُقرأ، أو بلا تذكرة، أو لزائر');
+    // الإنشاء: الغرفة والعمر والتذكرة في كتابة واحدة من منشئها
+    r.ok(X('A', [['rooms/888888', duoWaiting], ...AGE('888888', 'tN1')]) && X('A', [['rooms/888888', lobby], ...AGE('888888', 'tN1')])
+      && X('A', [['rooms/888888', { ...duoWaiting, public: true }], ...AGE('888888', 'tN1'), ['openRooms/d/4/888888', { t: SV, u: 'A' }]])
+      && X('A', [['rooms/888888', duoWaiting], ...AGE('888888', 'y'.repeat(32))]),
+      '5ج: إنشاء الغرفة مع عمرها وتذكرتها رُفض');
+    r.ok(!X('A', [['rooms/888888', duoWaiting], ['roomAge/888888', { t: SV, k: 'tN1' }]])
+      && !X('A', [['rooms/888888', duoWaiting], ['roomAge/888888', { t: SV, k: 'tN1' }], ['ageList/tN1', SV]])
+      && !X('A', [['rooms/888888', duoWaiting], ['roomAge/888888', { t: SV, k: 'tN1' }], ['ageCode/tN1', '888888']])
+      && !X('A', [['rooms/888888', duoWaiting], ['roomAge/888888', SV]]),
+      '5ج: عمر بلا تذكرة كاملة (أو بالشكل القديم) قُبل — غرفة لا يجدها التنظيف');
+    r.ok(!X('A', [['rooms/888888', duoWaiting], ['roomAge/888888', { t: SV, k: 'tN1' }], ['ageList/tN1', SV], ['ageCode/tN1', '111111']])
+      && !X('A', [['rooms/888888', duoWaiting], ['roomAge/888888', { t: SV, k: 'tN1' }], ['ageList/tN1', 5], ['ageCode/tN1', '888888']])
+      && !X('A', [['rooms/888888', duoWaiting], ['roomAge/888888', { t: 5, k: 'tN1' }], ['ageList/tN1', SV], ['ageCode/tN1', '888888']])
+      && !X('A', [['rooms/888888', duoWaiting], ['roomAge/888888', { t: SV, k: 'tN1' }], ['ageList/tN1', SV], ['ageCode/tN1', 888888]])
+      && !X('A', [['rooms/888888', duoWaiting], ['roomAge/888888', { t: SV, k: 'tN1', x: 1 }], ['ageList/tN1', SV], ['ageCode/tN1', '888888']])
+      && !X('A', [['rooms/888888', duoWaiting], ...AGE('888888', 'z'.repeat(33))]),
+      '5ج: تذكرة لرقم آخر، أو بوقت مصطنع، أو رقم ليس نصاً، أو حقل غريب، أو تذكرة فوق 32 — قُبلت');
+    r.ok(!X('A', [['rooms/888888', duoWaiting], ...AGE('888888', 'tOrphan')]) && !X('A', [['rooms/888888', duoWaiting], ...AGE('888888', 'tA')])
+      && !X('A', [['rooms/888888', duoWaiting], ['roomAge/888888', { t: SV, k: 'tA' }], ['ageList/tN1', SV], ['ageCode/tN1', '888888']])
+      && !X('A', [['rooms/888888', duoWaiting], ...AGE('888888', 'tN1'), ['ageList/tN2', SV], ['ageCode/tN2', '888888']]),
+      '5ج: تذكرة قائمة تُستعمل لغرفة أخرى، أو عمر يشير لتذكرة غيره، أو تذكرتان لغرفة واحدة — قُبل');
+    // (طفرات) تذكرة واحدة لغرفتين (الثانية لا يجدها التنظيف)، ورقم بلا وقت (بقايا لا تُمحى)، ودفاع عن حالتين لا تُبلغان
+    r.ok(!X('A', [['roomAge/111111', { t: SV, k: 'tS' }], ['roomAge/444444', { t: SV, k: 'tS' }], ['ageList/tS', SV], ['ageCode/tS', '111111']]),
+      '5ج: تذكرة واحدة لغرفتين قُبلت');
+    r.ok(!X('V', [['ageCode/tJunk', '111111']]) && !X('A', [['ageCode/tJunk', '111111']]), '5ج: رقم بلا وقته (بقايا لا تُقرأ ولا تُمحى) يُكتب');
+    r.ok(!X('A', [['ageList/tLost', SV], ['ageCode/tLost', '121212']]) && !X('A', [...AGE('444444', 'tOrphC')]),
+      '5ج: تذكرة بلا عمر جديد، أو رقم قائم يُعاد ربطه — قُبل');
+    r.ok(!X('V', AGE('111111', 'tN1')) && !X('A', AGE('999998', 'tN1')) && !X('A', [['ageList/tN1', SV], ['ageCode/tN1', '111111']])
+      && !X('A', [['ageList/tN1', SV], ['ageCode/tN1', '999998']]),
+      '5ج: تذكرة لغرفة لست فيها، أو لغرفة غير موجودة، أو بلا عمر جديد — قُبلت');
+    // الإعادة (غرفة اختفت وأُعيدت): لاعب الغرفة يربطها بتذكرة جديدة، والقديمة تصير قابلة للمحو وحدها
+    r.ok(X('A', AGE('111111', 'tR')) && X('B', AGE('222222', 'tR')), '5ج: لاعب الغرفة لا يستطيع ربطها بتذكرة جديدة (الإعادة تفشل)');
+    {
+      const after = checkWrite(NEW, AGE('111111', 'tR'), { uid: 'A', root: g, now: NOWX }).newRoot;
+      r.ok(X('V', PAIR('tA'), after) && !X('V', PAIR('tR'), after), '5ج: بعد الإعادة، التذكرة القديمة لا تُمحى أو الجديدة تُمحى');
+    }
+    r.ok(!X('A', [['roomAge/111111', { t: SV, k: 'tOld' }]]) && !X('A', [['roomAge/111111/t', SV]]) && !X('A', [['ageCode/tA', '222222']])
+      && !X('A', [['ageList/tA', SV]]) && !X('A', [['ageList/tOld', SV]]),
+      '5ج: ربط غرفة بتذكرة قائمة، أو تجديد وقت العمر وحده، أو تغيير رقم تذكرة أو وقتها — قُبل');
+    // المحو: التذكرة مع غرفتها وعمرها، أو وحدها حين لم تعد تذكرة غرفتها
+    r.ok(X('V', GONE('555555', 'tOld')) && X('V', GONE('666666', 'tPush')) && X('V', GONE('777777', 'tGone'))
+      && X('A', GONE('111111', 'tA')) && X('V', PAIR('tStale')) && X('V', PAIR('tOrphan')) && X('V', [['ageList/tOrphan', null]]),
+      '5ج: تنظيف غرفة قديمة مع عمرها وتذكرتها، أو تذكرة لم تعد لغرفتها، أو بقايا — رُفض');
+    r.ok(!X('V', PAIR('tA')) && !X('A', PAIR('tA')) && !X('V', GONE('111111', 'tA')) && !X('V', [['roomAge/111111', null], ...PAIR('tA')])
+      && !X('V', PAIR('tGone')) && !X('V', PAIR('tNew')),
+      '5ج: تذكرة غرفة حيّة (أو غرفة حديثة) تُمحى — غرفة لا يجدها التنظيف');
+    r.ok(!X('V', [['ageList/tStale', null]]) && !X('V', [['ageCode/tStale', null]]) && !X('V', [['ageCode/tA', null]]),
+      '5ج: نصف تذكرة يُمحى (رقم بلا وقت يبقى للأبد، أو وقت بلا رقم)');
   }
   // ولماذا كان لا بدّ منها: القواعد السابقة ترفض الطلب والحذف والقبول
   r.ok(!W(OLD, 'A', [['users/B/friendRequests/A', { name: 'أ' }]]) && !W(OLD, 'A', [['users/B/friends/A', null]])
@@ -728,7 +809,9 @@ const sweepBase = () => {
         move: { key: '', by: 0, seq: 0 } },
     },
     openRooms: { d: { 4: { R2: { t: T - 1e5, u: 'A' } } } },
-    roomAge: { R1: T - 1e5, R2: T - 1e5, M1: T - 1e5 },
+    roomAge: { R1: { t: T - 1e5, k: 'tokR1' }, R2: { t: T - 1e5, k: 'tokR2' }, M1: { t: T - 1e5, k: 'tokM1' } },   // 3.3ج-5ج
+    ageList: { tokR1: T - 1e5, tokR2: T - 1e5, tokM1: T - 1e5 },
+    ageCode: { tokR1: 'R1', tokR2: 'R2', tokM1: 'M1' },
     invites: { B: { fromUid: 'A', fromName: 'أ', roomCode: 'R1', cfg: { rows: 4, cols: 4 }, sentAt: T - 1000 } },
     inviteRejections: { A: { rejectedBy: 'B', name: 'ب', roomCode: 'R1', ts: T - 1000, reason: 'rejected' } },
     dailyChallenges: { [SWEEP_DAY]: { results: { B: { result: 'win', myScore: 9, oppScore: 0, duration: 50, name: 'ب', ts: T - 1000 } } } },
@@ -741,7 +824,7 @@ export function rulesShapeSweep() {
   const base = sweepBase();
   // متغيّرات المسارات ← قيم قائمة في الشجرة (متغيّر جديد بلا قيمة هنا يأخذ X — يُمسح أيضاً)
   const sub = { $uid: 'A', $fromUid: 'C', $friendUid: 'B', $toUid: 'B', $ts: String(SWEEP_T - 5000), $key: 'vs_x', $opp: 'B', $ach: 'first_win',
-    $mid: 'm1', $code: 'R1', $msgid: 'm1', $date: SWEEP_DAY, $type: 'water', $cell: '0,0', $n: '1', $kind: 'd', $rows: '4' };
+    $mid: 'm1', $code: 'R1', $msgid: 'm1', $date: SWEEP_DAY, $type: 'water', $cell: '0,0', $n: '1', $kind: 'd', $rows: '4', $tok: 'tokR1' };
   const conc = ps => ps.map(k => (k.startsWith('$') ? (sub[k] ?? 'X') : k)).join('/');
   const containers = new Set(), leaves = new Set();
   (function walk(n, ps) {
@@ -755,11 +838,11 @@ export function rulesShapeSweep() {
   ['rooms/M1', 'rooms/M1/players', 'rooms/M1/players/A', 'rooms/M1/players/B', 'rooms/M1/approval', 'rooms/M1/approval/decisions', 'rooms/R1/spectators/C',
     'users/B/friends/A', 'users/A/friendRequests/C', 'users/B', 'users/A/lastRead', 'chats/A_B/m1', 'invites/B', 'inviteRejections/A',
     'dailyChallenges/' + SWEEP_DAY + '/results/A', 'profiles/A', 'users/A/stats/online/B',
-    'openRooms/d/4/R2', 'openRooms/d/4', 'openRooms/d'].forEach(p => containers.add(p));   // 3.3ج-5ب: مدخل قائم لغرفة مفتوحة
+    'openRooms/d/4/R2', 'openRooms/d/4', 'openRooms/d', 'roomAge/R2', 'roomAge/M1'].forEach(p => containers.add(p));   // 3.3ج-5ب: مدخل قائم لغرفة مفتوحة
   ['users/A/email', 'users/A/lastRead/A_B', 'users/B/requestCooldown/A', 'users/A/sentRequests/D', 'rooms/R1/status', 'rooms/R1/p2name',
     'rooms/M1/players/A/name', 'chats/A_B/m1/text', 'chats/A_B/m1/status', 'invites/B/fromName', 'inviteRejections/A/name',
     'inviteRejections/A/roomCode', 'inviteRejections/A/rejectedBy',
-    'openRooms/d/4/R2/u', 'openRooms/d/4/R2/t', 'roomAge/R2', 'roomAge/M1'].forEach(p => leaves.add(p));   // مراجعة ج-5أ: ردّ قائم (المتغيّر وحده يعطي C بلا ردّ)
+    'openRooms/d/4/R2/u', 'openRooms/d/4/R2/t', 'roomAge/R2/k', 'roomAge/M1/t', 'ageList/tokR2', 'ageCode/tokM1'].forEach(p => leaves.add(p));   // مراجعة ج-5أ: ردّ قائم (المتغيّر وحده يعطي C بلا ردّ)
   const who = ['A', 'B', 'C'];
   const ok = (uid, p, v) => checkWrite(NEW, [[p, v]], { uid, root: base, now: SWEEP_T }).ok;
   const LONG = 'x'.repeat(5000);
@@ -789,9 +872,15 @@ export function rulesShapeSweep() {
     ['A', 'rooms/R1/elementMap', { '0,0': 'water', '1,2': 'gem' }], ['B', 'rooms/R1/signals', { restart: 2, ts: T }],
     ['C', 'rooms/R1/spectators/C', { name: 'ج', at: T }], ['B', 'rooms/M1/players/B/disconnectedAt', T],
     ['A', 'rooms/M1/approval/decisions/1', 'rejected'], ['B', 'chats/A_B/m1/status', 'read'],
-    ['A', 'openRooms/d/4/R2', { t: T, u: 'A' }], ['B', 'roomAge/R1', T], ['A', 'roomAge/M1', T],   // 3.3ج-5ب
+    ['A', 'openRooms/d/4/R2', { t: T, u: 'A' }],   // 3.3ج-5ب
   ];
   const refused = legit.filter(([uid, p, v]) => !ok(uid, p, v)).map(([uid, p]) => `${p} ← ${uid}`);
+  // 3.3ج-5ج: العمر بتذكرته كتابةٌ واحدة متعددة المسارات
+  const SVX = { '.sv': 'timestamp' };
+  for (const [uid, code, tok] of [['B', 'R1', 'tokNew1'], ['A', 'M1', 'tokNew2']]) {
+    const w = [['roomAge/' + code, { t: SVX, k: tok }], ['ageList/' + tok, SVX], ['ageCode/' + tok, code]];
+    if (!checkWrite(NEW, w, { uid, root: base, now: T }).ok) refused.push(`roomAge/${code} + ${tok} ← ${uid}`);
+  }
   r.ok(refused.length === 0, `كتابة مشروعة رُفضت على شجرة المسح: ${refused.join('، ')}`);
   return r;
 }

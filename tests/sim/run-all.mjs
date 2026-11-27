@@ -42,8 +42,8 @@ const sections = [
   ['🟢 الحضور', [() => IV.presenceFollowsMatch(verbose), () => IV.presenceHeals(verbose)]],
   ['🔤 أمان النصوص', [() => TS.namesInSearchAndVote(verbose), () => TS.namesInCodeLobby(verbose), () => TS.roomMaxIsText(verbose)]],
   ['🔐 تحضير قفل الغرف (3.3ب-1)', [() => RM.lobbyLeaveUnderMemberRules(verbose), () => RM.roomCodeCollision(verbose)]],
-  ['🗂️ الغرف لا تُقرأ كلها (3.3ج-5ب)', [() => RI.duoIndexLifecycle(verbose), () => RI.duoIndexBothSidesDrop(verbose), () => RI.ownEntrySkipped(verbose), () => RI.duoIndexCancelClose(verbose), () => RI.restoreReindexes(verbose),
-    () => RI.staleEntries(verbose), () => RI.multiIndex(verbose), () => RI.poisonedBucket(verbose), () => RI.cleanupByAge(verbose)]],
+  ['🗂️ الغرف لا تُقرأ كلها وأرقامها الخاصة لا تُكشف (3.3ج-5ب، 5ج)', [() => RI.duoIndexLifecycle(verbose), () => RI.duoIndexBothSidesDrop(verbose), () => RI.ownEntrySkipped(verbose), () => RI.duoIndexCancelClose(verbose), () => RI.restoreReindexes(verbose),
+    () => RI.staleEntries(verbose), () => RI.multiIndex(verbose), () => RI.poisonedBucket(verbose), () => RI.cleanupByAge(verbose), () => RI.privateCodeHidden(verbose)]],
 ];
 
 for (const [title, runs] of sections) {

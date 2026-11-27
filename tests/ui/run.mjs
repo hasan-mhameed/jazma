@@ -9,6 +9,7 @@ import { guardProbes } from './guardProbes.mjs';
 import { ALL } from './render.mjs';
 import { APP_ALL } from './app.mjs';
 import { RULES_ALL } from './rules.mjs';
+import { SW_ALL } from './sw.mjs';
 
 const only = (process.argv.find(a => a.startsWith('--only=')) || '').slice(7);
 let bad = 0;
@@ -30,6 +31,15 @@ console.log('\n🔐 قواعد الأمان المنشورة (database.rules.jso
 for (const t of RULES_ALL) {
   const r = await t();
   if (only && !r.title.includes(only) && only !== 'القواعد') continue;
+  console.log(`${r.fail ? '❌' : '✅'} ${r.title} — ${r.pass}/${r.pass + r.fail}`);
+  r.notes.forEach(n => console.log('     ' + n));
+  if (r.fail) bad++;
+}
+
+console.log('\n⚙️ service worker (3.3ج-5ج)');
+for (const t of SW_ALL) {
+  const r = await t();
+  if (only && !r.title.includes(only) && only !== 'sw') continue;
   console.log(`${r.fail ? '❌' : '✅'} ${r.title} — ${r.pass}/${r.pass + r.fail}`);
   r.notes.forEach(n => console.log('     ' + n));
   if (r.fail) bad++;

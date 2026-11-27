@@ -1,5 +1,5 @@
 // 📄 service-worker.js — v14.2
-const CACHE_NAME = "jazma-v1795432663";
+const CACHE_NAME = "jazma-v1795741688";
 
 // نكاش الـ static assets فقط — JS بيتحمل من الشبكة دايماً عشان الـ ?v= يشتغل
 const STATIC_ASSETS = [
@@ -16,7 +16,9 @@ const STATIC_ASSETS = [
 // تثبيت
 self.addEventListener("install", (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS))
+    // من الشبكة لا من ذاكرة المتصفح (مراجعة ج-5ج): كانت index.html تُحفظ أحياناً بنسخة عمرها حتى 10 دقائق (مهلة GitHub Pages)
+    // فتبقى تُقدَّم من المحفوظ حتى الإصدار التالي
+    caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS.map(u => new Request(u, { cache: "reload" }))))
   );
   self.skipWaiting();
 });
@@ -31,18 +33,27 @@ self.addEventListener("activate", (e) => {
   self.clients.claim();
 });
 
-// fetch — JS و Firebase دايماً من الشبكة، باقي الـ assets من الـ cache
+// fetch — 3.3ج-5ج (من فحص الـconsole في ج-5ب): كان المعالج يعترض كل الطلبات، ويعيد "لا شيء" حين تفشل الشبكة ولا نسخة
+// محفوظة (طلب يُقطع عند التحديث أو الإغلاق، أو انقطاع لحظي) فيرمي المتصفح "Failed to convert value to 'Response'".
+// الآن: لا نلمس إلا طلبات GET من موقع اللعبة نفسه (Firebase وGoogle والخطوط يتولاها المتصفح مباشرة كما بلا service worker)،
+// وأي فشل بلا نسخة محفوظة يُعاد خطأَ شبكة عادياً — كأنه انقطاع، بلا استثناء.
 self.addEventListener("fetch", (e) => {
-  const url = e.request.url;
+  const req = e.request;
+  if (req.method !== "GET") return;
+  let url;
+  try { url = new URL(req.url); } catch { return; }
+  if (url.origin !== self.location.origin) return;
 
-  // JS files و Firebase → دايماً من الشبكة
-  if (url.includes(".js") || url.includes("firebase") || url.includes("googleapis")) {
-    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+  // ملفات JS (وmanifest.json) → من الشبكة دايماً عشان الـ ?v= يشتغل، والمحفوظ إن انقطعت
+  if (url.pathname.includes(".js")) {
+    e.respondWith(
+      fetch(req).catch(() => caches.match(req)).then(res => res || Response.error(), () => Response.error())
+    );
     return;
   }
 
   // باقي الـ assets → cache first
   e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request))
+    caches.match(req).catch(() => undefined).then(cached => cached || fetch(req)).catch(() => Response.error())
   );
 });
